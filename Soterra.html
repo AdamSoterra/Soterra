@@ -190,7 +190,7 @@ select{height:32px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 
     <h1 class="hp-h1">Build smarter.<br><span class="hp-h1-sub">Less rework. Fewer delays.</span></h1>
     <p class="hp-p">Soterra connects your site team and leadership with the intelligence they need — tracking open issues, predicting what will fail, and making sure nothing falls through the cracks between inspection and close-out.</p>
     <div class="hp-actions">
-      <button class="hp-cta" onclick="showLogin()">Open dashboard →</button>
+      <button class="hp-cta" onclick="showLogin()">Open dashboard ↗</button>
       <a class="hp-demo-cta" href="demo.html">View demo ↗</a>
       <a href="mailto:adam@soterra.co.nz" class="hp-link">Talk to us ↗</a>
     </div>
@@ -398,8 +398,8 @@ select{height:32px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 
 .hp-h1-sub{display:block;color:#0E74BD}
 .hp-p{font-size:15px;font-weight:300;color:#4A6080;line-height:1.75;max-width:560px;margin-bottom:36px;animation:hpup .8s .18s ease both}
 .hp-actions{display:flex;align-items:center;gap:16px;animation:hpup .8s .24s ease both}
-.hp-cta{height:48px;padding:0 24px;background:transparent;color:#0E74BD;border:1.5px solid rgba(14,116,189,.35);border-radius:8px;font-size:14px;font-weight:500;font-family:'DM Sans',system-ui,sans-serif;cursor:pointer;transition:all .2s}
-.hp-cta:hover{background:rgba(14,116,189,.06);border-color:#0E74BD}
+.hp-cta{height:48px;padding:0 28px;background:#0E74BD;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:500;font-family:'DM Sans',system-ui,sans-serif;cursor:pointer;transition:background .2s,transform .15s}
+.hp-cta:hover{background:#0A5C97;transform:translateY(-1px)}
 .hp-link{font-size:13px;font-weight:500;color:#4A6080;text-decoration:none;transition:color .2s}
 .hp-link:hover{color:#0E74BD}
 
@@ -490,6 +490,8 @@ select{height:32px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 
   .hp-ba-mid{padding:10px 0}
   .hp-ba-section{padding:24px 20px}
   .hp-trust{gap:14px;padding:16px 20px}
+  .hp-cta,.hp-demo-cta{font-size:12px;height:42px;padding:0 16px}
+  .hp-actions{gap:8px}
 }
 @media(max-width:500px){
   .hp-feat-grid{grid-template-columns:1fr}
