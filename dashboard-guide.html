@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Soterra Dashboard — Interactive Developer Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--font:'DM Sans',system-ui,sans-serif;--blue:#0E74BD;--sky:#38BDF8;--navy:#0A2540;--slate:#4A6080;--bg:#F8F8FA;--card:#fff;--border:rgba(0,0,0,.08);--green:#10B981;--red:#EF4444;--amber:#F59E0B;--indigo:#4F46E5}
+body{font-family:var(--font);background:var(--bg);color:var(--navy);font-size:13px;line-height:1.5;overflow:hidden;height:100vh}
+
+/* ── SHELL ── */
+.shell{display:flex;height:100vh;width:100vw}
+
+/* ── SIDEBAR ── */
+.sidebar{width:180px;background:#fff;border-right:1.5px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto}
+.sidebar-logo{font-size:18px;font-weight:700;color:var(--blue);padding:20px 20px 8px;letter-spacing:.01em}
+.sidebar-sub{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#999;padding:0 20px 12px}
+
+/* dashboard switcher */
+.dash-switch{display:flex;margin:0 12px 16px;border:1.5px solid var(--border);border-radius:8px;overflow:hidden}
+.dash-switch button{flex:1;padding:8px 4px;font-size:10px;font-weight:600;font-family:var(--font);border:none;cursor:pointer;background:#fff;color:var(--slate);transition:all .15s}
+.dash-switch button.active-exec{background:var(--blue);color:#fff}
+.dash-switch button.active-site{background:var(--green);color:#fff}
+
+.nav-group-label{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#bbb;padding:16px 20px 6px}
+.nav-item{padding:9px 20px;font-size:12px;color:var(--slate);cursor:pointer;border-left:3px solid transparent;transition:all .12s;user-select:none}
+.nav-item:hover{background:rgba(14,116,189,.04);color:var(--navy)}
+.nav-item.active{color:var(--blue);font-weight:600;background:rgba(14,116,189,.06);border-left-color:var(--blue)}
+.nav-item.active-green{color:var(--green);font-weight:600;background:rgba(16,185,129,.06);border-left-color:var(--green)}
+.nav-group{display:none}
+.nav-group.visible{display:block}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{height:52px;background:#fff;border-bottom:1.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;flex-shrink:0}
+.breadcrumb{font-size:11px;color:var(--slate)}
+.breadcrumb strong{color:var(--navy)}
+.user-area{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--slate)}
+.user-badge{width:30px;height:30px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+
+.content{flex:1;overflow-y:auto;padding:28px 32px 60px}
+
+/* ── PAGE CONTAINER ── */
+.page{display:none;max-width:900px}
+.page.active{display:block}
+.page-title{font-size:22px;font-weight:600;color:var(--navy);margin-bottom:2px}
+.page-sub{font-size:12px;color:var(--slate);margin-bottom:24px}
+
+/* ── SECTION (mockup + explanation) ── */
+.section{margin-bottom:28px}
+.section-label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--blue);margin-bottom:8px}
+.section-label.green{color:var(--green)}
+
+/* mockup area */
+.mockup{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:20px;margin-bottom:0;position:relative}
+
+/* explanation card */
+.explain{background:rgba(14,116,189,.03);border:1.5px solid rgba(14,116,189,.12);border-radius:0 0 12px 12px;padding:16px 20px;margin-top:-2px}
+.explain-title{font-size:14px;font-weight:600;color:var(--navy);margin-bottom:4px}
+.explain-what{font-size:12px;color:var(--slate);line-height:1.6;margin-bottom:8px}
+.explain-why{font-size:12px;color:var(--blue);font-weight:500;line-height:1.6;padding-top:8px;border-top:1px solid rgba(14,116,189,.12)}
+
+/* ── KPI ── */
+.kpi-grid{display:grid;gap:10px}
+.kpi-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.kpi-label{font-size:10px;color:var(--slate);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.kpi-value{font-size:24px;font-weight:600;color:var(--navy)}
+.kpi-value.red{color:var(--red)}
+.kpi-value.amber{color:var(--amber)}
+.kpi-value.green{color:var(--green)}
+
+/* ── CARD ── */
+.card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px}
+.card-title{font-size:14px;font-weight:600;color:var(--navy);margin-bottom:2px}
+.card-sub{font-size:11px;color:var(--slate);margin-bottom:12px}
+
+/* ── TABLE ── */
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);padding:7px 8px;border-bottom:1.5px solid var(--border)}
+td{padding:7px 8px;border-bottom:1px solid rgba(0,0,0,.04)}
+
+/* ── BADGES ── */
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.badge-high{background:rgba(239,68,68,.1);color:var(--red)}
+.badge-medium{background:rgba(245,158,11,.1);color:var(--amber)}
+.badge-low{background:rgba(16,185,129,.1);color:var(--green)}
+
+/* ── DOTS ── */
+.dot{display:inline-block;width:52px;height:26px;border-radius:5px;font-size:9px;font-weight:500;text-align:center;line-height:26px;color:#fff}
+.dot-green{background:var(--green)}
+.dot-yellow{background:var(--amber)}
+.dot-red{background:var(--red)}
+.dot-empty{background:transparent;border:1.5px solid rgba(0,0,0,.12);color:var(--slate)}
+
+/* ── CHART PLACEHOLDER ── */
+.chart-placeholder{height:120px;background:linear-gradient(180deg,rgba(14,116,189,.04),rgba(14,116,189,.01));border:1px dashed rgba(14,116,189,.15);border-radius:8px;display:flex;align-items:flex-end;justify-content:center;gap:4px;padding:12px}
+.chart-bar{width:24px;border-radius:4px 4px 0 0;background:var(--blue);opacity:.6}
+
+/* ── TRACKER STATS ── */
+.tracker-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:18px;text-align:center}
+.tracker-stat-val{font-size:32px;font-weight:600}
+.tracker-stat-lbl{font-size:11px;color:var(--slate)}
+
+/* ── CALENDAR ── */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:10px}
+.cal-header{background:rgba(14,116,189,.06);padding:6px;text-align:center;font-weight:600;color:var(--slate);font-size:9px;text-transform:uppercase}
+.cal-day{background:#fff;padding:6px;min-height:48px}
+.cal-day-num{font-weight:500;color:var(--navy);margin-bottom:2px}
+.cal-event{font-size:8px;padding:1px 4px;border-radius:3px;color:#fff;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-day.today{background:rgba(14,116,189,.04)}
+.cal-day.empty{background:#FAFAFA}
+.evt-legend{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.evt-pill{font-size:9px;padding:3px 8px;border-radius:4px;color:#fff;font-weight:500}
+
+/* ── MODAL REPLICA ── */
+.modal-replica{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:18px;max-width:400px;box-shadow:0 8px 30px rgba(0,0,0,.08)}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.modal-title{font-size:14px;font-weight:600}
+.modal-field{margin-bottom:10px}
+.modal-field-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--slate);margin-bottom:4px}
+.modal-input{width:100%;height:32px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-size:12px;font-family:var(--font);background:#FAFAFA}
+.modal-textarea{width:100%;height:60px;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:11px;font-family:var(--font);background:#FAFAFA;resize:none}
+.modal-btn{display:inline-block;height:32px;padding:0 16px;border-radius:6px;font-size:12px;font-weight:500;font-family:var(--font);cursor:default;border:none;line-height:32px}
+.modal-btn-primary{background:var(--indigo);color:#fff}
+.modal-btn-ghost{background:#F5F5F3;color:var(--navy);border:1px solid var(--border)}
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px){
+  .sidebar{width:140px}
+  .content{padding:20px}
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ═══════ SIDEBAR ═══════ -->
+  <div class="sidebar">
+    <div class="sidebar-logo">Soterra</div>
+    <div class="sidebar-sub">Developer Guide</div>
+
+    <div class="dash-switch">
+      <button id="btn-exec" onclick="switchDashboard('exec')" class="active-exec">Executive</button>
+      <button id="btn-site" onclick="switchDashboard('site')">Site Team</button>
+    </div>
+
+    <!-- Executive nav -->
+    <div class="nav-group visible" id="nav-exec">
+      <div class="nav-group-label">Executive Dashboard</div>
+      <div class="nav-item active" onclick="showPage('exec-overview',this,'exec')">Overview</div>
+      <div class="nav-item" onclick="showPage('exec-company',this,'exec')">Company</div>
+      <div class="nav-item" onclick="showPage('exec-performance',this,'exec')">Performance</div>
+      <div class="nav-item" onclick="showPage('exec-insights',this,'exec')">Insights</div>
+    </div>
+
+    <!-- Site Team nav -->
+    <div class="nav-group" id="nav-site">
+      <div class="nav-group-label">Site Team Dashboard</div>
+      <div class="nav-item" onclick="showPage('site-tracker',this,'site')">Live Tracker</div>
+      <div class="nav-item" onclick="showPage('site-calendar',this,'site')">Calendar</div>
+      <div class="nav-item" onclick="showPage('site-risk',this,'site')">Risk</div>
+      <div class="nav-item" onclick="showPage('site-overview',this,'site')">Overview</div>
+      <div class="nav-item" onclick="showPage('site-insights',this,'site')">Insights</div>
+    </div>
+
+    <!-- Shared -->
+    <div class="nav-group-label" style="margin-top:auto;padding-top:20px;border-top:1px solid var(--border)">Modals &amp; Actions</div>
+    <div class="nav-item" onclick="showPage('modals-actions',this,'modal')">Issue &amp; Actions</div>
+    <div class="nav-item" onclick="showPage('modals-booking',this,'modal')">Booking &amp; Calendar</div>
+    <div class="nav-item" onclick="showPage('integrations',this,'modal')">Integrations</div>
+  </div>
+
+  <!-- ═══════ MAIN AREA ═══════ -->
+  <div class="main">
+    <div class="topbar">
+      <div class="breadcrumb" id="breadcrumb">Home › Executive › <strong>Overview</strong></div>
+      <div class="user-area">Sam Carter <div class="user-badge">SC</div></div>
+    </div>
+
+    <div class="content">
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- EXECUTIVE OVERVIEW -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <div class="page active" id="exec-overview">
+        <div class="page-title">Overview</div>
+        <div class="page-sub">Portfolio performance at a glance.</div>
+
+        <!-- KPI Cards -->
+        <div class="section">
+          <div class="section-label">KPI Cards</div>
+          <div class="mockup">
+            <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+              <div class="kpi-card"><div class="kpi-label">Company failure rate</div><div class="kpi-value">43%</div></div>
+              <div class="kpi-card"><div class="kpi-label">Total inspections</div><div class="kpi-value">420</div></div>
+              <div class="kpi-card"><div class="kpi-label">Issues / inspection</div><div class="kpi-value">5.0</div></div>
+              <div class="kpi-card"><div class="kpi-label">Highest risk type</div><div class="kpi-value red" style="font-size:16px">Hydraulic 51%</div></div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Portfolio summary metrics</div>
+            <div class="explain-what">Four key numbers answering "how are we doing?" — company-wide failure rate, total inspections completed, average issues per inspection, and which inspection type is failing most.</div>
+            <div class="explain-why">Why: Executives need a single-screen answer. These four KPIs replace weekly email reports and save 30+ minutes of manual data gathering.</div>
+          </div>
+        </div>
+
+        <!-- Portfolio Risk Table -->
+        <div class="section">
+          <div class="section-label">Portfolio Risk Table</div>
+          <div class="mockup">
+            <div class="card-title">Portfolio risk</div>
+            <div class="card-sub">Click a project to see full breakdown</div>
+            <table>
+              <tr><th>Project</th><th>Inspections</th><th>Failure rate</th><th>Open issues</th><th>Overdue (&gt;14d)</th><th>Risk</th></tr>
+              <tr><td style="color:var(--indigo);font-weight:500">Harbor View Tower</td><td>45</td><td style="color:var(--red);font-weight:600">51%</td><td>12</td><td style="color:var(--red);font-weight:600">3</td><td><span class="badge badge-high">High</span></td></tr>
+              <tr><td style="color:var(--indigo);font-weight:500">North Ridge Schools</td><td>38</td><td>38%</td><td>5</td><td>0</td><td><span class="badge badge-medium">Medium</span></td></tr>
+              <tr><td style="color:var(--indigo);font-weight:500">Union Rail Depot</td><td>51</td><td>45%</td><td>8</td><td>1</td><td><span class="badge badge-medium">Medium</span></td></tr>
+            </table>
+          </div>
+          <div class="explain">
+            <div class="explain-title">All projects ranked by risk</div>
+            <div class="explain-what">Every project with failure rate, open issues, and overdue count. Rows are clickable — drill into any project to see its full inspection breakdown.</div>
+            <div class="explain-why">Why: Eliminates "how's the project going?" calls. One glance shows which sites need attention. Overdue items highlighted in red create urgency.</div>
+          </div>
+        </div>
+
+        <!-- Impact Metrics -->
+        <div class="section">
+          <div class="section-label">Impact Metrics</div>
+          <div class="mockup">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+              <div class="card" style="margin:0">
+                <div class="card-title">Before vs after Soterra</div>
+                <div class="card-sub">Since platform adoption</div>
+                <div style="display:flex;gap:12px;margin-top:8px;text-align:center">
+                  <div style="flex:1"><div style="font-size:22px;font-weight:600;color:var(--red)">51%</div><div style="font-size:9px;color:#999">Before</div></div>
+                  <div style="flex:1"><div style="font-size:22px;font-weight:600;color:var(--green)">43%</div><div style="font-size:9px;color:#999">After</div></div>
+                  <div style="flex:1"><div style="font-size:22px;font-weight:600;color:var(--indigo)">↓ 8%</div><div style="font-size:9px;color:#999">Improvement</div></div>
+                </div>
+              </div>
+              <div class="card" style="margin:0">
+                <div class="card-title">Inspection readiness</div>
+                <div class="card-sub">Called before work complete</div>
+                <div style="font-size:28px;font-weight:600;color:var(--amber);margin-top:6px">22%</div>
+                <div style="font-size:10px;color:#999">with outstanding works or docs</div>
+              </div>
+              <div class="card" style="margin:0">
+                <div class="card-title">Close-out performance</div>
+                <div class="card-sub">How quickly issues are resolved</div>
+                <div style="display:flex;gap:16px;margin-top:6px">
+                  <div><div style="font-size:24px;font-weight:600">10</div><div style="font-size:9px;color:#999">avg days to close</div></div>
+                  <div><div style="font-size:24px;font-weight:600">22%</div><div style="font-size:9px;color:#999">need reinspection</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Proving ROI to stakeholders</div>
+            <div class="explain-what">Before/after comparison shows measurable improvement. Inspection readiness tracks premature bookings. Close-out performance tracks resolution speed.</div>
+            <div class="explain-why">Why: Construction companies need proof that tools work. An 8% drop in failure rate directly translates to saved rework costs — typically tens of thousands per project.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- EXECUTIVE COMPANY -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <div class="page" id="exec-company">
+        <div class="page-title">Company</div>
+        <div class="page-sub">Company-wide performance breakdown by inspection type.</div>
+
+        <!-- Type breakdown table -->
+        <div class="section">
+          <div class="section-label">Performance by Inspection Type</div>
+          <div class="mockup">
+            <div class="card-title">Performance by inspection type</div>
+            <div class="card-sub">Company-wide breakdown</div>
+            <table>
+              <tr><th>Type</th><th>Inspections</th><th>Failure rate</th><th>Reinspection %</th><th>Issues / insp</th></tr>
+              <tr><td>Hydraulic</td><td>120</td><td style="color:var(--red);font-weight:600">51%</td><td>28%</td><td>6.2</td></tr>
+              <tr><td>Structural</td><td>90</td><td>42%</td><td>20%</td><td>4.9</td></tr>
+              <tr><td>Electrical</td><td>60</td><td>38%</td><td>21%</td><td>4.6</td></tr>
+              <tr><td>Fire</td><td>70</td><td style="color:var(--green)">32%</td><td>15%</td><td>4.3</td></tr>
+              <tr><td>Preline</td><td>40</td><td>40%</td><td>19%</td><td>4.7</td></tr>
+              <tr><td>Waterproofing</td><td>20</td><td>35%</td><td>16%</td><td>4.1</td></tr>
+              <tr><td>Earthworks</td><td>20</td><td style="color:var(--green)">28%</td><td>12%</td><td>3.5</td></tr>
+            </table>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Performance by inspection type + trend</div>
+            <div class="explain-what">Breaks down failure rates by inspection type (Hydraulic, Structural, Electrical, etc.). Expandable table with "View all" toggle. 12-month bar chart shows improvement trajectory.</div>
+            <div class="explain-why">Why: Hydraulic at 51% across the company is systemic — not one bad project. This view surfaces company-wide patterns that individual project reports miss.</div>
+          </div>
+        </div>
+
+        <!-- Trend chart -->
+        <div class="section">
+          <div class="section-label">Issues per Inspection Trend</div>
+          <div class="mockup">
+            <div class="card-title">Issues per inspection trend</div>
+            <div class="card-sub">Monthly average — 12 months</div>
+            <div class="chart-placeholder">
+              <div class="chart-bar" style="height:85%"></div><div class="chart-bar" style="height:80%"></div>
+              <div class="chart-bar" style="height:82%"></div><div class="chart-bar" style="height:75%"></div>
+              <div class="chart-bar" style="height:72%"></div><div class="chart-bar" style="height:65%"></div>
+              <div class="chart-bar" style="height:58%"></div><div class="chart-bar" style="height:62%"></div>
+              <div class="chart-bar" style="height:58%"></div><div class="chart-bar" style="height:55%"></div>
+              <div class="chart-bar" style="height:50%"></div><div class="chart-bar" style="height:45%"></div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">12-month trend visualization</div>
+            <div class="explain-what">Bar chart showing monthly average issues per inspection across the company. Downward trend indicates improvement over time.</div>
+            <div class="explain-why">Why: Trend lines prove whether interventions are working. A flat or rising line tells leadership to change strategy. A falling line justifies continued investment in the platform.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- EXECUTIVE PERFORMANCE -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <div class="page" id="exec-performance">
+        <div class="page-title">Performance</div>
+        <div class="page-sub">Predictive failure analysis across all projects.</div>
+
+        <div class="section">
+          <div class="section-label">Top Failure Drivers</div>
+          <div class="mockup">
+            <div class="card-title">Top failure drivers</div>
+            <div class="card-sub">Ranked by occurrence across all projects</div>
+            <table>
+              <tr><th>Issue</th><th>Fail count</th><th>% of failures</th><th>Recurrence</th></tr>
+              <tr><td>Pipe penetrations</td><td>108</td><td style="font-weight:600">52%</td><td style="color:var(--red);font-weight:500">65%</td></tr>
+              <tr><td>Waterproofing membranes</td><td>85</td><td>41%</td><td style="color:var(--amber);font-weight:500">55%</td></tr>
+              <tr><td>Framing bracing</td><td>79</td><td>38%</td><td style="color:var(--amber);font-weight:500">49%</td></tr>
+              <tr><td>Pipe supports &amp; fixings</td><td>60</td><td>29%</td><td style="color:var(--red);font-weight:500">65%</td></tr>
+              <tr><td>Pressure testing</td><td>50</td><td>24%</td><td style="color:var(--amber);font-weight:500">55%</td></tr>
+            </table>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Predictive failure patterns</div>
+            <div class="explain-what">Ranks inspection items by how often they fail. Recurrence column shows likelihood of reappearing — colour-coded red/amber/green.</div>
+            <div class="explain-why">Why: This is the prediction engine. If pipe supports have 65% recurrence, teams should check them proactively before the inspector arrives — preventing failures instead of reacting.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- EXECUTIVE INSIGHTS -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <div class="page" id="exec-insights">
+        <div class="page-title">Insights</div>
+        <div class="page-sub">Trends, root causes, and risk concentration areas.</div>
+
+        <!-- Trend chart -->
+        <div class="section">
+          <div class="section-label">Failure Rate Trend</div>
+          <div class="mockup">
+            <div class="card-title">Failure rate trend</div>
+            <div class="card-sub">12-month company-wide trend</div>
+            <div class="chart-placeholder">
+              <div class="chart-bar" style="height:92%"></div><div class="chart-bar" style="height:88%"></div>
+              <div class="chart-bar" style="height:90%"></div><div class="chart-bar" style="height:80%"></div>
+              <div class="chart-bar" style="height:78%"></div><div class="chart-bar" style="height:72%"></div>
+              <div class="chart-bar" style="height:66%"></div><div class="chart-bar" style="height:68%"></div>
+              <div class="chart-bar" style="height:64%"></div><div class="chart-bar" style="height:68%"></div>
+              <div class="chart-bar" style="height:60%"></div><div class="chart-bar" style="height:55%"></div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Company-wide failure trend</div>
+            <div class="explain-what">12-month trend chart showing overall failure rate trajectory. Expandable with trend arrows (↑ Increasing, → Stable, ↓ Improving) per category.</div>
+            <div class="explain-why">Why: Knowing "what" fails isn't enough — you need the trajectory. A 43% failure rate that's falling is very different from 43% that's rising.</div>
+          </div>
+        </div>
+
+        <!-- Root causes + Risk areas -->
+        <div class="section">
+          <div class="section-label">Root Causes &amp; Risk Areas</div>
+          <div class="mockup">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="card" style="margin:0">
+                <div class="card-title">Top root causes</div>
+                <div class="card-sub">Why inspections fail</div>
+                <div style="font-size:11px;color:var(--slate);line-height:1.8;margin-top:8px">1. Incomplete pre-inspection prep<br>2. Work not finished before booking<br>3. Subcontractor quality issues<br>4. Missing documentation on site</div>
+              </div>
+              <div class="card" style="margin:0">
+                <div class="card-title">High risk areas</div>
+                <div class="card-sub">Where problems concentrate</div>
+                <div style="font-size:11px;color:var(--slate);line-height:1.8;margin-top:8px">1. Wet area bathrooms<br>2. External cladding junctions<br>3. Service penetrations<br>4. Basement waterproofing</div>
+              </div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Trends, root causes &amp; risk areas</div>
+            <div class="explain-what">Expandable root cause and risk area lists, plus problem pattern table with trend arrows (↑ Increasing, → Stable, ↓ Improving).</div>
+            <div class="explain-why">Why: Knowing "what" fails isn't enough — you need "why" and "where." Automated pattern detection surfaces causes that would take weeks of manual report reading.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- SITE TEAM: LIVE TRACKER -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <div class="page" id="site-tracker">
+        <div class="page-title">Live Tracker — Harbor View Tower</div>
+        <div class="page-sub">Inspection status at a glance. Click any box to view detail and take action.</div>
+
+        <!-- Stats -->
+        <div class="section">
+          <div class="section-label green">Daily Status Summary</div>
+          <div class="mockup">
+            <div class="tracker-stats">
+              <div><div class="tracker-stat-val" style="color:var(--red)">12</div><div class="tracker-stat-lbl">Open issues</div></div>
+              <div><div class="tracker-stat-val" style="color:var(--amber)">5</div><div class="tracker-stat-lbl">Ready for inspection</div></div>
+              <div><div class="tracker-stat-val" style="color:var(--green)">8</div><div class="tracker-stat-lbl">Closed (last 7 days)</div></div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Daily status summary</div>
+            <div class="explain-what">Three headline numbers: open issues, items ready for inspection, and recently closed. Site selector dropdown switches between projects.</div>
+            <div class="explain-why">Why: Site managers start each day asking "what do I need to deal with?" These three numbers answer that instantly — no scrolling, no reports.</div>
+          </div>
+        </div>
+
+        <!-- Inspection Grid -->
+        <div class="section">
+          <div class="section-label green">Inspection Grid</div>
+          <div class="mockup">
+            <div class="card-title">Inspection status tracker</div>
+            <div class="card-sub">Colour-coded by status — click any box for detail and actions</div>
+            <table>
+              <tr><th>Inspection type</th><th>Lot 1</th><th>Lot 2</th><th>Lot 3</th><th>Lot 4</th><th>Lot 5</th><th>Lot 6</th><th>Lot 7</th></tr>
+              <tr><td><strong>Earthworks</strong></td><td><span class="dot dot-green">12 Jan</span></td><td><span class="dot dot-green">14 Jan</span></td><td><span class="dot dot-green">14 Jan</span></td><td><span class="dot dot-yellow">12 Apr</span></td><td><span class="dot dot-empty">20 Apr</span></td><td><span class="dot dot-empty">5 May</span></td><td><span class="dot dot-empty">12 May</span></td></tr>
+              <tr><td><strong>Foundations</strong></td><td><span class="dot dot-green">20 Jan</span></td><td><span class="dot dot-green">22 Jan</span></td><td><span class="dot dot-yellow">7 Apr</span></td><td><span class="dot dot-empty">18 Apr</span></td><td><span class="dot dot-empty">28 Apr</span></td><td><span class="dot dot-empty">8 May</span></td><td><span class="dot dot-empty">18 May</span></td></tr>
+              <tr><td><strong>Framing</strong></td><td><span class="dot dot-green">3 Feb</span></td><td><span class="dot dot-green">5 Feb</span></td><td><span class="dot dot-red">8 Apr</span></td><td><span class="dot dot-empty">22 Apr</span></td><td><span class="dot dot-empty">2 May</span></td><td><span class="dot dot-empty">12 May</span></td><td><span class="dot dot-empty">22 May</span></td></tr>
+              <tr><td><strong>Preline (services)</strong></td><td><span class="dot dot-red">3 Feb</span></td><td><span class="dot dot-yellow">7 Apr</span></td><td><span class="dot dot-empty">30 Apr</span></td><td><span class="dot dot-empty">10 May</span></td><td><span class="dot dot-empty">20 May</span></td><td><span class="dot dot-empty">30 May</span></td><td><span class="dot dot-empty">9 Jun</span></td></tr>
+              <tr><td><strong>Waterproofing</strong></td><td><span class="dot dot-empty">14 May</span></td><td><span class="dot dot-empty">24 May</span></td><td><span class="dot dot-empty">3 Jun</span></td><td><span class="dot dot-empty">13 Jun</span></td><td><span class="dot dot-empty">23 Jun</span></td><td><span class="dot dot-empty">3 Jul</span></td><td><span class="dot dot-empty">13 Jul</span></td></tr>
+              <tr><td><strong>Final</strong></td><td><span class="dot dot-empty">20 Jun</span></td><td><span class="dot dot-empty">30 Jun</span></td><td><span class="dot dot-empty">10 Jul</span></td><td><span class="dot dot-empty">20 Jul</span></td><td><span class="dot dot-empty">30 Jul</span></td><td><span class="dot dot-empty">9 Aug</span></td><td><span class="dot dot-empty">19 Aug</span></td></tr>
+            </table>
+            <div style="display:flex;gap:14px;margin-top:10px;font-size:10px;color:#999">
+              <span><span class="dot dot-green" style="width:auto;height:auto;padding:1px 6px;font-size:9px">&#9679;</span> Passed</span>
+              <span><span class="dot dot-yellow" style="width:auto;height:auto;padding:1px 6px;font-size:9px">&#9679;</span> Ready</span>
+              <span><span class="dot dot-red" style="width:auto;height:auto;padding:1px 6px;font-size:9px">&#9679;</span> Failed</span>
+              <span><span class="dot dot-empty" style="width:auto;height:auto;padding:1px 6px;font-size:9px">&#9675;</span> Not started</span>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Visual status of every lot x every inspection type</div>
+            <div class="explain-what">Rows = inspection types (Earthworks → Final). Columns = lots. Each cell shows date + colour: green passed, yellow ready, red failed, grey not started. Clicking opens detail modal with actions.</div>
+            <div class="explain-why">Why: Replaces the whiteboard in the site office. Everyone sees every lot's status without walking to the office. This is the single most-used view for site teams.</div>
+          </div>
+        </div>
+
+        <!-- Issue Register -->
+        <div class="section">
+          <div class="section-label green">Issue Register</div>
+          <div class="mockup">
+            <div class="card-title">Issue register</div>
+            <div class="card-sub">All open and ready inspection items</div>
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <select style="height:28px;border:1px solid var(--border);border-radius:5px;font-size:11px;padding:0 8px;font-family:var(--font)"><option>All status</option><option>Open</option><option>Ready</option><option>Closed</option></select>
+              <select style="height:28px;border:1px solid var(--border);border-radius:5px;font-size:11px;padding:0 8px;font-family:var(--font)"><option>All types</option><option>Hydraulic</option><option>Framing</option><option>Fire</option><option>Structural</option></select>
+            </div>
+            <table>
+              <tr><th>Issue</th><th>Type</th><th>Date identified</th><th>Days open</th><th>Re-insp</th><th>Status</th></tr>
+              <tr><td>Pipe penetration not sealed</td><td>Hydraulic</td><td>12 Feb 2026</td><td style="color:var(--red);font-weight:600">54</td><td>0</td><td><span class="badge badge-high">Open</span></td></tr>
+              <tr><td>Bracing not to spec</td><td>Framing</td><td>5 Mar 2026</td><td style="color:var(--red);font-weight:600">32</td><td>1</td><td><span class="badge badge-high">Open</span></td></tr>
+              <tr><td>Hold down bolts missing</td><td>Structural</td><td>19 Mar 2026</td><td style="color:var(--amber);font-weight:600">18</td><td>0</td><td><span class="badge badge-high">Open</span></td></tr>
+              <tr><td>Smoke detector placement</td><td>Fire</td><td>1 Apr 2026</td><td>5</td><td>0</td><td><span class="badge badge-medium">Ready</span></td></tr>
+            </table>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Filterable issue list with one-tap actions</div>
+            <div class="explain-what">Filter by status (Open/Ready/Closed) and type (Hydraulic/Framing/etc). Each row clickable → opens modal with actions: Send to sub, Mark ready, Book inspection, Download report.</div>
+            <div class="explain-why">Why: No issue gets forgotten. Overdue items highlighted in red. One-tap "send to sub" creates accountability with a paper trail — replaces phone calls with no audit trail.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- SITE TEAM: CALENDAR -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <div class="page" id="site-calendar">
+        <div class="page-title">Calendar — Harbor View Tower</div>
+        <div class="page-sub">Project calendar with 10 event types. Click any date to add an event.</div>
+
+        <div class="section">
+          <div class="section-label green">Project Calendar</div>
+          <div class="mockup">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <div style="display:flex;align-items:center;gap:8px"><span style="cursor:default">&#8592;</span><strong>April 2026</strong><span style="cursor:default">&#8594;</span></div>
+              <div style="display:flex;gap:6px">
+                <span style="font-size:10px;padding:3px 8px;border:1px solid var(--border);border-radius:4px">&#11015; Month</span>
+                <span style="font-size:10px;padding:3px 8px;border:1px solid var(--border);border-radius:4px">1 week</span>
+                <span style="font-size:10px;padding:3px 8px;border:1px solid var(--border);border-radius:4px">2 weeks</span>
+                <span style="font-size:10px;padding:3px 8px;background:var(--indigo);color:#fff;border-radius:4px">Share lookahead</span>
+              </div>
+            </div>
+            <div class="evt-legend">
+              <span class="evt-pill" style="background:#3B82F6">Structure</span>
+              <span class="evt-pill" style="background:#0D9488">Facade</span>
+              <span class="evt-pill" style="background:#8B5CF6">Fitout</span>
+              <span class="evt-pill" style="background:#475569">Basement</span>
+              <span class="evt-pill" style="background:#16A34A">Landscaping</span>
+              <span class="evt-pill" style="background:#F59E0B;color:#000">Delivery</span>
+              <span class="evt-pill" style="background:#EF4444">H&amp;S</span>
+              <span class="evt-pill" style="background:#4F46E5">Measures</span>
+              <span class="evt-pill" style="background:#1D1FAA">Inspection</span>
+              <span class="evt-pill" style="background:#6B7280">Other</span>
+            </div>
+            <div class="cal-grid">
+              <div class="cal-header">Mon</div><div class="cal-header">Tue</div><div class="cal-header">Wed</div><div class="cal-header">Thu</div><div class="cal-header">Fri</div><div class="cal-header">Sat</div><div class="cal-header">Sun</div>
+              <div class="cal-day empty"></div><div class="cal-day empty"></div><div class="cal-day"><div class="cal-day-num">1</div></div><div class="cal-day"><div class="cal-day-num">2</div></div><div class="cal-day"><div class="cal-day-num">3</div></div><div class="cal-day"><div class="cal-day-num">4</div></div><div class="cal-day"><div class="cal-day-num">5</div></div>
+              <div class="cal-day"><div class="cal-day-num">6</div></div><div class="cal-day today"><div class="cal-day-num">7</div><div class="cal-event" style="background:#4F46E5">Window measure</div></div><div class="cal-day"><div class="cal-day-num">8</div></div><div class="cal-day"><div class="cal-day-num">9</div><div class="cal-event" style="background:#3B82F6">Scaffold drop</div></div><div class="cal-day"><div class="cal-day-num">10</div></div><div class="cal-day"><div class="cal-day-num">11</div></div><div class="cal-day"><div class="cal-day-num">12</div></div>
+              <div class="cal-day"><div class="cal-day-num">13</div></div><div class="cal-day"><div class="cal-day-num">14</div><div class="cal-event" style="background:#F59E0B;color:#000">Facade delivery</div></div><div class="cal-day"><div class="cal-day-num">15</div></div><div class="cal-day"><div class="cal-day-num">16</div><div class="cal-event" style="background:#EF4444">H&amp;S audit</div></div><div class="cal-day"><div class="cal-day-num">17</div></div><div class="cal-day"><div class="cal-day-num">18</div></div><div class="cal-day"><div class="cal-day-num">19</div></div>
+              <div class="cal-day"><div class="cal-day-num">20</div></div><div class="cal-day"><div class="cal-day-num">21</div></div><div class="cal-day"><div class="cal-day-num">22</div><div class="cal-event" style="background:#16A34A">Landscaping</div></div><div class="cal-day"><div class="cal-day-num">23</div></div><div class="cal-day"><div class="cal-day-num">24</div></div><div class="cal-day"><div class="cal-day-num">25</div></div><div class="cal-day"><div class="cal-day-num">26</div></div>
+              <div class="cal-day"><div class="cal-day-num">27</div></div><div class="cal-day"><div class="cal-day-num">28</div><div class="cal-event" style="background:#475569">Basement WP</div></div><div class="cal-day"><div class="cal-day-num">29</div></div><div class="cal-day"><div class="cal-day-num">30</div></div><div class="cal-day empty"></div><div class="cal-day empty"></div><div class="cal-day empty"></div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Project calendar with 10 event types</div>
+            <div class="explain-what">Click any date to add events (deliveries, measures, scaffold drops, inspections, H&amp;S, etc). Colour-coded pills. Print month/week/fortnight views. Share lookahead via email to subcontractors.</div>
+            <div class="explain-why">Why: Replaces whiteboards and "I'll text you" culture. Main contractors must share weekly lookaheads with subs — this automates a 30-minute weekly task into one click.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- SITE TEAM: RISK -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <div class="page" id="site-risk">
+        <div class="page-title">Risk — Harbor View Tower</div>
+        <div class="page-sub">Predictive risk analysis and pre-inspection checklist.</div>
+
+        <!-- Upcoming inspections -->
+        <div class="section">
+          <div class="section-label green">Upcoming Inspection Risk</div>
+          <div class="mockup">
+            <div class="card-title">Upcoming inspection risk</div>
+            <div class="card-sub">Predicted failure items based on historical patterns</div>
+            <table>
+              <tr><th>Type</th><th>Expected date</th><th>Days away</th><th>Risk level</th><th></th></tr>
+              <tr><td>Hydraulic</td><td>12 Apr 2026</td><td>5 days</td><td><span class="badge badge-high">High</span></td><td style="color:var(--indigo);font-size:10px">Export &#8599;</td></tr>
+              <tr><td>Fire</td><td>18 Apr 2026</td><td>11 days</td><td><span class="badge badge-medium">Medium</span></td><td style="color:var(--indigo);font-size:10px">Export &#8599;</td></tr>
+              <tr><td>Preline</td><td>24 Apr 2026</td><td>17 days</td><td><span class="badge badge-medium">Medium</span></td><td style="color:var(--indigo);font-size:10px">Export &#8599;</td></tr>
+              <tr><td>Structural</td><td>2 May 2026</td><td>25 days</td><td><span class="badge badge-low">Low</span></td><td style="color:var(--indigo);font-size:10px">Export &#8599;</td></tr>
+            </table>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Predictive risk + pre-inspection checklist</div>
+            <div class="explain-what">Shows upcoming inspections with risk levels. Dropdown selects type (Hydraulic/Fire/etc) to see likely failure items. Exportable as PDF for on-site use. Close-out timing data proves speed matters.</div>
+            <div class="explain-why">Why: A foreman can print the likely failure list, walk the site, and check every high-risk item before the inspector arrives. Prevents failures instead of reacting to them.</div>
+          </div>
+        </div>
+
+        <!-- Likely failures -->
+        <div class="section">
+          <div class="section-label green">Likely Failure Items</div>
+          <div class="mockup">
+            <div class="card-title">Likely failure items — Hydraulic</div>
+            <div class="card-sub">Most common issues in hydraulic inspections</div>
+            <table>
+              <tr><th>Issue</th><th>Fail count</th><th>% of failures</th><th>Recurrence</th></tr>
+              <tr><td>Pipe supports &amp; fixings</td><td>60</td><td>29%</td><td style="color:var(--red);font-weight:500">65%</td></tr>
+              <tr><td>Pressure testing &amp; leaks</td><td>50</td><td>24%</td><td style="color:var(--amber);font-weight:500">55%</td></tr>
+              <tr><td>Pipe penetrations</td><td>43</td><td>21%</td><td style="color:var(--amber);font-weight:500">49%</td></tr>
+            </table>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Historical failure patterns for this inspection type</div>
+            <div class="explain-what">Ranked list of items most likely to fail for the selected inspection type. Recurrence percentage shows how often the same issue reappears after being fixed.</div>
+            <div class="explain-why">Why: Gives the site team a concrete checklist. Instead of guessing what to prepare, they know exactly which items to double-check before the inspector arrives.</div>
+          </div>
+        </div>
+
+        <!-- Close-out effect -->
+        <div class="section">
+          <div class="section-label green">Early Close-out Effect</div>
+          <div class="mockup">
+            <div class="card" style="background:rgba(14,116,189,.03);border-color:rgba(14,116,189,.12);margin:0">
+              <div class="card-title" style="font-size:12px">Early close-out effect</div>
+              <div style="font-size:11px;color:var(--slate);line-height:1.7;margin-top:4px">
+                Issues closed within 7–10 days: <strong style="color:var(--green)">12–18%</strong> recurrence<br>
+                Issues left open beyond 14 days: <strong style="color:var(--red)">35–45%</strong> recurrence
+              </div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Speed of resolution matters</div>
+            <div class="explain-what">Shows the direct correlation between how quickly issues are closed and how likely they are to reappear. Data-driven motivation for fast close-out.</div>
+            <div class="explain-why">Why: Hard evidence that closing issues fast halves recurrence. This changes behaviour — when teams see the numbers, they prioritise close-out over new work.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- SITE TEAM: OVERVIEW -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <div class="page" id="site-overview">
+        <div class="page-title">Overview — Harbor View Tower</div>
+        <div class="page-sub">Single-project performance snapshot for site leadership.</div>
+
+        <div class="section">
+          <div class="section-label green">Project KPIs</div>
+          <div class="mockup">
+            <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+              <div class="kpi-card"><div class="kpi-label">Failure rate</div><div class="kpi-value red">51%</div></div>
+              <div class="kpi-card"><div class="kpi-label">Total inspections</div><div class="kpi-value">45</div></div>
+              <div class="kpi-card"><div class="kpi-label">Open issues</div><div class="kpi-value amber">12</div></div>
+              <div class="kpi-card"><div class="kpi-label">Overdue (&gt;14d)</div><div class="kpi-value red">3</div></div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Project-level KPIs</div>
+            <div class="explain-what">Same KPI pattern as the executive view but scoped to a single project. Shows failure rate, total inspections, open issues, and overdue count for this site only.</div>
+            <div class="explain-why">Why: Site managers need their own numbers, not the company average. A project at 51% needs different action than one at 28%. This gives them ownership of their data.</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label green">Project Performance by Type</div>
+          <div class="mockup">
+            <div class="card-title">Performance by inspection type</div>
+            <div class="card-sub">Harbor View Tower breakdown</div>
+            <table>
+              <tr><th>Type</th><th>Inspections</th><th>Failure rate</th><th>Open issues</th></tr>
+              <tr><td>Hydraulic</td><td>15</td><td style="color:var(--red);font-weight:600">60%</td><td>5</td></tr>
+              <tr><td>Framing</td><td>12</td><td>42%</td><td>3</td></tr>
+              <tr><td>Structural</td><td>10</td><td>40%</td><td>2</td></tr>
+              <tr><td>Fire</td><td>8</td><td style="color:var(--green)">25%</td><td>2</td></tr>
+            </table>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Which inspection types are problematic on this site</div>
+            <div class="explain-what">Breaks down this project's performance by inspection type. Lets site managers see if their hydraulic problem is worse than the company average or just normal.</div>
+            <div class="explain-why">Why: Context matters. If the company average for hydraulic is 51% but this site is at 60%, there's a site-specific issue. If it's 51% everywhere, it's a systemic training problem.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- SITE TEAM: INSIGHTS -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <div class="page" id="site-insights">
+        <div class="page-title">Insights — Harbor View Tower</div>
+        <div class="page-sub">Site-specific trends, patterns, and subcontractor performance.</div>
+
+        <div class="section">
+          <div class="section-label green">Site Failure Trend</div>
+          <div class="mockup">
+            <div class="card-title">Failure rate trend</div>
+            <div class="card-sub">6-month project trend</div>
+            <div class="chart-placeholder">
+              <div class="chart-bar" style="height:90%"></div><div class="chart-bar" style="height:85%"></div>
+              <div class="chart-bar" style="height:80%"></div><div class="chart-bar" style="height:78%"></div>
+              <div class="chart-bar" style="height:72%"></div><div class="chart-bar" style="height:68%"></div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Project-level failure trajectory</div>
+            <div class="explain-what">6-month trend chart for this project only. Shows whether this site is improving, stable, or getting worse over time.</div>
+            <div class="explain-why">Why: A site manager needs to know if their efforts are working. A downward trend means their process changes are having impact. An upward trend means something has changed on site.</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label green">Subcontractor Performance</div>
+          <div class="mockup">
+            <div class="card-title">Subcontractor performance</div>
+            <div class="card-sub">Failure rates by subcontractor on this project</div>
+            <table>
+              <tr><th>Subcontractor</th><th>Inspections</th><th>Failure rate</th><th>Avg days to close</th></tr>
+              <tr><td>ABC Plumbing</td><td>15</td><td style="color:var(--red);font-weight:600">60%</td><td style="color:var(--red)">18</td></tr>
+              <tr><td>Smith Framing</td><td>12</td><td>42%</td><td>8</td></tr>
+              <tr><td>Metro Electrical</td><td>10</td><td style="color:var(--green)">30%</td><td>5</td></tr>
+            </table>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Accountability by subcontractor</div>
+            <div class="explain-what">Ranks subcontractors by failure rate and resolution speed. Shows which subs are causing the most rework on this specific project.</div>
+            <div class="explain-why">Why: "ABC Plumbing has a 60% failure rate and takes 18 days to close" is a conversation-starter with data behind it. Replaces gut-feel with evidence when managing subcontractor quality.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- MODALS: ISSUE & ACTIONS -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <div class="page" id="modals-actions">
+        <div class="page-title">Modals &amp; Actions</div>
+        <div class="page-sub">Interactive dialogs triggered from the dashboard.</div>
+
+        <!-- Issue modal -->
+        <div class="section">
+          <div class="section-label" style="color:var(--indigo)">Issue Detail Modal</div>
+          <div class="mockup">
+            <div class="modal-replica" style="max-width:100%">
+              <div class="modal-header">
+                <div><div class="modal-title">Pipe penetration not sealed</div><div style="font-size:10px;color:#999;margin-top:2px">Harbor View Tower · Hydraulic · 12 Feb 2026</div></div>
+                <span class="badge badge-high">Open</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;margin-bottom:14px">
+                <div><span style="color:#999">Days open:</span> <strong style="color:var(--red)">54</strong></div>
+                <div><span style="color:#999">Re-inspections:</span> <strong>0</strong></div>
+              </div>
+              <div style="font-size:11px;color:var(--slate);margin-bottom:14px;padding:8px;background:#FAFAFA;border-radius:6px">Pipe penetrations through fire-rated walls not sealed to required standard.</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <span class="modal-btn modal-btn-primary">Send to sub</span>
+                <span class="modal-btn modal-btn-ghost">Mark ready</span>
+                <span class="modal-btn modal-btn-ghost">Book inspection</span>
+                <span class="modal-btn modal-btn-ghost">Close</span>
+              </div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Issue detail with contextual actions</div>
+            <div class="explain-what">Shows all issue details. Actions change by status: Open → Send to sub, Mark ready. Ready → Book inspection, Send reminder. Closed → Open/download report.</div>
+            <div class="explain-why">Why: Every issue needs action, not just visibility. One-tap actions eliminate "I'll deal with it later" — the behaviour that causes issues to go overdue.</div>
+          </div>
+        </div>
+
+        <!-- Send to sub modal -->
+        <div class="section">
+          <div class="section-label" style="color:var(--indigo)">Send to Subcontractor Modal</div>
+          <div class="mockup">
+            <div class="modal-replica" style="max-width:100%">
+              <div class="modal-header"><div class="modal-title">Send to subcontractor</div><span style="font-size:10px;color:#999">Draft email — edit before sending</span></div>
+              <div class="modal-field"><div class="modal-field-label">To</div><input class="modal-input" value="subcontractor@email.com" readonly></div>
+              <div class="modal-field"><div class="modal-field-label">Subject</div><input class="modal-input" value="Action required: Pipe penetration not sealed" readonly></div>
+              <div class="modal-field"><div class="modal-field-label">Message</div><textarea class="modal-textarea" readonly>Hi,
+
+Please action the following issue at Harbor View Tower:
+
+Issue: Pipe penetration not sealed
+Type: Hydraulic
+Days open: 54
+
+Please resolve and confirm completion.
+
+Regards, Sam Carter</textarea></div>
+              <div style="display:flex;gap:6px">
+                <span class="modal-btn modal-btn-ghost">Copy to clipboard</span>
+                <span class="modal-btn modal-btn-ghost">Open in email &#8599;</span>
+                <span class="modal-btn modal-btn-primary" style="margin-left:auto">Send email</span>
+              </div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Pre-drafted email to subcontractor</div>
+            <div class="explain-what">Auto-populates recipient, subject, and message with issue details. Multiple recipients supported. Three send options: copy, open in email client, or send directly via EmailJS.</div>
+            <div class="explain-why">Why: Chasing subs by phone leaves no paper trail. Pre-drafted emails save 5 minutes per issue and create accountability. That's hours saved per week across a portfolio.</div>
+          </div>
+        </div>
+
+        <!-- PDF -->
+        <div class="section">
+          <div class="section-label" style="color:var(--indigo)">PDF Report Generation</div>
+          <div class="mockup">
+            <div style="background:linear-gradient(135deg,#0A2540,var(--indigo));color:#fff;padding:20px;border-radius:10px">
+              <div style="font-size:16px;font-weight:600;margin-bottom:4px">SOTERRA</div>
+              <div style="font-size:10px;opacity:.7;margin-bottom:16px">Hydraulic Inspection Report</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px;opacity:.8;margin-bottom:16px">
+                <div>Site: Harbor View Tower</div><div>Lot: Lot 3</div>
+                <div>Date: 8 Apr 2026</div><div>Inspector: K. Mitchell</div>
+                <div>Result: <span style="color:#FCA5A5;font-weight:600">FAILED</span></div><div>Failed items: 3</div>
+              </div>
+              <div style="font-size:9px;opacity:.5;border-top:1px solid rgba(255,255,255,.15);padding-top:8px">Generated by Soterra · jsPDF · A4 format with branded header and footer</div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Branded inspection report + risk export</div>
+            <div class="explain-what">Auto-generates A4 PDF with Soterra branding. Includes: type, site, lot, date, inspector, result, failed items list, preparation checklist, and footer. Also exports risk predictions as PDF.</div>
+            <div class="explain-why">Why: Professional branded reports replace handwritten notes. They're consistent, legible, and create a permanent audit trail — critical for compliance and dispute resolution.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- MODALS: BOOKING & CALENDAR -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <div class="page" id="modals-booking">
+        <div class="page-title">Booking &amp; Calendar Modals</div>
+        <div class="page-sub">How users book inspections and manage calendar events.</div>
+
+        <!-- Book inspection -->
+        <div class="section">
+          <div class="section-label" style="color:var(--indigo)">Book Inspection Modal</div>
+          <div class="mockup">
+            <div class="modal-replica" style="max-width:100%">
+              <div class="modal-header"><div class="modal-title">Book inspection</div></div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="padding:12px;border:1px solid var(--border);border-radius:8px;display:flex;gap:10px;align-items:center">
+                  <div style="width:32px;height:32px;border-radius:8px;background:rgba(79,70,229,.1);display:flex;align-items:center;justify-content:center;font-size:16px">&#9993;</div>
+                  <div><div style="font-weight:500;font-size:12px">Email consultant</div><div style="font-size:10px;color:#999">Send booking request to your inspector</div></div>
+                </div>
+                <div style="padding:12px;border:1px solid var(--border);border-radius:8px;display:flex;gap:10px;align-items:center">
+                  <div style="width:32px;height:32px;border-radius:8px;background:rgba(16,185,129,.1);display:flex;align-items:center;justify-content:center;font-size:16px">&#9201;</div>
+                  <div><div style="font-weight:500;font-size:12px">Book via Consentium &#8599;</div><div style="font-size:10px;color:#999">Opens Consentium booking portal</div></div>
+                </div>
+                <div style="padding:12px;border:1px solid var(--border);border-radius:8px;display:flex;gap:10px;align-items:center">
+                  <div style="width:32px;height:32px;border-radius:8px;background:rgba(59,130,246,.1);display:flex;align-items:center;justify-content:center;font-size:16px">&#127963;</div>
+                  <div><div style="font-weight:500;font-size:12px">Book via Auckland Council &#8599;</div><div style="font-size:10px;color:#999">Opens council booking page</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Three booking options in one place</div>
+            <div class="explain-what">Email your consultant directly, or link out to Consentium or Auckland Council booking portals. Also includes booking reminder and calendar event modals.</div>
+            <div class="explain-why">Why: NZ construction uses multiple booking systems. Soterra doesn't replace them — it links to all of them from one place, so teams don't need to remember which portal to use.</div>
+          </div>
+        </div>
+
+        <!-- Calendar event + docs -->
+        <div class="section">
+          <div class="section-label" style="color:var(--indigo)">Add Event &amp; Documents Modal</div>
+          <div class="mockup">
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+              <div class="modal-replica" style="flex:1;min-width:280px">
+                <div class="modal-header"><div class="modal-title">Add event</div></div>
+                <div class="modal-field"><div class="modal-field-label">Event title</div><input class="modal-input" placeholder="e.g. Window measure, Concrete delivery..." readonly></div>
+                <div class="modal-field"><div class="modal-field-label">Type</div><select class="modal-input" style="height:32px"><option>Structure</option><option>Facade</option><option>Delivery</option><option>H&amp;S</option><option>Measures</option><option>Inspection</option></select></div>
+                <div class="modal-field"><div class="modal-field-label">Note (optional)</div><input class="modal-input" placeholder="Additional details..." readonly></div>
+                <div style="display:flex;gap:6px;justify-content:flex-end"><span class="modal-btn modal-btn-ghost">Cancel</span><span class="modal-btn modal-btn-primary">Add event</span></div>
+              </div>
+              <div class="modal-replica" style="flex:1;min-width:280px">
+                <div class="modal-header"><div class="modal-title">Site documents</div></div>
+                <div style="border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;color:#999;font-size:11px">
+                  <div style="font-size:20px;margin-bottom:4px">&#128206;</div>
+                  Click to attach or drag files here<br>
+                  <span style="font-size:9px">PDF, DOCX, XLSX, JPG, PNG — up to 20MB</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Event entry &amp; document management</div>
+            <div class="explain-what">Add/edit/delete calendar events with 10 type categories. Site documents modal allows drag-and-drop file upload per project (consents, plans, specs).</div>
+            <div class="explain-why">Why: Simple event entry means the calendar actually gets used. Document storage per project means consents and specs are always findable — not buried in someone's email.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════ -->
+      <!-- INTEGRATIONS -->
+      <!-- ═══════════════════════════════════════════════════ -->
+      <div class="page" id="integrations">
+        <div class="page-title">External Integrations</div>
+        <div class="page-sub">Third-party services the dashboard connects to.</div>
+
+        <div class="section">
+          <div class="section-label" style="color:#475569">Current Integrations</div>
+          <div class="mockup">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+              <div class="card" style="margin:0;text-align:center">
+                <div style="font-size:20px;margin-bottom:6px">&#128231;</div>
+                <div class="card-title" style="font-size:12px">EmailJS</div>
+                <div style="font-size:10px;color:#999">Send to sub, booking reminders, consultant emails, share lookaheads</div>
+              </div>
+              <div class="card" style="margin:0;text-align:center">
+                <div style="font-size:20px;margin-bottom:6px">&#128196;</div>
+                <div class="card-title" style="font-size:12px">jsPDF</div>
+                <div style="font-size:10px;color:#999">Branded inspection report PDFs, risk export PDFs. A4 format.</div>
+              </div>
+              <div class="card" style="margin:0;text-align:center">
+                <div style="font-size:20px;margin-bottom:6px">&#127963;</div>
+                <div class="card-title" style="font-size:12px">Booking Portals</div>
+                <div style="font-size:10px;color:#999">Consentium + Auckland Council booking links</div>
+              </div>
+            </div>
+          </div>
+          <div class="explain">
+            <div class="explain-title">Current third-party connections</div>
+            <div class="explain-what">EmailJS for in-app email sending. jsPDF for client-side PDF generation. External links to NZ booking portals (Consentium, Auckland Council).</div>
+            <div class="explain-why">Why: These are lightweight integrations that work without a backend. A production build should replace EmailJS with a proper email service and add database-backed PDF storage.</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /shell -->
+
+<script>
+// ── PAGE SWITCHING ──
+function showPage(pageId, navEl, type) {
+  // hide all pages
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  // show target
+  document.getElementById(pageId).classList.add('active');
+
+  // reset nav highlights
+  document.querySelectorAll('.nav-item').forEach(n => {
+    n.classList.remove('active');
+    n.classList.remove('active-green');
+  });
+
+  // highlight clicked nav
+  if (navEl) {
+    navEl.classList.add(type === 'site' ? 'active-green' : 'active');
+  }
+
+  // update breadcrumb
+  const bc = document.getElementById('breadcrumb');
+  const title = document.getElementById(pageId).querySelector('.page-title').textContent;
+  if (type === 'exec') {
+    bc.innerHTML = 'Home &#8250; Executive &#8250; <strong>' + title + '</strong>';
+  } else if (type === 'site') {
+    bc.innerHTML = 'Home &#8250; Site Team &#8250; <strong>' + title + '</strong>';
+  } else {
+    bc.innerHTML = 'Home &#8250; <strong>' + title + '</strong>';
+  }
+
+  // scroll to top
+  document.querySelector('.content').scrollTop = 0;
+}
+
+// ── DASHBOARD SWITCHER ──
+function switchDashboard(which) {
+  const btnExec = document.getElementById('btn-exec');
+  const btnSite = document.getElementById('btn-site');
+  const navExec = document.getElementById('nav-exec');
+  const navSite = document.getElementById('nav-site');
+
+  btnExec.className = '';
+  btnSite.className = '';
+
+  if (which === 'exec') {
+    btnExec.classList.add('active-exec');
+    navExec.classList.add('visible');
+    navSite.classList.remove('visible');
+    // show first exec page
+    const firstNav = navExec.querySelector('.nav-item');
+    showPage('exec-overview', firstNav, 'exec');
+  } else {
+    btnSite.classList.add('active-site');
+    navSite.classList.add('visible');
+    navExec.classList.remove('visible');
+    // show first site page
+    const firstNav = navSite.querySelector('.nav-item');
+    showPage('site-tracker', firstNav, 'site');
+  }
+}
+</script>
+
+</body>
+</html>

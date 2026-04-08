@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soterra — Construction Inspection Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--font:'DM Sans',system-ui,sans-serif;--blue:#0E74BD;--navy:#0A2540;--slate:#4A6080;--bg:#FAFBFD;--white:#fff}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);background:var(--bg);color:var(--navy);overflow-x:hidden}
+
+/* ── NAV ── */
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:16px 40px;display:flex;align-items:center;justify-content:space-between;background:rgba(250,251,253,.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(0,0,0,.04);transition:all .3s}
+.nav-logo{font-size:20px;font-weight:700;color:var(--blue);letter-spacing:-.01em}
+.nav-logo span{color:var(--navy)}
+.nav-links{display:flex;gap:32px;align-items:center}
+.nav-link{font-size:13px;color:var(--slate);text-decoration:none;font-weight:400;transition:color .15s}
+.nav-link:hover{color:var(--navy)}
+.nav-cta{height:38px;padding:0 22px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center}
+.nav-cta:hover{background:#0A5C97;transform:translateY(-1px)}
+
+/* ── SECTIONS ── */
+.section{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:100px 40px;position:relative;overflow:hidden}
+
+/* ── HERO ── */
+.hero{background:linear-gradient(170deg,#F0F7FF 0%,#FAFBFD 40%,#fff 100%);text-align:center}
+.hero::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(circle at 30% 20%,rgba(14,116,189,.06) 0%,transparent 50%),radial-gradient(circle at 70% 80%,rgba(56,189,248,.04) 0%,transparent 50%)}
+.hero-content{position:relative;z-index:1;max-width:720px}
+.hero-badge{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--blue);background:rgba(14,116,189,.06);padding:6px 16px;border-radius:20px;margin-bottom:24px}
+.hero h1{font-size:clamp(36px,5vw,56px);font-weight:700;color:var(--navy);line-height:1.1;margin-bottom:20px;letter-spacing:-.02em}
+.hero h1 em{font-style:normal;color:var(--blue)}
+.hero p{font-size:clamp(16px,2vw,19px);color:var(--slate);line-height:1.7;margin-bottom:36px;font-weight:300}
+.hero-buttons{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn-hero{height:48px;padding:0 28px;border-radius:10px;font-size:15px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:8px;text-decoration:none}
+.btn-primary{background:var(--blue);color:#fff;border:none}
+.btn-primary:hover{background:#0A5C97;transform:translateY(-2px);box-shadow:0 8px 24px rgba(14,116,189,.25)}
+.btn-secondary{background:var(--white);color:var(--navy);border:1.5px solid rgba(0,0,0,.12)}
+.btn-secondary:hover{background:var(--bg);transform:translateY(-2px)}
+.hero-stat-row{display:flex;gap:40px;justify-content:center;margin-top:48px;flex-wrap:wrap}
+.hero-stat{text-align:center}
+.hero-stat-val{font-size:28px;font-weight:700;color:var(--blue)}
+.hero-stat-label{font-size:11px;color:var(--slate);margin-top:2px}
+
+/* ── PROBLEM ── */
+.problem{background:var(--navy);color:#fff}
+.problem-content{max-width:900px;text-align:center}
+.problem-eyebrow{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:20px}
+.problem h2{font-size:clamp(28px,4vw,42px);font-weight:600;line-height:1.2;margin-bottom:16px}
+.problem h2 span{color:#EF4444}
+.problem p{font-size:17px;color:rgba(255,255,255,.6);line-height:1.7;margin-bottom:48px;max-width:600px;margin-left:auto;margin-right:auto}
+.pain-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;text-align:left}
+.pain-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:24px}
+.pain-card-icon{font-size:24px;margin-bottom:12px}
+.pain-card h3{font-size:15px;font-weight:600;margin-bottom:6px}
+.pain-card p{font-size:13px;color:rgba(255,255,255,.5);line-height:1.6}
+
+/* ── FEATURE SECTIONS ── */
+.feature{background:var(--white)}
+.feature:nth-child(even){background:var(--bg)}
+.feature-inner{max-width:1100px;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
+.feature-inner.reverse{direction:rtl}
+.feature-inner.reverse>*{direction:ltr}
+.feature-text{max-width:460px}
+.feature-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:4px 12px;border-radius:4px;margin-bottom:16px}
+.feature-tag.blue{color:var(--blue);background:rgba(14,116,189,.08)}
+.feature-tag.green{color:#059669;background:rgba(5,150,105,.08)}
+.feature-tag.purple{color:#7C3AED;background:rgba(124,58,237,.08)}
+.feature h2{font-size:clamp(24px,3vw,32px);font-weight:600;line-height:1.2;margin-bottom:12px;color:var(--navy)}
+.feature p{font-size:14px;color:var(--slate);line-height:1.7;margin-bottom:24px}
+.feature-bullets{display:flex;flex-direction:column;gap:12px}
+.feature-bullet{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--slate);line-height:1.5}
+.feature-bullet-icon{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;margin-top:1px}
+.feature-bullet-icon.blue{background:rgba(14,116,189,.08);color:var(--blue)}
+.feature-bullet-icon.green{background:rgba(5,150,105,.08);color:#059669}
+.feature-bullet-icon.purple{background:rgba(124,58,237,.08);color:#7C3AED}
+
+/* Preview mockup */
+.feature-preview{border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.08),0 1px 3px rgba(0,0,0,.04);position:relative;background:#fff;border:1px solid rgba(0,0,0,.06)}
+.preview-bar{height:36px;background:#F8F9FA;border-bottom:1px solid rgba(0,0,0,.06);display:flex;align-items:center;padding:0 14px;gap:6px}
+.preview-dot{width:8px;height:8px;border-radius:50%}
+.preview-body{padding:20px;position:relative}
+.preview-body::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.9) 100%);pointer-events:none}
+.preview-body img{width:100%;border-radius:8px;display:block}
+
+/* Placeholder mockup content */
+.mock-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.mock-kpi{background:var(--bg);border-radius:8px;padding:12px;text-align:center}
+.mock-kpi-val{font-size:18px;font-weight:600;color:var(--navy)}
+.mock-kpi-label{font-size:9px;color:var(--slate);text-transform:uppercase;letter-spacing:.03em;margin-top:2px}
+.mock-table{width:100%;font-size:11px;border-collapse:collapse}
+.mock-table th{text-align:left;padding:6px 8px;font-size:9px;color:var(--slate);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid rgba(0,0,0,.06)}
+.mock-table td{padding:6px 8px;border-bottom:1px solid rgba(0,0,0,.03);color:var(--navy)}
+.mock-badge{font-size:9px;font-weight:600;padding:2px 8px;border-radius:3px;display:inline-block}
+.mock-dot{display:inline-block;width:36px;height:20px;border-radius:4px;font-size:8px;text-align:center;line-height:20px;color:#fff;font-weight:500}
+
+/* Calendar mock */
+.mock-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:rgba(0,0,0,.04);border-radius:8px;overflow:hidden;font-size:9px}
+.mock-cal-h{background:rgba(14,116,189,.04);padding:5px 2px;text-align:center;color:var(--slate);font-weight:600;font-size:8px}
+.mock-cal-d{background:#fff;padding:4px;min-height:36px}
+.mock-cal-d span{font-size:8px;font-weight:500;color:var(--slate)}
+.mock-cal-evt{font-size:7px;color:#fff;padding:1px 4px;border-radius:2px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── CTA ── */
+.cta{background:linear-gradient(170deg,#0A2540,#0E74BD);color:#fff;text-align:center}
+.cta-content{max-width:600px}
+.cta h2{font-size:clamp(28px,4vw,40px);font-weight:600;line-height:1.2;margin-bottom:12px}
+.cta p{font-size:16px;color:rgba(255,255,255,.6);line-height:1.7;margin-bottom:36px}
+.cta-form{display:flex;gap:10px;max-width:440px;margin:0 auto;flex-wrap:wrap;justify-content:center}
+.cta-input{flex:1;min-width:220px;height:48px;border:1.5px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);border-radius:10px;padding:0 16px;font-size:14px;font-family:var(--font);color:#fff;outline:none;transition:all .15s}
+.cta-input::placeholder{color:rgba(255,255,255,.35)}
+.cta-input:focus{border-color:rgba(255,255,255,.5);background:rgba(255,255,255,.12)}
+.cta-submit{height:48px;padding:0 28px;background:#fff;color:var(--navy);border:none;border-radius:10px;font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .2s}
+.cta-submit:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.cta-note{font-size:12px;color:rgba(255,255,255,.35);margin-top:16px}
+
+/* ── FOOTER ── */
+.footer{padding:32px 40px;text-align:center;font-size:11px;color:var(--slate);border-top:1px solid rgba(0,0,0,.04)}
+
+/* ── SCROLL ANIMATIONS ── */
+.reveal{opacity:0;transform:translateY(30px);transition:opacity .7s ease,transform .7s ease}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-delay-1{transition-delay:.1s}
+.reveal-delay-2{transition-delay:.2s}
+.reveal-delay-3{transition-delay:.3s}
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px){
+  .nav{padding:14px 20px}
+  .nav-links .nav-link{display:none}
+  .section{padding:80px 20px}
+  .feature-inner,.feature-inner.reverse{grid-template-columns:1fr;gap:32px;direction:ltr}
+  .feature-text{max-width:100%}
+  .pain-grid{grid-template-columns:1fr}
+  .hero-stat-row{gap:24px}
+  .mock-kpis{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ NAV ═══ -->
+<nav class="nav">
+  <a href="index.html" class="nav-logo" style="text-decoration:none">Soter<span>ra</span></a>
+  <div class="nav-links">
+    <a href="#problem" class="nav-link">Why Soterra</a>
+    <a href="#portfolio" class="nav-link">Product</a>
+    <a href="#cta" class="nav-cta">Book a demo</a>
+  </div>
+</nav>
+
+<!-- ═══ 1. HERO ═══ -->
+<section class="section hero" id="hero">
+  <div class="hero-content">
+    <div class="hero-badge reveal">Construction Inspection Intelligence</div>
+    <h1 class="reveal reveal-delay-1">Stop reacting.<br><em>Start predicting.</em></h1>
+    <p class="reveal reveal-delay-2">Soterra turns construction data into actionable intelligence. Know what will fail before it happens, track every issue to close-out, and prove your improvement to stakeholders.</p>
+    <div class="hero-buttons reveal reveal-delay-3">
+      <a href="#cta" class="btn-hero btn-primary">Book a demo &#8594;</a>
+      <a href="#portfolio" class="btn-hero btn-secondary">See how it works</a>
+    </div>
+    <div class="hero-stat-row reveal reveal-delay-3">
+      <div class="hero-stat"><div class="hero-stat-val">~10%</div><div class="hero-stat-label">of project cost lost to rework</div></div>
+      <div class="hero-stat"><div class="hero-stat-val">88%</div><div class="hero-stat-label">of NZ & AU projects run behind schedule</div></div>
+      <div class="hero-stat"><div class="hero-stat-val">15%</div><div class="hero-stat-label">of workers leave every quarter</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 2. THE PROBLEM ═══ -->
+<section class="section problem" id="problem">
+  <div class="problem-content">
+    <div class="problem-eyebrow reveal">The industry problem</div>
+    <h2 class="reveal reveal-delay-1">Your projects are losing money to <span>preventable problems</span></h2>
+    <p class="reveal reveal-delay-2">Rework and delays are the biggest cost drivers in construction. Most teams don't know what went wrong until it happens — by then it's too late.</p>
+    <div class="pain-grid">
+      <div class="pain-card reveal">
+        <div class="pain-card-icon">&#128200;</div>
+        <h3>No visibility</h3>
+        <p>Project performance lives in spreadsheets, emails, and someone's memory. Executives can't see portfolio risk without chasing PMs.</p>
+      </div>
+      <div class="pain-card reveal reveal-delay-1">
+        <div class="pain-card-icon">&#128336;</div>
+        <h3>Reactive, not proactive</h3>
+        <p>Teams find out about problems when they happen. Soterra helps you predict and get ahead before rework is needed.</p>
+      </div>
+      <div class="pain-card reveal reveal-delay-2">
+        <div class="pain-card-icon">&#128222;</div>
+        <h3>Phone-call culture</h3>
+        <p>Chasing subs by phone leaves no paper trail. Issues get forgotten, reminders don't happen, and the same problems keep coming back.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 3. PORTFOLIO VIEW ═══ -->
+<section class="section feature" id="portfolio">
+  <div class="feature-inner">
+    <div class="feature-text">
+      <div class="feature-tag blue reveal">Portfolio overview</div>
+      <h2 class="reveal reveal-delay-1">Your entire portfolio in one view</h2>
+      <p class="reveal reveal-delay-2">Every project, every inspection, every risk — live. No spreadsheets, no chasing PMs for updates.</p>
+      <div class="feature-bullets reveal reveal-delay-3">
+        <div class="feature-bullet"><div class="feature-bullet-icon blue">&#10003;</div>Company-wide failure rates update live as inspections are completed</div>
+        <div class="feature-bullet"><div class="feature-bullet-icon blue">&#10003;</div>Projects ranked by risk — high-risk sites surface instantly</div>
+        <div class="feature-bullet"><div class="feature-bullet-icon blue">&#10003;</div>Drill into any project for full issue history and inspection timeline</div>
+      </div>
+    </div>
+    <div class="feature-preview reveal">
+      <div class="preview-bar"><div class="preview-dot" style="background:#EF4444"></div><div class="preview-dot" style="background:#F59E0B"></div><div class="preview-dot" style="background:#10B981"></div></div>
+      <div class="preview-body">
+        <div class="mock-kpis">
+          <div class="mock-kpi"><div class="mock-kpi-val">43%</div><div class="mock-kpi-label">Failure rate</div></div>
+          <div class="mock-kpi"><div class="mock-kpi-val">420</div><div class="mock-kpi-label">Inspections</div></div>
+          <div class="mock-kpi"><div class="mock-kpi-val">5.0</div><div class="mock-kpi-label">Issues/insp</div></div>
+          <div class="mock-kpi"><div class="mock-kpi-val" style="color:#EF4444;font-size:13px">Hydraulic</div><div class="mock-kpi-label">Highest risk</div></div>
+        </div>
+        <table class="mock-table">
+          <tr><th>Project</th><th>Failure rate</th><th>Open</th><th>Risk</th></tr>
+          <tr><td style="font-weight:500">Harbor View Tower</td><td style="color:#EF4444;font-weight:500">51%</td><td>12</td><td><span class="mock-badge" style="background:#FEE2E2;color:#EF4444">High</span></td></tr>
+          <tr><td style="font-weight:500">North Ridge Schools</td><td>38%</td><td>5</td><td><span class="mock-badge" style="background:#FEF3C7;color:#D97706">Medium</span></td></tr>
+          <tr><td style="font-weight:500">Union Rail Depot</td><td>45%</td><td>8</td><td><span class="mock-badge" style="background:#FEF3C7;color:#D97706">Medium</span></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 4. SITE INTELLIGENCE ═══ -->
+<section class="section feature" id="intelligence">
+  <div class="feature-inner reverse">
+    <div class="feature-text">
+      <div class="feature-tag green reveal">Predictive intelligence</div>
+      <h2 class="reveal reveal-delay-1">Know what will fail before the inspector arrives</h2>
+      <p class="reveal reveal-delay-2">Soterra analyses historical patterns to predict which items are most likely to fail. Your team walks the site with insight built on real data from past inspections.</p>
+      <div class="feature-bullets reveal reveal-delay-3">
+        <div class="feature-bullet"><div class="feature-bullet-icon green">&#10003;</div>Colour-coded inspection tracker — every lot, every type, at a glance</div>
+        <div class="feature-bullet"><div class="feature-bullet-icon green">&#10003;</div>Predictive risk alerts flag high-risk items days in advance</div>
+        <div class="feature-bullet"><div class="feature-bullet-icon green">&#10003;</div>Likely failure items ranked by recurrence — exportable as a site checklist</div>
+      </div>
+    </div>
+    <div class="feature-preview reveal">
+      <div class="preview-bar"><div class="preview-dot" style="background:#EF4444"></div><div class="preview-dot" style="background:#F59E0B"></div><div class="preview-dot" style="background:#10B981"></div></div>
+      <div class="preview-body">
+        <div style="font-size:12px;font-weight:600;color:var(--navy);margin-bottom:10px">Inspection status tracker</div>
+        <table class="mock-table" style="margin-bottom:14px">
+          <tr><th>Type</th><th>Lot 1</th><th>Lot 2</th><th>Lot 3</th><th>Lot 4</th></tr>
+          <tr><td style="font-weight:500">Earthworks</td><td><span class="mock-dot" style="background:#10B981">Jan</span></td><td><span class="mock-dot" style="background:#10B981">Jan</span></td><td><span class="mock-dot" style="background:#10B981">Jan</span></td><td><span class="mock-dot" style="background:#F59E0B">Apr</span></td></tr>
+          <tr><td style="font-weight:500">Foundations</td><td><span class="mock-dot" style="background:#10B981">Jan</span></td><td><span class="mock-dot" style="background:#10B981">Jan</span></td><td><span class="mock-dot" style="background:#F59E0B">Apr</span></td><td><span class="mock-dot" style="background:transparent;border:1.5px solid rgba(0,0,0,.15);color:#999">Apr</span></td></tr>
+          <tr><td style="font-weight:500">Framing</td><td><span class="mock-dot" style="background:#10B981">Feb</span></td><td><span class="mock-dot" style="background:#10B981">Feb</span></td><td><span class="mock-dot" style="background:#EF4444">Apr</span></td><td><span class="mock-dot" style="background:transparent;border:1.5px solid rgba(0,0,0,.15);color:#999">Apr</span></td></tr>
+          <tr><td style="font-weight:500">Preline</td><td><span class="mock-dot" style="background:#EF4444">Feb</span></td><td><span class="mock-dot" style="background:#F59E0B">Apr</span></td><td><span class="mock-dot" style="background:transparent;border:1.5px solid rgba(0,0,0,.15);color:#999">Apr</span></td><td><span class="mock-dot" style="background:transparent;border:1.5px solid rgba(0,0,0,.15);color:#999">May</span></td></tr>
+        </table>
+        <table class="mock-table">
+          <tr><th>Upcoming</th><th>Date</th><th>Days</th><th>Risk</th></tr>
+          <tr><td style="font-weight:500">Hydraulic</td><td>12 Apr</td><td style="color:#EF4444;font-weight:500">5</td><td><span class="mock-badge" style="background:#FEE2E2;color:#EF4444">High</span></td></tr>
+          <tr><td style="font-weight:500">Fire</td><td>18 Apr</td><td>11</td><td><span class="mock-badge" style="background:#FEF3C7;color:#D97706">Medium</span></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 5. CALENDAR & AUTOMATION ═══ -->
+<section class="section feature" id="calendar">
+  <div class="feature-inner">
+    <div class="feature-text">
+      <div class="feature-tag purple reveal">Automation</div>
+      <h2 class="reveal reveal-delay-1">Keep your whole team aligned, automatically</h2>
+      <p class="reveal reveal-delay-2">One calendar for everything — deliveries, inspections, scaffold drops. Assign tasks, set reminders, and notify subs without picking up the phone.</p>
+      <div class="feature-bullets reveal reveal-delay-3">
+        <div class="feature-bullet"><div class="feature-bullet-icon purple">&#10003;</div>Auto-reminders before key milestones — configurable by site</div>
+        <div class="feature-bullet"><div class="feature-bullet-icon purple">&#10003;</div>One-click email to subs with pre-drafted messages and paper trail</div>
+        <div class="feature-bullet"><div class="feature-bullet-icon purple">&#10003;</div>Calendar events with .ics export — syncs with Outlook and Google Calendar</div>
+      </div>
+    </div>
+    <div class="feature-preview reveal">
+      <div class="preview-bar"><div class="preview-dot" style="background:#EF4444"></div><div class="preview-dot" style="background:#F59E0B"></div><div class="preview-dot" style="background:#10B981"></div></div>
+      <div class="preview-body">
+        <div style="font-size:12px;font-weight:600;color:var(--navy);margin-bottom:10px">April 2026</div>
+        <div class="mock-cal">
+          <div class="mock-cal-h">Mon</div><div class="mock-cal-h">Tue</div><div class="mock-cal-h">Wed</div><div class="mock-cal-h">Thu</div><div class="mock-cal-h">Fri</div><div class="mock-cal-h">Sat</div><div class="mock-cal-h">Sun</div>
+          <div class="mock-cal-d"></div><div class="mock-cal-d"></div><div class="mock-cal-d"><span>1</span></div><div class="mock-cal-d"><span>2</span></div><div class="mock-cal-d"><span>3</span></div><div class="mock-cal-d"><span>4</span></div><div class="mock-cal-d"><span>5</span></div>
+          <div class="mock-cal-d"><span>6</span></div><div class="mock-cal-d"><span>7</span><div class="mock-cal-evt" style="background:#4F46E5">Window measure</div></div><div class="mock-cal-d"><span>8</span></div><div class="mock-cal-d"><span>9</span><div class="mock-cal-evt" style="background:#3B82F6">Scaffold drop</div></div><div class="mock-cal-d"><span>10</span></div><div class="mock-cal-d"><span>11</span></div><div class="mock-cal-d"><span>12</span></div>
+          <div class="mock-cal-d"><span>13</span></div><div class="mock-cal-d"><span>14</span><div class="mock-cal-evt" style="background:#F59E0B;color:#000">Delivery</div></div><div class="mock-cal-d"><span>15</span></div><div class="mock-cal-d"><span>16</span><div class="mock-cal-evt" style="background:#EF4444">H&amp;S audit</div></div><div class="mock-cal-d"><span>17</span></div><div class="mock-cal-d"><span>18</span></div><div class="mock-cal-d"><span>19</span></div>
+          <div class="mock-cal-d"><span>20</span></div><div class="mock-cal-d"><span>21</span></div><div class="mock-cal-d"><span>22</span><div class="mock-cal-evt" style="background:#16A34A">Landscaping</div></div><div class="mock-cal-d"><span>23</span></div><div class="mock-cal-d"><span>24</span><div class="mock-cal-evt" style="background:#F59E0B;color:#000">Gib delivery</div></div><div class="mock-cal-d"><span>25</span></div><div class="mock-cal-d"><span>26</span></div>
+          <div class="mock-cal-d"><span>27</span></div><div class="mock-cal-d"><span>28</span><div class="mock-cal-evt" style="background:#475569">Basement WP</div></div><div class="mock-cal-d"><span>29</span></div><div class="mock-cal-d"><span>30</span></div><div class="mock-cal-d"></div><div class="mock-cal-d"></div><div class="mock-cal-d"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 6. CTA ═══ -->
+<section class="section cta" id="cta">
+  <div class="cta-content">
+    <h2 class="reveal">See it with your own project data</h2>
+    <p class="reveal reveal-delay-1">Get in touch to see a personalised demo showing your failure patterns, risk areas, and what Soterra can predict for your next inspection.</p>
+    <div class="cta-form reveal reveal-delay-2">
+      <input type="email" class="cta-input" placeholder="Your work email">
+      <button class="cta-submit" onclick="submitDemo()">Book a demo &#8594;</button>
+    </div>
+    <div class="cta-note reveal reveal-delay-3">Free pilot for NZ construction companies. No credit card required.</div>
+  </div>
+</section>
+
+<!-- ═══ FOOTER ═══ -->
+<footer class="footer">
+  Soterra &copy; 2026 &nbsp;&middot;&nbsp; Construction Inspection Intelligence &nbsp;&middot;&nbsp; New Zealand
+</footer>
+
+<script>
+// ── Scroll reveal ──
+function revealOnScroll(){
+  document.querySelectorAll('.reveal').forEach(function(el){
+    var top=el.getBoundingClientRect().top;
+    if(top<window.innerHeight-60) el.classList.add('visible');
+  });
+}
+window.addEventListener('scroll',revealOnScroll);
+window.addEventListener('load',revealOnScroll);
+
+// ── Smooth nav scroll ──
+document.querySelectorAll('a[href^="#"]').forEach(function(a){
+  a.addEventListener('click',function(e){
+    var target=document.querySelector(this.getAttribute('href'));
+    if(target){e.preventDefault();target.scrollIntoView({behavior:'smooth'});}
+  });
+});
+
+// ── Demo submit ──
+function submitDemo(){
+  var email=document.querySelector('.cta-input').value.trim();
+  if(!email){alert('Please enter your email');return;}
+  // In production, this would send to your backend
+  var btn=document.querySelector('.cta-submit');
+  btn.textContent='Thank you!';
+  btn.style.background='#10B981';
+  setTimeout(function(){
+    btn.textContent='Book a demo \u2192';
+    btn.style.background='#fff';
+  },3000);
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Soterra Demo Panel — Mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--blue:#0E74BD;--sky:#38BDF8;--navy:#0A2540;--slate:#4A6080;--bg:#F0F7FF;--font:'DM Sans',system-ui,sans-serif}
+body{font-family:var(--font);background:var(--bg);display:flex;height:100vh;overflow:hidden}
+
+/* ── FAKE DASHBOARD ── */
+.fake-dash{flex:1;display:flex;transition:margin-right .35s cubic-bezier(.4,0,.2,1)}
+.fake-dash.pushed{margin-right:360px}
+.fake-sidebar{width:180px;background:#fff;border-right:1px solid rgba(0,0,0,.08);padding:24px 0;flex-shrink:0}
+.fake-sidebar-logo{font-size:16px;font-weight:600;color:var(--blue);padding:0 20px 24px}
+.fake-nav{padding:9px 20px;font-size:12px;color:var(--slate);border-left:3px solid transparent;cursor:default}
+.fake-nav.active{color:var(--blue);font-weight:600;background:rgba(14,116,189,.06);border-left-color:var(--blue)}
+.fake-main{flex:1;padding:28px;overflow-y:auto}
+.fake-topbar{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--slate);padding-bottom:14px;border-bottom:1px solid rgba(0,0,0,.06);margin-bottom:20px}
+.fake-topbar-right{display:flex;align-items:center;gap:10px}
+.fake-avatar{width:28px;height:28px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600}
+.fake-title{font-size:20px;font-weight:500;color:var(--navy);margin-bottom:4px}
+.fake-sub{font-size:12px;color:var(--slate);margin-bottom:20px}
+.fake-page{display:none}
+.fake-page.active{display:block}
+
+/* Fake KPIs */
+.fake-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.fake-kpi{background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:10px;padding:16px}
+.fake-kpi-label{font-size:10px;color:var(--slate);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.fake-kpi-val{font-size:24px;font-weight:500;color:var(--navy)}
+
+/* Fake cards/tables */
+.fake-card{background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:10px;padding:20px;margin-bottom:16px}
+.fake-card-title{font-size:14px;font-weight:600;color:var(--navy);margin-bottom:4px}
+.fake-card-sub{font-size:11px;color:var(--slate);margin-bottom:14px}
+.fake-table{width:100%;border-collapse:collapse;font-size:12px}
+.fake-table th{text-align:left;padding:8px 10px;border-bottom:1px solid rgba(0,0,0,.06);color:var(--slate);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.fake-table td{padding:8px 10px;border-bottom:1px solid rgba(0,0,0,.04);color:var(--navy)}
+.badge{font-size:10px;font-weight:600;padding:3px 10px;border-radius:4px;display:inline-block}
+.badge-high{background:#FEE2E2;color:#EF4444}
+.badge-med{background:#FEF3C7;color:#D97706}
+.badge-low{background:#D1FAE5;color:#059669}
+
+/* Tracker dots */
+.dot{display:inline-block;width:32px;height:22px;border-radius:4px;font-size:9px;text-align:center;line-height:22px;color:#fff;font-weight:500}
+.dot-g{background:#10B981}.dot-y{background:#F59E0B}.dot-r{background:#EF4444}.dot-e{background:transparent;border:1.5px solid rgba(0,0,0,.15);color:var(--slate)}
+
+/* Calendar grid */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:rgba(0,0,0,.04);border-radius:8px;overflow:hidden;font-size:11px}
+.cal-head{background:rgba(14,116,189,.04);padding:8px 4px;text-align:center;font-weight:500;color:var(--slate);font-size:10px}
+.cal-day{background:#fff;padding:6px;min-height:64px}
+.cal-day-num{font-size:10px;color:var(--slate);margin-bottom:4px}
+.cal-day-num.today{color:var(--blue);font-weight:600}
+.cal-evt{font-size:8px;color:#fff;padding:2px 5px;border-radius:3px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.cal-legend span{font-size:9px;display:flex;align-items:center;gap:4px;color:var(--slate)}
+.cal-swatch{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* Highlight ring */
+.demo-highlight-ring{outline:2.5px solid var(--blue);outline-offset:8px;border-radius:12px;animation:demoPulse 2s ease-in-out infinite;position:relative;z-index:1}
+@keyframes demoPulse{0%,100%{outline-color:#0E74BD}50%{outline-color:rgba(14,116,189,.3)}}
+
+/* ── GUIDE PANEL ── */
+#demo-guide{position:fixed;top:0;right:0;width:360px;height:100vh;background:#fff;border-left:1px solid rgba(0,0,0,.08);z-index:100;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.06);transform:translateX(0);transition:transform .35s cubic-bezier(.4,0,.2,1)}
+.demo-guide-header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid rgba(0,0,0,.06)}
+.demo-guide-logo{font-size:15px;font-weight:600;color:var(--blue);display:flex;align-items:center;gap:10px}
+.demo-guide-label{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--slate);background:rgba(14,116,189,.06);padding:3px 10px;border-radius:4px}
+.demo-guide-step-count{font-size:11px;color:var(--slate);font-weight:400}
+.demo-guide-close{width:28px;height:28px;border-radius:6px;border:1px solid rgba(0,0,0,.08);background:#fff;color:var(--slate);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.demo-guide-close:hover{background:var(--bg);color:var(--navy)}
+.demo-guide-body{flex:1;overflow-y:auto;padding:28px 24px}
+.demo-step-tag{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--blue);background:rgba(14,116,189,.08);padding:4px 12px;border-radius:4px;display:inline-block;margin-bottom:16px}
+.demo-step-title{font-size:20px;font-weight:500;color:var(--navy);margin-bottom:10px;line-height:1.3}
+.demo-step-desc{font-size:13px;color:var(--slate);line-height:1.75;font-weight:300}
+.demo-step-desc strong{color:var(--navy);font-weight:500}
+.demo-feature-list{margin-top:20px;display:flex;flex-direction:column;gap:10px}
+.demo-feature-item{display:flex;align-items:flex-start;gap:10px;font-size:12px;color:var(--slate);line-height:1.5}
+.demo-feature-icon{width:20px;height:20px;border-radius:5px;background:rgba(14,116,189,.08);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;margin-top:1px}
+
+/* "Also includes" snippet */
+.demo-also{margin-top:24px;padding-top:18px;border-top:1px solid rgba(0,0,0,.06)}
+.demo-also-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);margin-bottom:10px;opacity:.7}
+.demo-also-list{display:flex;flex-direction:column;gap:6px}
+.demo-also-item{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--slate);opacity:.65;cursor:default}
+.demo-also-item span.also-dot{width:5px;height:5px;border-radius:50%;background:var(--blue);opacity:.4;flex-shrink:0}
+
+.demo-guide-footer{border-top:1px solid rgba(0,0,0,.06);padding:0}
+.demo-progress-bar{height:3px;background:rgba(14,116,189,.08)}
+.demo-progress-fill{height:100%;background:var(--blue);transition:width .4s cubic-bezier(.4,0,.2,1)}
+.demo-guide-nav{display:flex;align-items:center;justify-content:space-between;padding:16px 24px}
+.demo-guide-back{background:none;border:none;color:var(--slate);font-size:13px;font-weight:400;cursor:pointer;font-family:var(--font);padding:8px 0;transition:color .15s}
+.demo-guide-back:hover{color:var(--navy)}
+.demo-guide-back.hidden{visibility:hidden}
+.demo-guide-next{height:40px;padding:0 24px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;font-family:var(--font);cursor:pointer;transition:background .15s;display:flex;align-items:center;gap:6px}
+.demo-guide-next:hover{background:#0A5C97}
+
+/* CTA */
+.demo-cta-wrap{text-align:center;padding:20px 0}
+.demo-cta-icon{width:56px;height:56px;border-radius:14px;background:rgba(14,116,189,.08);color:var(--blue);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:24px}
+.demo-cta-title{font-size:20px;font-weight:500;color:var(--navy);margin-bottom:10px}
+.demo-cta-desc{font-size:13px;color:var(--slate);line-height:1.7;font-weight:300;margin-bottom:24px}
+.demo-cta-btn{display:flex;width:100%;height:44px;border-radius:8px;font-size:14px;font-weight:500;font-family:var(--font);cursor:pointer;transition:all .15s;margin-bottom:10px;text-decoration:none;align-items:center;justify-content:center}
+.demo-cta-primary{background:var(--blue);color:#fff;border:none}
+.demo-cta-primary:hover{background:#0A5C97}
+.demo-cta-secondary{background:#fff;color:var(--slate);border:1.5px solid rgba(0,0,0,.1)}
+.demo-cta-secondary:hover{border-color:var(--blue);color:var(--blue)}
+
+/* Mockup switcher */
+.mockup-switcher{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:8px;display:flex;gap:4px;box-shadow:0 4px 20px rgba(0,0,0,.08);z-index:200}
+.mockup-switcher button{height:32px;padding:0 14px;border:none;background:transparent;color:var(--slate);font-size:11px;font-weight:500;font-family:var(--font);cursor:pointer;border-radius:6px;transition:all .15s}
+.mockup-switcher button.active{background:var(--blue);color:#fff}
+</style>
+</head>
+<body>
+
+<!-- ── FAKE DASHBOARD ── -->
+<div class="fake-dash pushed" id="fake-dash">
+  <div class="fake-sidebar" id="fake-sidebar">
+    <div class="fake-sidebar-logo">Soterra</div>
+    <div class="fake-nav active" id="nav-overview">Overview</div>
+    <div class="fake-nav" id="nav-company">Company</div>
+    <div class="fake-nav" id="nav-performance">Performance</div>
+    <div class="fake-nav" id="nav-insights">Insights</div>
+    <div style="height:1px;background:rgba(0,0,0,.06);margin:14px 20px"></div>
+    <div class="fake-nav" id="nav-tracker">Live tracker</div>
+    <div class="fake-nav" id="nav-calendar">Calendar</div>
+    <div class="fake-nav" id="nav-risk">Risk alerts</div>
+  </div>
+  <div class="fake-main">
+    <div class="fake-topbar">
+      <div id="topbar-label">Dashboard · Executive</div>
+      <div class="fake-topbar-right">
+        <span>Adam</span>
+        <div class="fake-avatar">A</div>
+      </div>
+    </div>
+
+    <!-- PAGE 0: Executive Overview -->
+    <div class="fake-page active" id="page-0">
+      <div class="fake-title">Executive overview</div>
+      <div class="fake-sub">Company-wide performance at a glance</div>
+      <div class="fake-kpis demo-highlight-ring">
+        <div class="fake-kpi"><div class="fake-kpi-label">Company failure rate</div><div class="fake-kpi-val">43%</div></div>
+        <div class="fake-kpi"><div class="fake-kpi-label">Total inspections</div><div class="fake-kpi-val">420</div></div>
+        <div class="fake-kpi"><div class="fake-kpi-label">Issues / inspection</div><div class="fake-kpi-val">5.0</div></div>
+        <div class="fake-kpi"><div class="fake-kpi-label">Highest risk type</div><div class="fake-kpi-val" style="font-size:16px">Hydraulic <span style="color:#EF4444">51%</span></div></div>
+      </div>
+      <div class="fake-card">
+        <div class="fake-card-title">Portfolio risk</div>
+        <div class="fake-card-sub">Click a project to see full breakdown</div>
+        <table class="fake-table">
+          <tr><th>Project</th><th>Inspections</th><th>Failure rate</th><th>Open issues</th><th>Overdue</th><th>Risk</th></tr>
+          <tr><td style="color:#4F46E5;font-weight:500">Harbor View Tower</td><td>45</td><td style="color:#EF4444;font-weight:500">51%</td><td>12</td><td style="color:#EF4444;font-weight:500">3</td><td><span class="badge badge-high">High</span></td></tr>
+          <tr><td style="color:#4F46E5;font-weight:500">North Ridge Schools</td><td>38</td><td>38%</td><td>5</td><td>0</td><td><span class="badge badge-med">Medium</span></td></tr>
+          <tr><td style="color:#4F46E5;font-weight:500">Westfield Apartments</td><td>52</td><td>35%</td><td>3</td><td>0</td><td><span class="badge badge-low">Low</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- PAGE 1: Early Risk Alerts -->
+    <div class="fake-page" id="page-1">
+      <div class="fake-title">Early risk alerts</div>
+      <div class="fake-sub">Harbor View Tower — Predictive risk intelligence</div>
+      <div class="fake-card demo-highlight-ring">
+        <div class="fake-card-title">Upcoming inspection risk</div>
+        <div class="fake-card-sub">Auto-generated from your construction programme and inspection history</div>
+        <table class="fake-table">
+          <tr><th>Upcoming inspection</th><th>Date</th><th>Predicted risk</th><th>Top predicted failures</th></tr>
+          <tr><td style="font-weight:500">Hydraulic — Lot 4</td><td>12 Apr 2026</td><td><span class="badge badge-high">High</span></td><td style="color:#EF4444">Pipe penetrations, pressure testing</td></tr>
+          <tr><td style="font-weight:500">Framing — Lot 5</td><td>20 Apr 2026</td><td><span class="badge badge-med">Medium</span></td><td style="color:#D97706">Bracing connections, nail patterns</td></tr>
+          <tr><td style="font-weight:500">Preline — Lot 3</td><td>30 Apr 2026</td><td><span class="badge badge-low">Low</span></td><td style="color:var(--slate)">—</td></tr>
+        </table>
+      </div>
+      <div class="fake-card">
+        <div class="fake-card-title">Recurring risks — predictive</div>
+        <div class="fake-card-sub">Re-inspection likelihood once first identified</div>
+        <table class="fake-table">
+          <tr><th>Issue</th><th>Re-inspection rate</th><th>Repeat instances</th><th style="background:#EEF2FF;color:#4F46E5">Early close-out effect</th></tr>
+          <tr><td>Pipe penetrations</td><td style="color:#EF4444;font-weight:500">42%</td><td>18 of 43</td><td style="background:#EEF2FF;font-size:11px">12–18% if closed within 10 days</td></tr>
+          <tr><td>Pipe supports & fixings</td><td style="color:#F59E0B;font-weight:500">37%</td><td>22 of 60</td><td style="background:#EEF2FF;font-size:11px">15–20% if closed within 10 days</td></tr>
+          <tr><td>Pressure testing & leaks</td><td style="color:#F59E0B;font-weight:500">18%</td><td>9 of 50</td><td style="background:#EEF2FF;font-size:11px">8–12% if closed within 10 days</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- PAGE 2: Inspection Tracker -->
+    <div class="fake-page" id="page-2">
+      <div class="fake-title">Live tracker — Harbor View Tower</div>
+      <div class="fake-sub">Inspection status at a glance</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+        <div style="background:#fff;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(0,0,0,.06)">
+          <div style="font-size:24px;font-weight:500;color:#EF4444">12</div>
+          <div style="font-size:11px;color:var(--slate)">Open issues</div>
+        </div>
+        <div style="background:#fff;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(0,0,0,.06)">
+          <div style="font-size:24px;font-weight:500;color:#F59E0B">5</div>
+          <div style="font-size:11px;color:var(--slate)">Ready for inspection</div>
+        </div>
+        <div style="background:#fff;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(0,0,0,.06)">
+          <div style="font-size:24px;font-weight:500;color:#10B981">8</div>
+          <div style="font-size:11px;color:var(--slate)">Closed (last 7 days)</div>
+        </div>
+      </div>
+      <div class="fake-card demo-highlight-ring">
+        <div class="fake-card-title">Inspection status tracker</div>
+        <div class="fake-card-sub">Colour-coded by status — click any box for detail and actions</div>
+        <table class="fake-table" style="font-size:11px">
+          <tr><th>Inspection type</th><th>Lot 1</th><th>Lot 2</th><th>Lot 3</th><th>Lot 4</th><th>Lot 5</th><th>Lot 6</th><th>Lot 7</th></tr>
+          <tr><td style="font-weight:500">Earthworks</td><td><span class="dot dot-g">12 Jan</span></td><td><span class="dot dot-g">14 Jan</span></td><td><span class="dot dot-g">14 Jan</span></td><td><span class="dot dot-y">12 Apr</span></td><td><span class="dot dot-e">20 Apr</span></td><td><span class="dot dot-e">5 May</span></td><td><span class="dot dot-e">12 May</span></td></tr>
+          <tr><td style="font-weight:500">Foundations</td><td><span class="dot dot-g">20 Jan</span></td><td><span class="dot dot-g">22 Jan</span></td><td><span class="dot dot-y">7 Apr</span></td><td><span class="dot dot-e">18 Apr</span></td><td><span class="dot dot-e">28 Apr</span></td><td><span class="dot dot-e">8 May</span></td><td><span class="dot dot-e">18 May</span></td></tr>
+          <tr><td style="font-weight:500">Framing</td><td><span class="dot dot-g">3 Feb</span></td><td><span class="dot dot-g">5 Feb</span></td><td><span class="dot dot-r">8 Apr</span></td><td><span class="dot dot-e">22 Apr</span></td><td><span class="dot dot-e">2 May</span></td><td><span class="dot dot-e">12 May</span></td><td><span class="dot dot-e">22 May</span></td></tr>
+          <tr><td style="font-weight:500">Preline</td><td><span class="dot dot-r">3 Feb</span></td><td><span class="dot dot-y">7 Apr</span></td><td><span class="dot dot-e">30 Apr</span></td><td><span class="dot dot-e">10 May</span></td><td><span class="dot dot-e">20 May</span></td><td><span class="dot dot-e">30 May</span></td><td><span class="dot dot-e">9 Jun</span></td></tr>
+          <tr><td style="font-weight:500">Waterproofing</td><td><span class="dot dot-e">14 May</span></td><td><span class="dot dot-e">24 May</span></td><td><span class="dot dot-e">3 Jun</span></td><td><span class="dot dot-e">13 Jun</span></td><td><span class="dot dot-e">23 Jun</span></td><td><span class="dot dot-e">3 Jul</span></td><td><span class="dot dot-e">13 Jul</span></td></tr>
+          <tr><td style="font-weight:500">Final</td><td><span class="dot dot-e">20 Jun</span></td><td><span class="dot dot-e">30 Jun</span></td><td><span class="dot dot-e">10 Jul</span></td><td><span class="dot dot-e">20 Jul</span></td><td><span class="dot dot-e">30 Jul</span></td><td><span class="dot dot-e">9 Aug</span></td><td><span class="dot dot-e">19 Aug</span></td></tr>
+        </table>
+        <div style="display:flex;gap:14px;margin-top:12px;font-size:10px;color:#999">
+          <span><span class="dot dot-g" style="width:auto;height:auto;padding:1px 6px;font-size:9px">●</span> Passed</span>
+          <span><span class="dot dot-y" style="width:auto;height:auto;padding:1px 6px;font-size:9px">●</span> Ready</span>
+          <span><span class="dot dot-r" style="width:auto;height:auto;padding:1px 6px;font-size:9px">●</span> Failed</span>
+          <span><span class="dot dot-e" style="width:auto;height:auto;padding:1px 6px;font-size:9px">○</span> Not started</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 3: Calendar -->
+    <div class="fake-page" id="page-3">
+      <div class="fake-title">Site calendar — Harbor View Tower</div>
+      <div class="fake-sub">April 2026</div>
+      <div class="fake-card demo-highlight-ring">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div class="fake-card-title" style="margin:0">April 2026</div>
+          <div style="display:flex;gap:6px">
+            <span style="font-size:9px;background:rgba(14,116,189,.06);color:var(--blue);padding:4px 10px;border-radius:4px;font-weight:500">Export PDF</span>
+            <span style="font-size:9px;background:rgba(14,116,189,.06);color:var(--blue);padding:4px 10px;border-radius:4px;font-weight:500">2-week lookahead</span>
+          </div>
+        </div>
+        <div class="cal-grid">
+          <div class="cal-head">Mon</div><div class="cal-head">Tue</div><div class="cal-head">Wed</div><div class="cal-head">Thu</div><div class="cal-head">Fri</div><div class="cal-head">Sat</div><div class="cal-head">Sun</div>
+          <div class="cal-day" style="opacity:.4"><div class="cal-day-num">30</div></div>
+          <div class="cal-day" style="opacity:.4"><div class="cal-day-num">31</div></div>
+          <div class="cal-day"><div class="cal-day-num">1</div></div>
+          <div class="cal-day"><div class="cal-day-num">2</div></div>
+          <div class="cal-day"><div class="cal-day-num">3</div></div>
+          <div class="cal-day"><div class="cal-day-num">4</div></div>
+          <div class="cal-day"><div class="cal-day-num">5</div></div>
+          <div class="cal-day"><div class="cal-day-num">6</div></div>
+          <div class="cal-day"><div class="cal-day-num">7</div><div class="cal-evt" style="background:#4F46E5">Window measure</div></div>
+          <div class="cal-day"><div class="cal-day-num today">8</div></div>
+          <div class="cal-day"><div class="cal-day-num">9</div><div class="cal-evt" style="background:#3B82F6">Scaffold drop</div></div>
+          <div class="cal-day"><div class="cal-day-num">10</div></div>
+          <div class="cal-day"><div class="cal-day-num">11</div></div>
+          <div class="cal-day"><div class="cal-day-num">12</div></div>
+          <div class="cal-day"><div class="cal-day-num">13</div></div>
+          <div class="cal-day"><div class="cal-day-num">14</div><div class="cal-evt" style="background:#F59E0B;color:#1a1a1a">Panel delivery</div></div>
+          <div class="cal-day"><div class="cal-day-num">15</div><div class="cal-evt" style="background:#EF4444">H&S audit</div><div class="cal-evt" style="background:#8B5CF6">Fitout delivery</div></div>
+          <div class="cal-day"><div class="cal-day-num">16</div></div>
+          <div class="cal-day"><div class="cal-day-num">17</div></div>
+          <div class="cal-day"><div class="cal-day-num">18</div></div>
+          <div class="cal-day"><div class="cal-day-num">19</div></div>
+          <div class="cal-day"><div class="cal-day-num">20</div></div>
+          <div class="cal-day"><div class="cal-day-num">21</div></div>
+          <div class="cal-day"><div class="cal-day-num">22</div><div class="cal-evt" style="background:#16A34A">Landscaping</div></div>
+          <div class="cal-day"><div class="cal-day-num">23</div></div>
+          <div class="cal-day"><div class="cal-day-num">24</div></div>
+          <div class="cal-day"><div class="cal-day-num">25</div></div>
+          <div class="cal-day"><div class="cal-day-num">26</div></div>
+          <div class="cal-day"><div class="cal-day-num">27</div></div>
+          <div class="cal-day"><div class="cal-day-num">28</div><div class="cal-evt" style="background:#475569">Waterproof insp.</div></div>
+          <div class="cal-day"><div class="cal-day-num">29</div></div>
+          <div class="cal-day"><div class="cal-day-num">30</div></div>
+        </div>
+        <div class="cal-legend">
+          <span><span class="cal-swatch" style="background:#3B82F6"></span>Structure</span>
+          <span><span class="cal-swatch" style="background:#0D9488"></span>Facade</span>
+          <span><span class="cal-swatch" style="background:#8B5CF6"></span>Fitout</span>
+          <span><span class="cal-swatch" style="background:#F59E0B"></span>Delivery</span>
+          <span><span class="cal-swatch" style="background:#EF4444"></span>H&S</span>
+          <span><span class="cal-swatch" style="background:#4F46E5"></span>Measures</span>
+          <span><span class="cal-swatch" style="background:#16A34A"></span>Landscaping</span>
+          <span><span class="cal-swatch" style="background:#475569"></span>Basement</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── GUIDE PANEL ── -->
+<div id="demo-guide">
+  <div class="demo-guide-header">
+    <div class="demo-guide-logo">
+      Soterra
+      <span class="demo-guide-label">Product Tour</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="demo-guide-step-count" id="step-count">Step 1 of 5</span>
+      <button class="demo-guide-close" onclick="showStep(0)">&times;</button>
+    </div>
+  </div>
+  <div class="demo-guide-body" id="guide-body"></div>
+  <div class="demo-guide-footer">
+    <div class="demo-progress-bar"><div class="demo-progress-fill" id="progress-fill" style="width:20%"></div></div>
+    <div class="demo-guide-nav">
+      <button class="demo-guide-back hidden" id="back-btn" onclick="prev()">&#8592; Back</button>
+      <button class="demo-guide-next" id="next-btn" onclick="next()">Next &#8594;</button>
+    </div>
+  </div>
+</div>
+
+<!-- MOCKUP SWITCHER -->
+<div class="mockup-switcher">
+  <button class="active" onclick="showStep(0)">1 · Overview</button>
+  <button onclick="showStep(1)">2 · Risk Alerts</button>
+  <button onclick="showStep(2)">3 · Tracker</button>
+  <button onclick="showStep(3)">4 · Calendar</button>
+  <button onclick="showStep(4)">5 · CTA</button>
+</div>
+
+<script>
+var steps=[
+  {
+    pageId:'page-0',
+    navId:'nav-overview',
+    topbar:'Dashboard · Executive',
+    tag:'PORTFOLIO OVERVIEW',
+    title:'Your entire portfolio in one view',
+    desc:'See company-wide failure rates, total inspections, and which projects need attention — no spreadsheets, no chasing PMs for updates. Every number updates live as inspections are completed on site.',
+    features:[
+      {icon:'📊',text:'Live KPIs update automatically — failure rates, open issues, risk levels'},
+      {icon:'🔴',text:'Projects ranked by risk — high-risk sites surface instantly'},
+      {icon:'📋',text:'Click any project to drill into full issue history and inspection timeline'}
+    ],
+    also:['Early risk alerts','Live inspection tracker','Site calendar with auto lookaheads','Auto inspection reminders']
+  },
+  {
+    pageId:'page-1',
+    navId:'nav-risk',
+    topbar:'Dashboard · Site Team · Risk Alerts',
+    tag:'EARLY RISK ALERTS',
+    title:'Know what will fail before it happens',
+    desc:'Soterra analyses your history to predict which items are most likely to fail, prevent rework before it happens.',
+    features:[
+      {icon:'⚠️',text:'Dates pulled from your construction programme — no manual entry'},
+      {icon:'📉',text:'Auto risk alerts flag high-risk inspections before they happen'},
+      {icon:'🔁',text:'Cross-project pattern detection flags recurring defects early'},
+      {icon:'⏱️',text:'Issues closed within 10 days reduce recurrence by 12–18%'}
+    ],
+    also:['Portfolio overview with live KPIs','Live inspection tracker','Site calendar with auto lookaheads','Auto inspection date reminders']
+  },
+  {
+    pageId:'page-2',
+    navId:'nav-tracker',
+    topbar:'Dashboard · Site Team · Live Tracker',
+    tag:'LIVE INSPECTION TRACKER',
+    title:'Every inspection, colour-coded and actionable',
+    desc:'Your site team sees exactly what has passed, what has failed, and what is ready — the full inspection process managed from one screen.',
+    features:[
+      {icon:'🟢',text:'Colour-coded grid: passed, ready, failed, not started'},
+      {icon:'📤',text:'Send issues to subcontractors, book inspections, track follow-through — all in one place'},
+      {icon:'🔔',text:'Auto alerts for upcoming inspections — dates read directly from your construction programme'},
+      {icon:'⚡',text:'Auto risk alerts on items likely to fail based on historical patterns'}
+    ],
+    also:['Portfolio overview with live KPIs','Early risk alerts and predictions','Site calendar with auto lookaheads','Auto inspection date reminders']
+  },
+  {
+    pageId:'page-3',
+    navId:'nav-calendar',
+    topbar:'Dashboard · Site Team · Calendar',
+    tag:'SITE CALENDAR',
+    title:'Keep your whole team aligned on what is happening when',
+    desc:'A full project calendar with colour-coded event types — structure inspections, deliveries, H&S checks, scaffold drops. All dates pulled automatically from your construction programme.',
+    features:[
+      {icon:'🗓️',text:'Colour-coded event types at a glance — inspections, deliveries, H&S, structure'},
+      {icon:'📄',text:'Auto 2-weekly lookaheads generated and ready to share with your team'},
+      {icon:'🔔',text:'Auto inspection date reminders — never miss a booking window'},
+      {icon:'🖨️',text:'Export month PDF for the site office wall or email to stakeholders'}
+    ],
+    also:['Portfolio overview with live KPIs','Early risk alerts and predictions','Live inspection tracker','Auto risk alerts on upcoming inspections']
+  },
+  {
+    tag:'CTA',
+    title:'See it with your own project data',
+    isFinal:true
+  }
+];
+
+var current=0;
+
+function showStep(i){
+  current=i;
+  var s=steps[i];
+  var body=document.getElementById('guide-body');
+  var count=document.getElementById('step-count');
+  var progress=document.getElementById('progress-fill');
+  var backBtn=document.getElementById('back-btn');
+  var nextBtn=document.getElementById('next-btn');
+
+  count.textContent='Step '+(i+1)+' of '+steps.length;
+  progress.style.width=((i+1)/steps.length*100)+'%';
+  backBtn.classList.toggle('hidden',i===0);
+
+  // Switch dashboard page
+  document.querySelectorAll('.fake-page').forEach(function(p){p.classList.remove('active');});
+  document.querySelectorAll('.fake-nav').forEach(function(n){n.classList.remove('active');});
+  if(s.pageId){
+    document.getElementById(s.pageId).classList.add('active');
+    if(s.navId) document.getElementById(s.navId).classList.add('active');
+    document.getElementById('topbar-label').textContent=s.topbar||'Dashboard';
+  } else if(!s.isFinal){
+    document.getElementById('page-0').classList.add('active');
+    document.getElementById('nav-overview').classList.add('active');
+  }
+
+  if(s.isFinal){
+    nextBtn.style.display='none';
+    body.innerHTML=
+      '<div class="demo-cta-wrap">'+
+        '<div class="demo-cta-icon">🚀</div>'+
+        '<div class="demo-cta-title">See it with your own project data</div>'+
+        '<div class="demo-cta-desc">You\'ve seen how Soterra gives you predictive risk alerts, a live inspection tracker, and automated scheduling — all with dates pulled directly from your construction programme. No manual handling.<br><br>Get in touch to see the platform loaded with your own projects, inspections, and team.</div>'+
+        '<a class="demo-cta-btn demo-cta-primary" href="mailto:adam@soterra.co.nz">Talk to us</a>'+
+        '<button class="demo-cta-btn demo-cta-secondary" onclick="showStep(0)">Restart tour</button>'+
+      '</div>';
+  } else {
+    var featHTML='';
+    if(s.features){
+      featHTML='<div class="demo-feature-list">';
+      s.features.forEach(function(f){
+        featHTML+='<div class="demo-feature-item"><div class="demo-feature-icon">'+f.icon+'</div><div>'+f.text+'</div></div>';
+      });
+      featHTML+='</div>';
+    }
+    var alsoHTML='';
+    if(s.also){
+      alsoHTML='<div class="demo-also"><div class="demo-also-label">Also includes</div><div class="demo-also-list">';
+      s.also.forEach(function(a){
+        alsoHTML+='<div class="demo-also-item"><span class="also-dot"></span>'+a+'</div>';
+      });
+      alsoHTML+='</div></div>';
+    }
+    body.innerHTML=
+      '<div class="demo-step-tag">'+s.tag+'</div>'+
+      '<div class="demo-step-title">'+s.title+'</div>'+
+      '<div class="demo-step-desc">'+s.desc+'</div>'+
+      featHTML+alsoHTML;
+    nextBtn.style.display='flex';
+    nextBtn.textContent=i===steps.length-2?'Finish \u2192':'Next \u2192';
+  }
+
+  // Update switcher
+  document.querySelectorAll('.mockup-switcher button').forEach(function(btn,idx){
+    btn.classList.toggle('active',idx===i);
+  });
+}
+
+function next(){current++;if(current>=steps.length)current=steps.length-1;showStep(current);}
+function prev(){current--;if(current<0)current=0;showStep(current);}
+
+showStep(0);
+</script>
+</body>
+</html>
