@@ -198,7 +198,7 @@ select{height:32px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 
   </div>
 
   <!-- STATS STRIP -->
-  <div class="hp-section">
+  <div class="hp-section reveal">
     <div class="hp-stats-box">
       <div class="hp-stat">
         <div class="hp-stat-num" data-target="10" data-prefix="~" data-suffix="%">~10%</div>
@@ -221,11 +221,11 @@ select{height:32px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 
   </div>
 
   <!-- VALUE SECTION -->
-  <div class="hp-section">
+  <div class="hp-section reveal">
     <div class="hp-value-box">
       <div class="hp-value-left">
-        <div class="hp-value-eyebrow">Why Soterra</div>
-        <h2 class="hp-value-h2">The same issues keep failing.<br>Soterra tells you why — and what's coming next.</h2>
+        <div class="hp-value-eyebrow reveal reveal-d1">Why Soterra</div>
+        <h2 class="hp-value-h2 reveal reveal-d2">The same issues keep failing.<br>Soterra tells you why — and what's coming next.</h2>
         <p class="hp-value-p">Most construction teams are flying blind between inspections. Issues get logged, then lost. The same defects repeat across lots and projects because no one connects the dots. Soterra does.</p>
         <div class="hp-bullets">
           <div class="hp-bullet">
@@ -246,7 +246,7 @@ select{height:32px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 
           </div>
         </div>
       </div>
-      <div class="hp-value-right">
+      <div class="hp-value-right reveal reveal-d3">
         <div class="hp-value-card">
           <div class="hp-vc-label">Portfolio risk</div>
           <div class="hp-vc-title">Company failure rate at 43%</div>
@@ -266,30 +266,30 @@ select{height:32px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 
   </div>
 
   <!-- FEATURES -->
-  <div class="hp-section">
+  <div class="hp-section reveal">
     <div class="hp-feat-grid">
-      <div class="hp-feat">
+      <div class="hp-feat reveal">
         <div class="hp-feat-icon">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 15L7 9.5L10.5 12.5L14 7L17 10" stroke="#0E74BD" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="7" r="1.5" fill="#0E74BD"/></svg>
         </div>
         <div class="hp-feat-title">Risk dashboard</div>
         <div class="hp-feat-desc">Portfolio-wide risk exposure for executives. Which projects are overdue, which inspections are coming, and where failure patterns are concentrating.</div>
       </div>
-      <div class="hp-feat">
+      <div class="hp-feat reveal">
         <div class="hp-feat-icon">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2.5" y="4" width="15" height="12" rx="2" stroke="#0E74BD" stroke-width="1.5"/><path d="M6 9h8M6 12h5" stroke="#0E74BD" stroke-width="1.5" stroke-linecap="round"/></svg>
         </div>
         <div class="hp-feat-title">Live issue register</div>
         <div class="hp-feat-desc">Every open item visible to the whole site team — with days outstanding, re-inspection count, and one-tap actions to send to sub or book inspection.</div>
       </div>
-      <div class="hp-feat">
+      <div class="hp-feat reveal">
         <div class="hp-feat-icon">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="14" height="14" rx="2" stroke="#0E74BD" stroke-width="1.5"/><path d="M3 8h14M8 3v5" stroke="#0E74BD" stroke-width="1.5" stroke-linecap="round"/></svg>
         </div>
         <div class="hp-feat-title">Site calendar</div>
         <div class="hp-feat-desc">Full project calendar with colour-coded event types. Share weekly lookaheads, print PDFs, and keep the whole team aligned on what's happening when.</div>
       </div>
-      <div class="hp-feat">
+      <div class="hp-feat reveal">
         <div class="hp-feat-icon">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="#0E74BD" stroke-width="1.5"/><path d="M10 6.5v4l2.5 2" stroke="#0E74BD" stroke-width="1.5" stroke-linecap="round"/></svg>
         </div>
@@ -301,7 +301,7 @@ select{height:32px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 
 
   <!-- BEFORE / AFTER -->
   <div class="hp-section">
-    <div class="hp-ba-section">
+    <div class="hp-ba-section reveal">
       <div class="hp-ba-eyebrow">The old way vs. Soterra</div>
       <div class="hp-ba-title">What changes when your inspection data starts working for you</div>
       <div class="hp-ba-grid">
@@ -328,7 +328,7 @@ select{height:32px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 
 
   <!-- TRUST BAR -->
   <div class="hp-section" style="padding-bottom:40px">
-    <div class="hp-trust">
+    <div class="hp-trust reveal">
       <div class="hp-trust-badge">Backed by AUT Ventures</div>
       <div class="hp-trust-sep"></div>
       <div class="hp-trust-text">Built on site experience</div>
@@ -497,6 +497,14 @@ select{height:32px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 
 @media(max-width:500px){
   .hp-feat-grid{grid-template-columns:1fr}
 }
+
+/* ── SCROLL REVEAL ────────────────────────────────────────── */
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .6s ease,transform .6s ease}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-d1{transition-delay:.1s}
+.reveal-d2{transition-delay:.2s}
+.reveal-d3{transition-delay:.3s}
+.reveal-d4{transition-delay:.4s}
 
 /* ── LOGIN SCREEN ────────────────────────────────────────── */
 #login-screen{position:fixed;inset:0;z-index:2100;background:#F0F7FF;display:none;align-items:center;justify-content:center}
@@ -3537,6 +3545,16 @@ document.addEventListener('DOMContentLoaded',function(){
   document.querySelectorAll('.btn,.btn-primary').forEach(function(b){if(b.textContent.trim().toLowerCase().indexOf('export')>-1&&!b.getAttribute('onclick')){b.addEventListener('click',function(e){e.stopPropagation();exportPDF();});}});
   initSiteTeam();
 });
+
+/* ── SCROLL REVEAL ── */
+function revealOnScroll(){
+  document.querySelectorAll('.reveal').forEach(function(el){
+    var top=el.getBoundingClientRect().top;
+    if(top<window.innerHeight-50) el.classList.add('visible');
+  });
+}
+window.addEventListener('scroll',revealOnScroll);
+window.addEventListener('load',revealOnScroll);
 </script>
 </body>
 </html>
