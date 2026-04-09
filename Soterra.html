@@ -3553,8 +3553,12 @@ function revealOnScroll(){
     if(top<window.innerHeight-50) el.classList.add('visible');
   });
 }
-window.addEventListener('scroll',revealOnScroll);
-window.addEventListener('load',revealOnScroll);
+window.addEventListener('load',function(){
+  revealOnScroll();
+  var hp=document.getElementById('homepage');
+  if(hp) hp.addEventListener('scroll',revealOnScroll);
+  window.addEventListener('scroll',revealOnScroll);
+});
 </script>
 </body>
 </html>
