@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Soterra — Project Setup</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--font:'DM Sans',system-ui,sans-serif;--blue:#0E74BD;--navy:#0A2540;--slate:#4A6080;--bg:#F0F7FF;--card:#fff;--border:rgba(0,0,0,.08);--green:#10B981;--red:#EF4444;--amber:#F59E0B}
@@ -273,6 +274,35 @@ function goStep(n) {
   window.scrollTo(0, 0);
 }
 
+// ═══ SUPABASE ═══
+var SUPABASE_URL = 'https://pffwyxygovfswchxlxun.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_HbvNAWlqxpiFYDZDcORntg_q2uu4Ooy';
+var sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+var currentUser = null;
+var currentProfile = null;
+
+// Check auth on load
+(async function() {
+  if (!sb) return; // Supabase not loaded (local dev)
+  var { data } = await sb.auth.getSession();
+  if (!data.session) {
+    window.location.href = 'auth.html';
+    return;
+  }
+  currentUser = data.session.user;
+
+  // Load profile
+  var { data: profile } = await sb.from('profiles').select('*, companies(name)').eq('id', currentUser.id).single();
+  if (profile) {
+    currentProfile = profile;
+    // Pre-fill step 1
+    if (profile.companies) document.getElementById('company-name').value = profile.companies.name || '';
+    document.getElementById('pm-name').value = profile.full_name || '';
+    document.getElementById('pm-email').value = profile.email || currentUser.email || '';
+    if (profile.role) document.getElementById('pm-role').value = profile.role;
+  }
+})();
+
 // ═══ FILE HANDLING ═══
 var dropZone = document.getElementById('upload-zone');
 var fileInput = document.getElementById('file-input');
@@ -407,27 +437,75 @@ function getTypeCount(inspections) {
 }
 
 // ═══ CONFIRM ═══
-function confirmSetup() {
+async function confirmSetup() {
   var company = document.getElementById('company-name').value || 'My Company';
   var total = parsedData ? parsedData.total : 0;
   var lots = parsedData ? parsedData.lots.length : 0;
+  var projectName = document.getElementById('project-name').value;
+  var projectAddress = document.getElementById('project-address').value;
+  var smName = document.getElementById('project-sm').value;
+  var smEmail = document.getElementById('project-sm-email').value;
 
-  document.getElementById('success-sub').textContent = company + ' — project created with ' + total + ' inspections across ' + lots + ' lots.';
-
-  // Store data for dashboard
+  // Store to localStorage as backup
   if (parsedData) {
     localStorage.setItem('soterra-setup', JSON.stringify({
       company: company,
       pmName: document.getElementById('pm-name').value,
       pmEmail: document.getElementById('pm-email').value,
-      projectName: document.getElementById('project-name').value,
-      projectAddress: document.getElementById('project-address').value,
-      smName: document.getElementById('project-sm').value,
-      smEmail: document.getElementById('project-sm-email').value,
+      projectName: projectName,
+      projectAddress: projectAddress,
+      smName: smName,
+      smEmail: smEmail,
       inspections: parsedData
     }));
   }
 
+  // Save to Supabase if logged in
+  if (sb && currentProfile && currentProfile.company_id) {
+    try {
+      // Create project
+      var { data: project, error: projErr } = await sb
+        .from('projects')
+        .insert({
+          company_id: currentProfile.company_id,
+          name: projectName,
+          address: projectAddress,
+          sm_name: smName,
+          sm_email: smEmail,
+          program_filename: parsedData ? parsedData.filename : null
+        })
+        .select()
+        .single();
+
+      if (projErr) throw projErr;
+
+      // Save inspections
+      if (parsedData && parsedData.inspections && project) {
+        var rows = parsedData.inspections.map(function(insp) {
+          return {
+            project_id: project.id,
+            task_id: insp.id || null,
+            task: insp.task,
+            lot: insp.lot || null,
+            section: insp.section || null,
+            start_date: insp.start_date || null,
+            duration: insp.duration || null,
+            status: 'notstarted'
+          };
+        });
+
+        var { error: inspErr } = await sb.from('inspections').insert(rows);
+        if (inspErr) console.error('Inspection save error:', inspErr);
+      }
+
+      console.log('Project and inspections saved to Supabase');
+    } catch(e) {
+      console.error('Supabase save error:', e);
+      // Continue anyway — data is in localStorage
+    }
+  }
+
+  document.getElementById('success-sub').textContent = company + ' — project created with ' + total + ' inspections across ' + lots + ' lots.';
   goStep(5);
 }
 
