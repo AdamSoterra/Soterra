@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soterra — Construction Intelligence</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--font:'DM Sans',system-ui,sans-serif;--blue:#0E74BD;--navy:#0A2540;--slate:#4A6080;--bg:#F0F7FF;--white:#fff;--sky:#38BDF8;--green:#10B981;--red:#EF4444}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);color:var(--navy);overflow-x:hidden;background:var(--bg)}
+
+/* ── NAVY GRID (visible throughout) ── */
+.grid-bg{position:fixed;inset:0;pointer-events:none;z-index:1;
+  background-image:linear-gradient(rgba(10,37,64,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(10,37,64,.04) 1px,transparent 1px);
+  background-size:32px 32px}
+
+/* ── SCROLL REVEAL ── */
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .65s ease,transform .65s ease}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.rd1{transition-delay:.1s}.rd2{transition-delay:.2s}.rd3{transition-delay:.3s}.rd4{transition-delay:.4s}
+
+/* ── NAV (scrolls with page, transparent) ── */
+.nav{position:relative;z-index:10;padding:20px 40px;display:flex;align-items:center;justify-content:space-between;max-width:1100px;margin:0 auto;width:100%;background:transparent}
+body{background:var(--bg)}
+.nav-logo{font-size:21px;font-weight:600;color:var(--blue);text-decoration:none;letter-spacing:.01em}
+.nav-logo span{color:var(--navy)}
+.nav-r{display:flex;gap:10px;align-items:center}
+.nav-a{height:34px;padding:0 16px;border-radius:7px;font-size:12px;font-weight:500;font-family:var(--font);text-decoration:none;display:inline-flex;align-items:center;transition:all .15s}
+.nav-outline{border:1.5px solid rgba(14,116,189,.3);color:var(--blue);background:rgba(14,116,189,.04)}
+.nav-outline:hover{border-color:var(--blue);background:rgba(14,116,189,.1)}
+.nav-solid{border:none;background:var(--navy);color:#fff}
+.nav-solid:hover{background:#162D4A}
+
+/* ── SECTIONS ── */
+.sec{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:80px 40px;position:relative}
+
+/* ═══ 1. HERO — light blue ═══ */
+.sec-hero{background:transparent;overflow:hidden}
+.sec-hero::before{display:none}
+.hero-wrap{position:relative;z-index:2;text-align:center;max-width:700px}
+.hero-pill{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--blue);background:rgba(14,116,189,.07);border:1px solid rgba(14,116,189,.15);padding:5px 16px;border-radius:20px;margin-bottom:24px}
+.hero-h1{font-size:clamp(34px,5vw,56px);font-weight:300;line-height:1.08;letter-spacing:-.03em;margin-bottom:18px}
+.hero-h1 em{font-style:normal;color:var(--blue)}
+.hero-p{font-size:15px;color:var(--slate);line-height:1.75;font-weight:300;max-width:540px;margin:0 auto 28px}
+.hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:48px}
+.btn{height:46px;padding:0 26px;border-radius:9px;font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:5px;text-decoration:none;border:none}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-blue:hover{background:#0A5C97;transform:translateY(-2px);box-shadow:0 6px 20px rgba(14,116,189,.2)}
+.btn-out{background:var(--white);color:var(--navy);border:1.5px solid rgba(0,0,0,.1)}
+.btn-out:hover{transform:translateY(-2px)}
+.btn-txt{background:none;color:var(--slate);font-size:13px;font-weight:500;padding:0 8px}
+.btn-txt:hover{color:var(--blue)}
+.hero-stats{display:flex;gap:40px;justify-content:center;flex-wrap:wrap}
+.hero-stat{text-align:center}
+.hero-stat-num{font-size:36px;font-weight:300;color:var(--blue);letter-spacing:-.03em;line-height:1}
+.hero-stat-lbl{font-size:11px;color:var(--slate);margin-top:4px;max-width:160px;line-height:1.4}
+.hero-stat-src{font-size:9px;color:#bbb;margin-top:3px;font-style:italic}
+
+/* ═══ 2. WHY SOTERRA — white ═══ */
+.sec-why{background:var(--white);border-top:none;border-bottom:none}
+.why-wrap{max-width:900px;text-align:center;width:100%;position:relative;z-index:2}
+.why-ey{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);margin-bottom:14px}
+.why-h2{font-size:clamp(22px,3vw,32px);font-weight:300;color:var(--navy);line-height:1.3;margin-bottom:14px;letter-spacing:-.01em}
+.why-p{font-size:14px;color:var(--slate);line-height:1.75;max-width:580px;margin:0 auto 44px}
+.why-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;text-align:left;margin-bottom:40px}
+.why-card{background:linear-gradient(135deg,#0A2540,#0E74BD);border-radius:12px;padding:22px;color:#fff;box-shadow:0 4px 16px rgba(10,37,64,.1)}
+.why-card h3{font-size:13px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.why-card h3::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--sky);flex-shrink:0}
+.why-card p{font-size:12px;color:rgba(255,255,255,.55);line-height:1.6}
+.risk-card{background:linear-gradient(135deg,var(--navy),var(--blue));border-radius:12px;padding:24px;max-width:520px;margin:0 auto;text-align:left;box-shadow:0 8px 32px rgba(10,37,64,.15)}
+.rc-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(56,189,248,.7);margin-bottom:6px}
+.rc-title{font-size:13px;font-weight:500;color:#fff;margin-bottom:10px}
+.rc-row{display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,.5);padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.rc-bad{color:#FCA5A5;font-weight:500}
+.rc-med{color:#FCD34D;font-weight:500}
+.rc-div{height:1px;background:rgba(255,255,255,.1);margin:12px 0}
+.rc-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px;color:rgba(255,255,255,.45)}
+.rc-bar-row span:first-child{min-width:120px}
+.rc-bar-wrap{flex:1;height:4px;background:rgba(255,255,255,.1);border-radius:2px}
+.rc-bar{height:4px;background:var(--sky);border-radius:2px}
+.rc-pct{color:var(--sky);font-weight:500;min-width:30px;text-align:right}
+
+/* ═══ 3. FEATURES — light blue ═══ */
+.sec-feat{background:var(--bg)}
+.feat-wrap{max-width:960px;width:100%;display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;position:relative;z-index:2}
+.feat-ey{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);margin-bottom:12px}
+.feat-h2{font-size:clamp(22px,3vw,30px);font-weight:300;line-height:1.3;margin-bottom:12px;letter-spacing:-.01em}
+.feat-p{font-size:13px;color:var(--slate);line-height:1.7}
+.feat-list{display:flex;flex-direction:column;gap:16px}
+.feat-item{display:flex;gap:14px;align-items:flex-start}
+.feat-icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#0A2540,#0E74BD);border:none;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(10,37,64,.15)}
+.feat-item h3{font-size:14px;font-weight:600;margin-bottom:3px}
+.feat-item p{font-size:12px;color:var(--slate);line-height:1.5}
+
+/* ═══ 4. BEFORE/AFTER — white, visual weight ═══ */
+.sec-ba{background:var(--white)}
+.ba-wrap{max-width:900px;width:100%;text-align:center;position:relative;z-index:2}
+.ba-ey{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);margin-bottom:12px}
+.ba-h2{font-size:clamp(20px,2.5vw,28px);font-weight:300;line-height:1.3;margin-bottom:40px}
+.ba-grid{display:grid;grid-template-columns:1fr 48px 1fr;gap:0;align-items:stretch;text-align:left}
+.ba-col{padding:32px;border-radius:16px}
+.ba-col.old{background:rgba(0,0,0,.02);border:1px solid rgba(0,0,0,.06);opacity:.65;filter:saturate(.3)}
+.ba-col.new{background:linear-gradient(135deg,rgba(10,37,64,.03),rgba(14,116,189,.04));border:1.5px solid rgba(10,37,64,.1);box-shadow:0 4px 20px rgba(10,37,64,.06)}
+.ba-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;border-radius:4px;margin-bottom:20px}
+.ba-badge.old{background:rgba(0,0,0,.06);color:#999}
+.ba-badge.new{background:linear-gradient(135deg,#0A2540,#0E74BD);color:#fff}
+.ba-item{display:flex;align-items:flex-start;gap:10px;font-size:12px;line-height:1.55;margin-bottom:14px}
+.ba-col.old .ba-item{color:#999}
+.ba-col.new .ba-item{color:var(--navy)}
+.ba-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px}
+.ba-col.old .ba-icon{background:rgba(0,0,0,.04);color:#bbb}
+.ba-col.new .ba-icon{background:linear-gradient(135deg,#0A2540,#0E74BD);color:#fff;border-radius:50%}
+.ba-mid{display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--blue);font-weight:300}
+
+/* ═══ 5. CTA + FOOTER — one navy gradient ═══ */
+.sec-cta{background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%);color:#fff;text-align:center;min-height:100vh;padding:80px 40px 0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.cta-wrap{max-width:560px;position:relative;z-index:2}
+.cta-trust{display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;margin-bottom:48px;font-size:11px;color:rgba(255,255,255,.4)}
+.cta-trust-badge{font-weight:600;color:rgba(255,255,255,.7);background:rgba(255,255,255,.08);padding:5px 12px;border-radius:5px;border:1px solid rgba(255,255,255,.1)}
+.cta-trust-sep{width:1px;height:14px;background:rgba(255,255,255,.15)}
+.cta-h2{font-size:clamp(24px,3vw,34px);font-weight:300;margin-bottom:12px}
+.cta-p{font-size:14px;color:rgba(255,255,255,.5);line-height:1.7;margin-bottom:28px}
+.cta-form{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.cta-input{flex:1;min-width:200px;height:46px;border:1.5px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);border-radius:9px;padding:0 16px;font-size:14px;font-family:var(--font);color:#fff;outline:none}
+.cta-input::placeholder{color:rgba(255,255,255,.28)}
+.cta-input:focus{border-color:rgba(255,255,255,.4)}
+.cta-submit{height:46px;padding:0 24px;background:#fff;color:var(--navy);border:none;border-radius:9px;font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .2s}
+.cta-submit:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.15)}
+.cta-note{font-size:10px;color:rgba(255,255,255,.25);margin-top:12px}
+.footer{padding:40px 24px 28px;text-align:center;font-size:11px;color:rgba(255,255,255,.3);background:transparent;display:flex;justify-content:center;gap:20px}
+.footer a{color:rgba(255,255,255,.45);text-decoration:none}
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px){
+  .nav{padding:14px 20px}
+  .sec{padding:60px 20px}
+  .hero-stats{gap:24px}
+  .hero-stat-num{font-size:28px}
+  .why-grid{grid-template-columns:1fr}
+  .feat-wrap{grid-template-columns:1fr;gap:32px}
+  .ba-grid{grid-template-columns:1fr;gap:16px}
+  .ba-mid{transform:rotate(90deg)}
+  .ba-col.old{opacity:.5}
+  .cta-trust{gap:10px}
+}
+
+@keyframes hpup{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- NAV -->
+<nav class="nav">
+  <a href="homepage-v2.html" class="nav-logo">Soter<span>ra</span></a>
+  <div class="nav-r">
+    <a href="demo.html" class="nav-a nav-outline">View demo &#8599;</a>
+    <a href="auth.html" class="nav-a nav-solid">Sign in &#8594;</a>
+  </div>
+</nav>
+
+<!-- ═══ 1. HERO ═══ -->
+<section class="sec sec-hero">
+  <div class="hero-wrap">
+    <div class="hero-pill" style="animation:hpup .7s ease both">Construction Intelligence Platform</div>
+    <h1 class="hero-h1" style="animation:hpup .7s .08s ease both">Build smarter.<br><em>Less rework. Fewer delays.</em></h1>
+    <p class="hero-p" style="animation:hpup .7s .16s ease both">Soterra connects your site team and leadership with the information they need — tracking open issues, predicting what will fail, and making sure nothing falls through the cracks between inspection and close-out.</p>
+    <div class="hero-btns" style="animation:hpup .7s .24s ease both">
+      <a href="auth.html" class="btn btn-blue">Open dashboard &#8599;</a>
+      <a href="demo.html" class="btn btn-out">View demo &#8599;</a>
+      <a href="mailto:adam@soterra.co.nz" class="btn btn-txt">Talk to us &#8599;</a>
+    </div>
+    <div class="hero-stats" style="animation:hpup .7s .32s ease both">
+      <div class="hero-stat">
+        <div class="hero-stat-num">~10%</div>
+        <div class="hero-stat-lbl">of project cost lost to rework on a typical build</div>
+        <div class="hero-stat-src">Plan Radar 2023 &middot; Visibuild 2025</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">88%</div>
+        <div class="hero-stat-lbl">of NZ &amp; AU construction projects run behind schedule</div>
+        <div class="hero-stat-src">BDO 2023</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">15%</div>
+        <div class="hero-stat-lbl">of construction workers leave every quarter, taking hard-won site knowledge with them</div>
+        <div class="hero-stat-src">Figure NZ</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 2. WHY SOTERRA ═══ -->
+<section class="sec sec-why">
+  <div class="why-wrap">
+    <div class="why-ey reveal">Why Soterra</div>
+    <h2 class="why-h2 reveal rd1">The same issues keep failing.<br>Soterra tells you why — and what's coming next.</h2>
+    <p class="why-p reveal rd2">Most construction teams are flying blind between inspections. Issues get logged, then lost. The same defects repeat across units and projects because no one connects the dots. Soterra does.</p>
+    <div class="why-grid">
+      <div class="why-card reveal">
+        <h3>Predictive intelligence</h3>
+        <p>Project history turned into forecasts — know what will fail before it does.</p>
+      </div>
+      <div class="why-card reveal rd1">
+        <h3>Failure patterns before they repeat</h3>
+        <p>Cross-project pattern detection flags recurring defects early.</p>
+      </div>
+      <div class="why-card reveal rd2">
+        <h3>Site team and leadership aligned</h3>
+        <p>Same data, right lens — executive portfolio view and site-specific detail.</p>
+      </div>
+      <div class="why-card reveal rd3">
+        <h3>Company knowledge captured and retained</h3>
+        <p>Even when people leave, the intelligence stays in the platform.</p>
+      </div>
+    </div>
+    <div class="risk-card reveal">
+      <div class="rc-label">Portfolio risk</div>
+      <div class="rc-title">Company failure rate at 43%</div>
+      <div class="rc-row"><span>Harbor View Tower</span><span class="rc-bad">51% &#8593;</span></div>
+      <div class="rc-row"><span>North Ridge Schools</span><span class="rc-med">38%</span></div>
+      <div class="rc-row"><span>Union Rail Depot</span><span class="rc-med">45%</span></div>
+      <div class="rc-div"></div>
+      <div class="rc-label">Top failure drivers</div>
+      <div class="rc-bar-row"><span>Pipe penetrations</span><div class="rc-bar-wrap"><div class="rc-bar" style="width:52%"></div></div><span class="rc-pct">52%</span></div>
+      <div class="rc-bar-row"><span>Waterproofing membranes</span><div class="rc-bar-wrap"><div class="rc-bar" style="width:41%"></div></div><span class="rc-pct">41%</span></div>
+      <div class="rc-bar-row"><span>Framing bracing</span><div class="rc-bar-wrap"><div class="rc-bar" style="width:38%"></div></div><span class="rc-pct">38%</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 3. FEATURES ═══ -->
+<section class="sec sec-feat">
+  <div class="feat-wrap">
+    <div>
+      <div class="feat-ey reveal">What you get</div>
+      <h2 class="feat-h2 reveal rd1">Everything your team needs, nothing they don't</h2>
+      <p class="feat-p reveal rd2">One platform for executives and site teams. Portfolio risk for leadership, live issue tracking for the people on the ground.</p>
+    </div>
+    <div class="feat-list">
+      <div class="feat-item reveal">
+        <div class="feat-icon"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3 15L7 9.5L10.5 12.5L14 7L17 10" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="7" r="1.5" fill="#fff"/></svg></div>
+        <div><h3>Risk dashboard</h3><p>Portfolio-wide risk exposure for executives. Which projects are overdue, which inspections are coming, and where failure patterns are concentrating.</p></div>
+      </div>
+      <div class="feat-item reveal rd1">
+        <div class="feat-icon"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="2.5" y="4" width="15" height="12" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M6 9h8M6 12h5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div><h3>Live issue register</h3><p>Every open item visible to the whole site team — with days outstanding, re-inspection count, and one-tap actions to send to sub or book inspection.</p></div>
+      </div>
+      <div class="feat-item reveal rd2">
+        <div class="feat-icon"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="14" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M3 8h14M8 3v5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div><h3>Site calendar</h3><p>Full project calendar with colour-coded event types. Share weekly lookaheads, print PDFs, and keep the whole team aligned on what's happening when.</p></div>
+      </div>
+      <div class="feat-item reveal rd3">
+        <div class="feat-icon"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="#fff" stroke-width="1.5"/><path d="M10 6.5v4l2.5 2" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div><h3>Performance trends</h3><p>Monthly failure rates, issues per inspection, and early close-out effects — so you can see what's improving and what needs attention before it becomes a pattern.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 4. BEFORE / AFTER ═══ -->
+<section class="sec sec-ba">
+  <div class="ba-wrap">
+    <div class="ba-ey reveal">The old way vs. Soterra</div>
+    <h2 class="ba-h2 reveal rd1">What changes when your inspection data starts working for you</h2>
+    <div class="ba-grid reveal rd2">
+      <div class="ba-col old">
+        <div class="ba-badge old">Without Soterra</div>
+        <div class="ba-item"><div class="ba-icon">&#10005;</div>Inspections logged in spreadsheets or PDFs — never analysed</div>
+        <div class="ba-item"><div class="ba-icon">&#10005;</div>Same defects repeat on every project because no one checks history</div>
+        <div class="ba-item"><div class="ba-icon">&#10005;</div>Issues discovered late, close-out drags 20–60 days over programme</div>
+        <div class="ba-item"><div class="ba-icon">&#10005;</div>Senior knowledge walks out the door when people leave</div>
+        <div class="ba-item"><div class="ba-icon">&#10005;</div>Subs chased by phone — no audit trail, no accountability</div>
+      </div>
+      <div class="ba-mid">&#8594;</div>
+      <div class="ba-col new">
+        <div class="ba-badge new">With Soterra</div>
+        <div class="ba-item"><div class="ba-icon">&#10003;</div>Every inspection feeds a live intelligence layer that learns your patterns</div>
+        <div class="ba-item"><div class="ba-icon">&#10003;</div>Recurring failures flagged before mistakes happen</div>
+        <div class="ba-item"><div class="ba-icon">&#10003;</div>Issues tracked in real time — nothing slips through between inspections</div>
+        <div class="ba-item"><div class="ba-icon">&#10003;</div>Company knowledge captured and accessible to every new team member</div>
+        <div class="ba-item"><div class="ba-icon">&#10003;</div>One-tap actions to assign, notify subs, and book re-inspections</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 5. CTA + FOOTER ═══ -->
+<section class="sec sec-cta">
+  <div class="cta-wrap">
+    <div class="cta-trust reveal">
+      <div class="cta-trust-badge">Backed by AUT Ventures</div>
+      <div class="cta-trust-sep"></div>
+      <div>Built on site experience</div>
+      <div class="cta-trust-sep"></div>
+      <div>Designed with NZ contractors</div>
+    </div>
+    <h2 class="cta-h2 reveal rd1">Ready to build smarter?</h2>
+    <p class="cta-p reveal rd2">Get in touch to see a personalised demo showing your failure patterns, risk areas, and what Soterra can predict for your next inspection.</p>
+    <div class="cta-form reveal rd3">
+      <input type="email" class="cta-input" placeholder="Your work email">
+      <button class="cta-submit">Book a demo &#8594;</button>
+    </div>
+    <div class="cta-note reveal rd4">Free pilot for NZ construction companies. No credit card required.</div>
+  </div>
+  <footer class="footer">
+    <span>&copy; 2026 Soterra</span>
+    <span>soterra.co.nz</span>
+    <a href="mailto:adam@soterra.co.nz">adam@soterra.co.nz</a>
+  </footer>
+</section>
+
+<script>
+function revealOnScroll(){
+  document.querySelectorAll('.reveal').forEach(function(el){
+    if(el.getBoundingClientRect().top<window.innerHeight-50) el.classList.add('visible');
+  });
+}
+window.addEventListener('scroll',revealOnScroll);
+window.addEventListener('load',revealOnScroll);
+</script>
+
+</body>
+</html>
