@@ -349,8 +349,13 @@ async function doSignup() {
     return;
   }
 
-  showMsg('Account created! Redirecting...', 'success');
-  setTimeout(function() { window.location.href = 'setup.html'; }, 1000);
+  if (companyMode === 'join') {
+    showMsg('Account created! Joining ' + existingCompany.name + '...', 'success');
+    setTimeout(function() { window.location.href = 'Soterra.html'; }, 1000);
+  } else {
+    showMsg('Account created! Redirecting to project setup...', 'success');
+    setTimeout(function() { window.location.href = 'setup.html'; }, 1000);
+  }
 }
 
 // Enter key to submit
