@@ -257,7 +257,26 @@ var uploadedFile = null;
 var parsedData = null;
 
 // ═══ NAVIGATION ═══
-function goStep(n) {
+async function goStep(n) {
+  // If moving from step 1 to step 2, ensure company is created
+  if (currentStep === 1 && n === 2 && sb && currentUser) {
+    var companyName = document.getElementById('company-name').value.trim();
+    if (companyName && (!currentProfile || !currentProfile.company_id)) {
+      // Create company and link to profile
+      var { data: comp } = await sb.from('companies').insert({ name: companyName }).select().single();
+      if (comp) {
+        await sb.from('profiles').update({
+          company_id: comp.id,
+          full_name: document.getElementById('pm-name').value.trim(),
+          role: document.getElementById('pm-role').value
+        }).eq('id', currentUser.id);
+        // Reload profile
+        var { data: profile } = await sb.from('profiles').select('*, companies(name)').eq('id', currentUser.id).single();
+        if (profile) currentProfile = profile;
+      }
+    }
+  }
+
   document.getElementById('step-' + currentStep).classList.remove('active');
   document.getElementById('step-' + n).classList.add('active');
   currentStep = n;

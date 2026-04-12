@@ -217,6 +217,8 @@ async function doSignup() {
   if (!name || !company || !email || !password) { showMsg('Please fill in all fields', 'error'); return; }
   if (password.length < 6) { showMsg('Password must be at least 6 characters', 'error'); return; }
 
+  showMsg('Creating your account...', 'success');
+
   // 1. Sign up the user
   var { data: authData, error: authError } = await supabase.auth.signUp({
     email: email,
@@ -241,26 +243,48 @@ async function doSignup() {
     return;
   }
 
-  // 2. Create company
-  var { data: companyData, error: compError } = await supabase
-    .from('companies')
-    .insert({ name: company })
-    .select()
-    .single();
+  // Wait for the database trigger to create the profile
+  await new Promise(function(r) { setTimeout(r, 1500); });
 
-  if (compError) {
-    showMsg('Account created but company setup failed: ' + compError.message, 'error');
+  // 2. Create company
+  var companyData = null;
+  for (var attempt = 0; attempt < 3; attempt++) {
+    var result = await supabase
+      .from('companies')
+      .insert({ name: company })
+      .select()
+      .single();
+
+    if (!result.error) {
+      companyData = result.data;
+      break;
+    }
+    // Wait and retry
+    await new Promise(function(r) { setTimeout(r, 1000); });
+  }
+
+  if (!companyData) {
+    showMsg('Account created but company setup failed. Please sign in and try again from setup.', 'error');
     return;
   }
 
-  // 3. Update profile with company_id and role
-  var { error: profError } = await supabase
-    .from('profiles')
-    .update({ company_id: companyData.id, full_name: name, role: role })
-    .eq('id', authData.user.id);
+  // 3. Update profile with company_id and role (retry up to 3 times)
+  var profSuccess = false;
+  for (var attempt2 = 0; attempt2 < 3; attempt2++) {
+    var profResult = await supabase
+      .from('profiles')
+      .update({ company_id: companyData.id, full_name: name, role: role })
+      .eq('id', authData.user.id);
 
-  if (profError) {
-    showMsg('Account created but profile update failed: ' + profError.message, 'error');
+    if (!profResult.error) {
+      profSuccess = true;
+      break;
+    }
+    await new Promise(function(r) { setTimeout(r, 1000); });
+  }
+
+  if (!profSuccess) {
+    showMsg('Account created but profile link failed. Please sign in — we will fix it on setup.', 'error');
     return;
   }
 
