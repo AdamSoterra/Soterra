@@ -264,7 +264,10 @@ async function doSignup() {
   }
 
   if (!companyData) {
-    showMsg('Account created but company setup failed. Please sign in and try again from setup.', 'error');
+    // Show the actual error for debugging
+    var debugResult = await supabase.from('companies').insert({ name: company }).select().single();
+    var errMsg = debugResult.error ? debugResult.error.message + ' (code: ' + debugResult.error.code + ')' : 'Unknown error';
+    showMsg('Company setup failed: ' + errMsg, 'error');
     return;
   }
 
