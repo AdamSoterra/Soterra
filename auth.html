@@ -88,10 +88,16 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
 
     <!-- SIGNUP PANEL -->
     <div class="auth-panel" id="panel-signup">
+      <!-- Company toggle -->
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button type="button" id="toggle-new" onclick="toggleCompanyMode('new')" style="flex:1;height:40px;border-radius:8px;font-size:12px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .15s;border:1.5px solid var(--blue);background:var(--blue);color:#fff">New company</button>
+        <button type="button" id="toggle-join" onclick="toggleCompanyMode('join')" style="flex:1;height:40px;border-radius:8px;font-size:12px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .15s;border:1.5px solid rgba(0,0,0,.12);background:transparent;color:var(--slate)">Join existing</button>
+      </div>
+
       <div class="field-row">
         <div class="field">
           <div class="field-label">Full name</div>
-          <input class="field-input" id="signup-name" placeholder="Adam Domok">
+          <input class="field-input" id="signup-name" placeholder="Your full name">
         </div>
         <div class="field">
           <div class="field-label">Role</div>
@@ -101,13 +107,30 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
             <option value="director">Director</option>
             <option value="engineer">Site Engineer</option>
             <option value="foreman">Foreman</option>
+            <option value="supervisor">Supervisor</option>
+            <option value="facade">Facade Manager</option>
+            <option value="fitout">Fitout Manager</option>
           </select>
         </div>
       </div>
-      <div class="field">
-        <div class="field-label">Company name</div>
-        <input class="field-input" id="signup-company" placeholder="Your construction company">
+
+      <!-- New company fields -->
+      <div id="new-company-fields">
+        <div class="field">
+          <div class="field-label">Company name</div>
+          <input class="field-input" id="signup-company" placeholder="Your construction company">
+        </div>
       </div>
+
+      <!-- Join company fields -->
+      <div id="join-company-fields" style="display:none">
+        <div class="field">
+          <div class="field-label">Company code</div>
+          <input class="field-input" id="signup-join-code" placeholder="e.g. APEX-7X4K" style="text-transform:uppercase;letter-spacing:.1em;font-weight:600">
+          <div style="font-size:10px;color:var(--slate);margin-top:4px">Ask your PM or admin for the company code</div>
+        </div>
+      </div>
+
       <div class="field">
         <div class="field-label">Email</div>
         <input class="field-input" id="signup-email" type="email" placeholder="you@company.co.nz">
@@ -175,6 +198,23 @@ function showMsg(text, type) {
   el.textContent = text;
   el.className = 'auth-msg ' + type;
 }
+
+var companyMode = 'new';
+function toggleCompanyMode(mode) {
+  companyMode = mode;
+  document.getElementById('new-company-fields').style.display = mode === 'new' ? 'block' : 'none';
+  document.getElementById('join-company-fields').style.display = mode === 'join' ? 'block' : 'none';
+  var btnNew = document.getElementById('toggle-new');
+  var btnJoin = document.getElementById('toggle-join');
+  if (mode === 'new') {
+    btnNew.style.background = 'var(--blue)'; btnNew.style.color = '#fff'; btnNew.style.borderColor = 'var(--blue)';
+    btnJoin.style.background = 'transparent'; btnJoin.style.color = 'var(--slate)'; btnJoin.style.borderColor = 'rgba(0,0,0,.12)';
+  } else {
+    btnJoin.style.background = 'var(--blue)'; btnJoin.style.color = '#fff'; btnJoin.style.borderColor = 'var(--blue)';
+    btnNew.style.background = 'transparent'; btnNew.style.color = 'var(--slate)'; btnNew.style.borderColor = 'rgba(0,0,0,.12)';
+  }
+  hideMsg();
+}
 function hideMsg() {
   document.getElementById('auth-msg').className = 'auth-msg';
 }
@@ -209,13 +249,32 @@ async function doLogin() {
 // ═══ SIGNUP ═══
 async function doSignup() {
   var name = document.getElementById('signup-name').value.trim();
-  var company = document.getElementById('signup-company').value.trim();
   var role = document.getElementById('signup-role').value;
   var email = document.getElementById('signup-email').value.trim();
   var password = document.getElementById('signup-password').value;
 
-  if (!name || !company || !email || !password) { showMsg('Please fill in all fields', 'error'); return; }
+  if (!name || !email || !password) { showMsg('Please fill in all fields', 'error'); return; }
   if (password.length < 6) { showMsg('Password must be at least 6 characters', 'error'); return; }
+
+  if (companyMode === 'new') {
+    var company = document.getElementById('signup-company').value.trim();
+    if (!company) { showMsg('Please enter a company name', 'error'); return; }
+  } else {
+    var joinCode = document.getElementById('signup-join-code').value.trim().toUpperCase();
+    if (!joinCode) { showMsg('Please enter a company code', 'error'); return; }
+
+    // Verify the code exists before creating account
+    var { data: existingCompany, error: lookupErr } = await supabase
+      .from('companies')
+      .select('id, name')
+      .eq('join_code', joinCode)
+      .single();
+
+    if (lookupErr || !existingCompany) {
+      showMsg('Invalid company code. Please check with your PM or admin.', 'error');
+      return;
+    }
+  }
 
   showMsg('Creating your account...', 'success');
 
@@ -231,7 +290,6 @@ async function doSignup() {
     return;
   }
 
-  // Check if email confirmation is required
   if (authData.user && !authData.session) {
     showMsg('Check your email to confirm your account, then sign in.', 'success');
     return;
@@ -246,37 +304,37 @@ async function doSignup() {
   // Wait for the database trigger to create the profile
   await new Promise(function(r) { setTimeout(r, 1500); });
 
-  // 2. Create company
-  var companyData = null;
-  for (var attempt = 0; attempt < 3; attempt++) {
-    var result = await supabase
+  var companyId = null;
+
+  if (companyMode === 'new') {
+    // Generate a join code
+    var code = '';
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    for (var c = 0; c < 6; c++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+
+    // Create company with join code
+    var { data: companyData, error: compErr } = await supabase
       .from('companies')
-      .insert({ name: company })
+      .insert({ name: company, join_code: code })
       .select()
       .single();
 
-    if (!result.error) {
-      companyData = result.data;
-      break;
+    if (compErr || !companyData) {
+      showMsg('Company setup failed: ' + (compErr ? compErr.message : 'Unknown error'), 'error');
+      return;
     }
-    // Wait and retry
-    await new Promise(function(r) { setTimeout(r, 1000); });
+    companyId = companyData.id;
+  } else {
+    // Join existing company
+    companyId = existingCompany.id;
   }
 
-  if (!companyData) {
-    // Show the actual error for debugging
-    var debugResult = await supabase.from('companies').insert({ name: company }).select().single();
-    var errMsg = debugResult.error ? debugResult.error.message + ' (code: ' + debugResult.error.code + ')' : 'Unknown error';
-    showMsg('Company setup failed: ' + errMsg, 'error');
-    return;
-  }
-
-  // 3. Update profile with company_id and role (retry up to 3 times)
+  // Update profile with company_id and role
   var profSuccess = false;
-  for (var attempt2 = 0; attempt2 < 3; attempt2++) {
+  for (var attempt = 0; attempt < 3; attempt++) {
     var profResult = await supabase
       .from('profiles')
-      .update({ company_id: companyData.id, full_name: name, role: role })
+      .update({ company_id: companyId, full_name: name, role: role })
       .eq('id', authData.user.id);
 
     if (!profResult.error) {
@@ -287,11 +345,11 @@ async function doSignup() {
   }
 
   if (!profSuccess) {
-    showMsg('Account created but profile link failed. Please sign in — we will fix it on setup.', 'error');
+    showMsg('Account created but profile link failed. Please sign in and try again.', 'error');
     return;
   }
 
-  showMsg('Account created! Redirecting to project setup...', 'success');
+  showMsg('Account created! Redirecting...', 'success');
   setTimeout(function() { window.location.href = 'setup.html'; }, 1000);
 }
 
