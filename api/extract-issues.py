@@ -83,10 +83,22 @@ class handler(BaseHTTPRequestHandler):
             # Try text extraction first
             issues = extract_issues_from_pdf(file_data, filename, inspection_type, lot)
 
+            # Handle structured response with report_type and outcome
+            if isinstance(issues, dict):
+                extracted_issues = issues.get("issues", [])
+                outcome = issues.get("outcome", "fail")
+                report_type = issues.get("report_type", "consultant")
+            else:
+                extracted_issues = issues
+                outcome = "fail" if issues else "pass"
+                report_type = "unknown"
+
             result = json.dumps({
                 "success": True,
-                "issues": issues,
-                "total": len(issues),
+                "issues": extracted_issues,
+                "total": len(extracted_issues),
+                "outcome": outcome,
+                "report_type": report_type,
             })
 
             self.send_response(200)
@@ -136,28 +148,28 @@ def extract_issues_from_pdf(file_data, filename, inspection_type, lot):
         msg = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=4000,
-            messages=[{"role": "user", "content": f"""You are reading a construction inspection report or consultant advice notice from a New Zealand construction project.
+            messages=[{"role": "user", "content": f"""You are reading a construction inspection report from a New Zealand construction project. There are two types of reports:
 
-Extract ALL items that need action, remediation, or attention. This includes:
-- Items explicitly marked as FAIL or non-compliant
-- Defects noted that need fixing
-- Items described as "needs to be carried out", "requires rectification", "not compliant", "missing", "incomplete"
-- Outstanding works or items requiring follow-up
-- Any issue the inspector/consultant has flagged as needing action
+TYPE 1 — COUNCIL/CONSENTIUM REPORTS: These have a formal inspection checklist with clear Pass/Fail/Partial Pass outcomes. They follow Auckland Council or Consentium format with checklist items. If the overall outcome is PASS, do NOT extract any items. If FAIL or PARTIAL PASS, extract only the failed checklist items.
 
-For each item, provide:
-- title: short description (e.g. "Fixings missing on plasterboard", "Fire stopping of wall penetrations incomplete")
-- description: the full detail from the report
+TYPE 2 — CONSULTANT ADVICE NOTICES: These are letters from fire engineers, structural engineers, or other consultants. They describe site observations, defects, and items needing attention. They do NOT have a formal Pass/Fail outcome. If ANY items need action, extract them ALL — even minor ones. Only return empty if the consultant genuinely found nothing.
 
-Do NOT include items that are explicitly passed, compliant, acceptable, or satisfactory.
+Your response must be a JSON object (not array) with this structure:
+{{"report_type": "council" or "consultant", "outcome": "pass" or "fail" or "partial", "issues": [...]}}
+
+Rules:
+- For council PASS reports: outcome="pass", issues=[]
+- For council FAIL reports: outcome="fail", issues=[list of failed items]
+- For council PARTIAL PASS: outcome="partial", issues=[list of outstanding items]
+- For consultant reports with items: outcome="fail", issues=[list of all items needing action]
+- For consultant reports with no items: outcome="pass", issues=[]
+
+Each issue: {{"title": "short description", "description": "full detail from report"}}
 
 The inspection type is: {inspection_type}
 The lot/area is: {lot}
 
-Return ONLY valid JSON array. No explanation, no markdown code blocks. Example:
-[{{"title": "Fixings missing on plasterboard", "description": "Fixings were missing in some locations."}},{{"title": "Fire stopping incomplete", "description": "Fire stopping through walls still needs to be carried out."}}]
-
-If genuinely no issues are found, return: []
+Return ONLY valid JSON. No explanation, no markdown code blocks.
 
 Report text:
 {text[:12000]}"""}],
@@ -171,8 +183,15 @@ Report text:
             if json_match:
                 response_text = json_match.group(1)
 
-        issues = json.loads(response_text)
-        return issues if isinstance(issues, list) else []
+        result = json.loads(response_text)
+
+        # Handle both old array format and new object format
+        if isinstance(result, list):
+            return result
+        elif isinstance(result, dict):
+            return result
+        else:
+            return []
 
     except Exception as e:
         return []

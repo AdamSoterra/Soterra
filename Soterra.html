@@ -2306,24 +2306,32 @@ async function uploadDotReport(file){
 
     // Filter out debug error messages
     var realIssues=(extractData.issues||[]).filter(function(i){return i.title!=='EXTRACTION_ERROR';});
-    if(extractData.success&&realIssues.length>0){
-      extractData.issues=realIssues;
-      // Save extracted issues to database
-      var issueRows=extractData.issues.map(function(issue){
-        return{
-          inspection_id:_currentDotDbId,
-          project_id:inspInfo?inspInfo.project_id:null,
-          title:issue.title,
-          description:issue.description||'',
-          lot:inspInfo?inspInfo.lot:'',
-          inspection_type:inspInfo?inspInfo.task:'',
-          status:'open'
-        };
-      });
-      await soterraDb.from('issues').insert(issueRows);
+    var outcome=extractData.outcome||'fail';
 
-      // Auto-set inspection status to failed if items were found
-      await soterraDb.from('inspections').update({status:'failed'}).eq('id',_currentDotDbId);
+    if(extractData.success){
+      // Set inspection status based on outcome
+      var newStatus='notstarted';
+      if(outcome==='pass') newStatus='passed';
+      else if(outcome==='partial') newStatus='partialpass';
+      else if(outcome==='fail') newStatus='failed';
+
+      await soterraDb.from('inspections').update({status:newStatus}).eq('id',_currentDotDbId);
+
+      // Only save issues if there are actual failed items
+      if(realIssues.length>0){
+        var issueRows=realIssues.map(function(issue){
+          return{
+            inspection_id:_currentDotDbId,
+            project_id:inspInfo?inspInfo.project_id:null,
+            title:issue.title,
+            description:issue.description||'',
+            lot:inspInfo?inspInfo.lot:'',
+            inspection_type:inspInfo?inspInfo.task:'',
+            status:'open'
+          };
+        });
+        await soterraDb.from('issues').insert(issueRows);
+      }
     }
   }catch(e){
     console.error('Issue extraction error:',e);
@@ -3250,6 +3258,19 @@ async function renderIssueRegister(){
   // Load issues from Supabase
   var{data:issues,error}=await soterraDb.from('issues').select('*').eq('project_id',projectId).order('created_at',{ascending:false});
   if(error||!issues)issues=[];
+
+  // Populate type filter dynamically from project inspections
+  var typeSelect=document.getElementById('st-filter-type');
+  if(typeSelect&&siteData[currentSite]&&siteData[currentSite].calGrid){
+    var types={};
+    siteData[currentSite].calGrid.forEach(function(row){types[row.type]=1;});
+    var currentTypeVal=typeSelect.value;
+    typeSelect.innerHTML='<option value="">All types</option>';
+    Object.keys(types).sort().forEach(function(t){
+      typeSelect.innerHTML+='<option value="'+t+'">'+t+'</option>';
+    });
+    typeSelect.value=currentTypeVal;
+  }
 
   // Populate lot filter dynamically
   var lotSelect=document.getElementById('st-filter-lot');
