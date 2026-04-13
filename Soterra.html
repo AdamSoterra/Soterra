@@ -2159,7 +2159,9 @@ function openIssue(title,type,site,date,days,reinspect,status,note){
 function closeIssue(){document.getElementById('issue-modal').classList.remove('open');}
 
 /* ── DOT MODAL ────────────────────────────────────────── */
-function openDot(type,lot,status,date,inspector,issues,related){
+var _currentDotDbId=null;
+function openDot(type,lot,status,date,inspector,issues,dbId){
+  _currentDotDbId=dbId||null;
   document.getElementById('dm-title').textContent=type+' — '+lot;
   var sb=document.getElementById('dm-status-badge');
   var sc={passed:'badge-passed',failed:'badge-failed',ready:'badge-ready',notstarted:'badge-notstarted',partialpass:'badge-partialpass'};
@@ -2188,11 +2190,51 @@ function openDot(type,lot,status,date,inspector,issues,related){
   }else{
     var dn=Math.round((new Date(date.split(' ').reverse().join('-'))-new Date())/86400000);
     body.innerHTML='<div class="mrow"><span class="mlbl">Planned inspection date</span><span class="mval">'+date+'</span></div><div class="mrow"><span class="mlbl">Days until inspection</span><span class="mval"><span style="font-weight:500">'+(isNaN(dn)?'—':dn)+' days</span></span></div><div style="margin-top:12px;padding:10px 12px;background:var(--color-background-secondary);border-radius:8px;font-size:12px;color:var(--color-text-secondary)">Prepare site and book inspection when ready.</div>';
-    ac.innerHTML='<button class="mabtn" onclick="openBookModal(&quot;'+type+'&quot;,&quot;'+siteData[currentSite].name+'&quot;,&quot;'+date+'&quot;)">Book inspection</button><button class="mabtn" onclick="openDotEmailModal(&quot;'+type+'&quot;,&quot;'+siteData[currentSite].name+'&quot;,&quot;'+date+'&quot;)">Send email</button><button class="mabtn">Adjust date</button><button class="btn-primary" onclick="closeDot()">Close ✕</button>';
+    ac.innerHTML='<button class="mabtn" onclick="openBookModal(&quot;'+type+'&quot;,&quot;'+siteData[currentSite].name+'&quot;,&quot;'+date+'&quot;)">Book inspection</button><button class="mabtn" onclick="openDotEmailModal(&quot;'+type+'&quot;,&quot;'+siteData[currentSite].name+'&quot;,&quot;'+date+'&quot;)">Send email</button>'+(isLiveData&&_currentDotDbId?'<button class="mabtn" onclick="adjustDotDate()">Adjust date</button>':'')+'<button class="btn-primary" onclick="closeDot()">Close ✕</button>';
+  }
+  // Add status update buttons to ALL dot modals when using live data
+  if(isLiveData&&_currentDotDbId){
+    body.innerHTML+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(0,0,0,.06)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-secondary);margin-bottom:8px">Update status</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="mabtn" style="background:#D1FAE5;color:#065F46;border-color:#10B981" onclick="updateDotStatus(\'passed\')">Passed</button><button class="mabtn" style="background:#FEE2E2;color:#991B1B;border-color:#EF4444" onclick="updateDotStatus(\'failed\')">Failed</button><button class="mabtn" style="background:#D1FAE5;color:#065F46;border:2px solid #EF4444" onclick="updateDotStatus(\'partialpass\')">Partial pass</button><button class="mabtn" style="background:#DBEAFE;color:#1E40AF;border-color:#3B82F6" onclick="updateDotStatus(\'ready\')">Ready</button><button class="mabtn" onclick="updateDotStatus(\'notstarted\')">Not started</button></div></div>';
   }
   document.getElementById('dot-modal').classList.add('open');
 }
 function closeDot(){document.getElementById('dot-modal').classList.remove('open');}
+
+// ── UPDATE INSPECTION STATUS IN SUPABASE ──
+async function updateDotStatus(newStatus){
+  if(!_currentDotDbId||!soterraDb){closeDot();return;}
+  var{error}=await soterraDb.from('inspections').update({status:newStatus}).eq('id',_currentDotDbId);
+  if(error){
+    alert('Failed to update: '+error.message);
+    return;
+  }
+  // Reload data and refresh grid
+  await loadFromSupabase();
+  var d=siteData[currentSite];
+  if(d){
+    renderTrackerStats(d);
+    buildCalGrid(currentSite);
+    renderIssues();
+    renderReports(d);
+  }
+  closeDot();
+}
+
+// ── ADJUST INSPECTION DATE ──
+async function adjustDotDate(){
+  if(!_currentDotDbId||!soterraDb)return;
+  var newDate=prompt('Enter new date (YYYY-MM-DD):');
+  if(!newDate||!/^\d{4}-\d{2}-\d{2}$/.test(newDate))return;
+  var{error}=await soterraDb.from('inspections').update({start_date:newDate}).eq('id',_currentDotDbId);
+  if(error){
+    alert('Failed to update date: '+error.message);
+    return;
+  }
+  await loadFromSupabase();
+  var d=siteData[currentSite];
+  if(d){buildCalGrid(currentSite);}
+  closeDot();
+}
 
 function togglePartialPassConfirm(){
   var box=document.getElementById('pp-confirm-box');
@@ -2502,33 +2544,52 @@ async function loadFromSupabase(){
 }
 
 function transformProjectToSiteData(project,inspections){
-  // Group inspections by type (task name normalized)
+  // Sort inspections by task_id (program order) — this preserves the PM's intended sequence
+  inspections.sort(function(a,b){
+    var idA=parseInt(a.task_id)||9999;
+    var idB=parseInt(b.task_id)||9999;
+    return idA-idB;
+  });
+
+  // Group inspections by normalized type, preserving first-seen order
+  var typeOrder=[];
   var typeMap={};
   var lotSet=new Set();
   inspections.forEach(function(insp){
     var type=normalizeInspectionType(insp.task);
     var lot=insp.lot||'General';
     lotSet.add(lot);
-    if(!typeMap[type])typeMap[type]={};
+    if(!typeMap[type]){
+      typeMap[type]={};
+      typeOrder.push(type); // preserve first-seen order (from task_id sort)
+    }
     if(!typeMap[type][lot])typeMap[type][lot]=insp;
   });
 
-  var lots=Array.from(lotSet).sort();
+  var lots=Array.from(lotSet).sort(function(a,b){
+    // Natural sort for lots (Lot 1, Lot 2... not Lot 1, Lot 10, Lot 2)
+    var na=parseInt(a.replace(/\D/g,''))||0;
+    var nb=parseInt(b.replace(/\D/g,''))||0;
+    return na-nb||(a<b?-1:a>b?1:0);
+  });
 
-  // Build calGrid
+  // Build calGrid using program order (typeOrder), not alphabetical
   var calGrid=[];
-  var types=Object.keys(typeMap).sort();
-  types.forEach(function(type){
+  var now=new Date();
+  typeOrder.forEach(function(type){
     var lotData=lots.map(function(lot){
       var insp=typeMap[type][lot];
-      if(!insp)return{status:'notstarted',date:''};
+      if(!insp)return{status:'notstarted',date:'',dbId:null,isPast:false};
       var d=insp.start_date?new Date(insp.start_date):null;
       var dateStr=d?d.toLocaleDateString('en-NZ',{day:'numeric',month:'short'}):'';
+      var isPast=d?d<now:false;
       return{
         status:insp.status||'notstarted',
         date:dateStr,
         inspector:insp.inspector||'',
-        issues:insp.issues||''
+        issues:insp.issues||'',
+        dbId:insp.id, // Supabase row ID for updates
+        isPast:isPast
       };
     });
     calGrid.push({type:type,lots:lotData});
@@ -2914,27 +2975,40 @@ function renderTrackerStats(d){
 /* ── CALENDAR GRID ────────────────────────────────────── */
 function buildCalGrid(siteKey){
   var d=siteData[siteKey];
+  if(!d||!d.calGrid||!d.calGrid.length)return;
   var tbl=document.getElementById('site-cal-grid');
-  var html='<tr><th>Inspection type</th><th>Lot 1</th><th>Lot 2</th><th>Lot 3</th><th>Lot 4</th><th>Lot 5</th><th>Lot 6</th><th>Lot 7</th></tr>';
+
+  // Build dynamic lot headers from data
+  var numLots=d.calGrid[0].lots.length;
+  var html='<tr><th>Inspection type</th>';
+  for(var h=0;h<numLots;h++)html+='<th>Lot '+(h+1)+'</th>';
+  html+='</tr>';
+
   d.calGrid.forEach(function(row){
     html+='<tr><td style="font-weight:500">'+row.type+'</td>';
     row.lots.forEach(function(lot,i){
       var cls={passed:'cal-passed',ready:'cal-ready',failed:'cal-failed',notstarted:'cal-notstarted',partialpass:'cal-partialpass'}[lot.status]||'cal-notstarted';
+      // Grey out past dates that are still "notstarted"
+      var pastStyle='';
+      if(lot.isPast&&lot.status==='notstarted'){
+        pastStyle='opacity:.45;';
+      }
       var inspector=lot.inspector||'';
       var issues=lot.issues||'';
-      var onclick="openDot('"+row.type+"','Lot "+(i+1)+"','"+lot.status+"','"+lot.date+" 2026','"+inspector+"','"+issues+"','')";
-      html+='<td><span class="cal-box '+cls+'" onclick="'+onclick+'">'+lot.date+'</span></td>';
+      var dbId=lot.dbId||'';
+      var onclick="openDot('"+row.type+"','Lot "+(i+1)+"','"+lot.status+"','"+lot.date+" 2026','"+inspector+"','"+issues+"','"+dbId+"')";
+      html+='<td><span class="cal-box '+cls+'" style="'+pastStyle+'" onclick="'+onclick+'">'+lot.date+'</span></td>';
     });
     html+='</tr>';
   });
   // Progress row
   html+='<tr style="background:var(--color-background-secondary)">';
   html+='<td style="font-size:11px;color:var(--color-text-secondary)">Progress</td>';
-  d.calGrid[0].lots.forEach(function(lot,i){
+  for(var p=0;p<numLots;p++){
     var total=d.calGrid.length;
-    var done=d.calGrid.filter(function(r){return r.lots[i].status==='passed';}).length;
+    var done=d.calGrid.filter(function(r){return r.lots[p]&&(r.lots[p].status==='passed'||r.lots[p].status==='partialpass');}).length;
     html+='<td style="font-size:11px;font-weight:500">'+Math.round(done/total*100)+'%</td>';
-  });
+  }
   html+='</tr>';
   tbl.innerHTML=html;
 }
