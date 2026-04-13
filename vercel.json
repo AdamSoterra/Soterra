@@ -3,6 +3,10 @@
     "api/parse-program.py": {
       "runtime": "@vercel/python@4.7.0",
       "maxDuration": 60
+    },
+    "api/extract-issues.py": {
+      "runtime": "@vercel/python@4.7.0",
+      "maxDuration": 60
     }
   },
   "rewrites": [
