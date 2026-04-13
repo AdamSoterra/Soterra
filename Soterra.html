@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Soterra — Construction Intelligence</title>
 <link rel="icon" type="image/png" href="favicon.png">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
@@ -2445,7 +2446,200 @@ function exportPDF(){
    SITE TEAM DATA & FUNCTIONS
    ══════════════════════════════════════════════════════════ */
 
-/* ── SITE DATA ────────────────────────────────────────── */
+/* ── SUPABASE CLIENT ────────────────────────────────── */
+var SOTERRA_SB_URL='https://pffwyxygovfswchxlxun.supabase.co';
+var SOTERRA_SB_KEY='sb_publishable_HbvNAWlqxpiFYDZDcORntg_q2uu4Ooy';
+var soterraDb=null;
+var soterraUser=null;
+var soterraProfile=null;
+var isLiveData=false;
+try{soterraDb=window.supabase?window.supabase.createClient(SOTERRA_SB_URL,SOTERRA_SB_KEY):null;}catch(e){}
+
+/* ── LOAD REAL DATA FROM SUPABASE ──────────────────── */
+async function loadFromSupabase(){
+  if(!soterraDb)return false;
+  try{
+    var{data:session}=await soterraDb.auth.getSession();
+    if(!session.session)return false;
+    soterraUser=session.session.user;
+
+    // Load profile
+    var{data:profile}=await soterraDb.from('profiles').select('*,companies(name,join_code)').eq('id',soterraUser.id).single();
+    if(!profile||!profile.company_id)return false;
+    soterraProfile=profile;
+
+    // Load all projects for this company
+    var{data:projects}=await soterraDb.from('projects').select('*').eq('company_id',profile.company_id);
+    if(!projects||projects.length===0)return false;
+
+    // Load all inspections for these projects
+    var projectIds=projects.map(function(p){return p.id;});
+    var{data:inspections}=await soterraDb.from('inspections').select('*').in('project_id',projectIds);
+    if(!inspections)inspections=[];
+
+    // Transform into siteData format
+    var newSiteData={};
+    projects.forEach(function(proj){
+      var projInsps=inspections.filter(function(i){return i.project_id===proj.id;});
+      newSiteData[proj.id]=transformProjectToSiteData(proj,projInsps);
+    });
+
+    // Replace siteData
+    siteData=newSiteData;
+    isLiveData=true;
+
+    // Update site selector dropdown
+    updateSiteSelector(projects);
+
+    // Set currentSite to first project
+    currentSite=projects[0].id;
+
+    return true;
+  }catch(e){
+    console.error('Supabase load error:',e);
+    return false;
+  }
+}
+
+function transformProjectToSiteData(project,inspections){
+  // Group inspections by type (task name normalized)
+  var typeMap={};
+  var lotSet=new Set();
+  inspections.forEach(function(insp){
+    var type=normalizeInspectionType(insp.task);
+    var lot=insp.lot||'General';
+    lotSet.add(lot);
+    if(!typeMap[type])typeMap[type]={};
+    if(!typeMap[type][lot])typeMap[type][lot]=insp;
+  });
+
+  var lots=Array.from(lotSet).sort();
+
+  // Build calGrid
+  var calGrid=[];
+  var types=Object.keys(typeMap).sort();
+  types.forEach(function(type){
+    var lotData=lots.map(function(lot){
+      var insp=typeMap[type][lot];
+      if(!insp)return{status:'notstarted',date:''};
+      var d=insp.start_date?new Date(insp.start_date):null;
+      var dateStr=d?d.toLocaleDateString('en-NZ',{day:'numeric',month:'short'}):'';
+      return{
+        status:insp.status||'notstarted',
+        date:dateStr,
+        inspector:insp.inspector||'',
+        issues:insp.issues||''
+      };
+    });
+    calGrid.push({type:type,lots:lotData});
+  });
+
+  // Calculate stats
+  var totalDone=inspections.filter(function(i){return i.status==='passed'||i.status==='failed'||i.status==='partialpass';}).length;
+  var totalFailed=inspections.filter(function(i){return i.status==='failed';}).length;
+  var failRate=totalDone>0?Math.round(totalFailed/totalDone*100):0;
+  var openIssues=inspections.filter(function(i){return i.status==='failed'||i.status==='partialpass';}).length;
+  var readyCount=inspections.filter(function(i){return i.status==='ready';}).length;
+  var passedCount=inspections.filter(function(i){return i.status==='passed';}).length;
+
+  // Build issues list from failed/partialpass inspections
+  var issues=inspections.filter(function(i){return i.status==='failed'||i.status==='partialpass';}).map(function(i){
+    var d=i.start_date?new Date(i.start_date):new Date();
+    var days=Math.round((new Date()-d)/86400000);
+    return{
+      title:i.task+(i.issues?' - '+i.issues.split('|')[0]:''),
+      type:normalizeInspectionType(i.task),
+      date:d.toLocaleDateString('en-NZ',{day:'2-digit',month:'short',year:'numeric'}),
+      days:Math.max(0,days),
+      reinsp:0,
+      status:i.status==='partialpass'?'ready':'open',
+      note:i.issues||''
+    };
+  });
+
+  // Build reports from passed/failed inspections
+  var reports=inspections.filter(function(i){return i.status==='passed'||i.status==='failed';}).slice(0,5).map(function(i){
+    var d=i.start_date?new Date(i.start_date):new Date();
+    return{
+      type:normalizeInspectionType(i.task),
+      lot:i.lot||'',
+      date:d.toLocaleDateString('en-NZ',{day:'2-digit',month:'short',year:'numeric'}),
+      inspector:i.inspector||'TBC',
+      failed:i.status==='failed'?1:0,
+      result:i.status==='passed'?'passed':'failed',
+      fn:null,args:[]
+    };
+  });
+
+  return{
+    name:project.name,
+    kpi:{
+      insp:totalDone,
+      fail:failRate+'%',
+      failColor:failRate>45?'#EF4444':failRate>30?'#F59E0B':'#10B981',
+      ipi:totalDone>0?(totalFailed/Math.max(totalDone,1)).toFixed(1):'0',
+      open:openIssues,
+      overdue:inspections.filter(function(i){
+        if(i.status!=='failed')return false;
+        var d=i.start_date?new Date(i.start_date):null;
+        return d&&(new Date()-d)/86400000>14;
+      }).length
+    },
+    trendData:[50,48,46,44,42,40,38,failRate,failRate,failRate,failRate,failRate],
+    vs:{
+      fail:{val:failRate+'%',color:failRate>45?'#EF4444':'#F59E0B',avg:'—',badge:'—',badgeClass:'badge-neutral'},
+      ipi:{val:'—',color:'#4A6080',avg:'—',badge:'—',badgeClass:'badge-neutral'},
+      overdue:{val:'0',color:'#10B981',avg:'—',badge:'—',badgeClass:'badge-neutral'}
+    },
+    stats:{open:openIssues,ready:readyCount,closed:passedCount},
+    issues:issues,
+    reports:reports,
+    calGrid:calGrid,
+    insights:{
+      rootCauses:['Data loading — patterns will build over time','Upload more inspection reports to generate insights'],
+      riskAreas:['Data loading — risk areas will appear as more inspections are recorded'],
+      patterns:[]
+    }
+  };
+}
+
+function normalizeInspectionType(task){
+  if(!task)return'Other';
+  var t=task.replace(/^\*/,'').trim();
+  // Normalize common names
+  if(/preline/i.test(t))return'Preline';
+  if(/postline/i.test(t))return'Postline';
+  if(/cavity/i.test(t))return'Cavity';
+  if(/cladding/i.test(t))return'Cladding';
+  if(/structural/i.test(t))return'Structural';
+  if(/prewrap|pre.wrap/i.test(t))return'Prewrap';
+  if(/fire/i.test(t))return'Fire';
+  if(/waterproof/i.test(t))return'Waterproofing';
+  if(/final/i.test(t))return'Final';
+  if(/prefinal|pre.final/i.test(t))return'Prefinal';
+  if(/defect/i.test(t))return'Defect';
+  if(/CCC|code.compliance/i.test(t))return'CCC';
+  if(/geotech/i.test(t))return'Geotech';
+  if(/drainage/i.test(t))return'Drainage';
+  if(/consentium/i.test(t))return'Consentium';
+  if(/engineer/i.test(t))return'Engineer';
+  if(/milestone/i.test(t))return'Milestone';
+  return t.length>25?t.substring(0,25)+'...':t;
+}
+
+function updateSiteSelector(projects){
+  var sel=document.getElementById('site-selector');
+  if(!sel)return;
+  sel.innerHTML='';
+  projects.forEach(function(p){
+    var opt=document.createElement('option');
+    opt.value=p.id;
+    opt.textContent=p.name;
+    sel.appendChild(opt);
+  });
+}
+
+/* ── SITE DATA (demo fallback) ───────────────────────── */
 var siteData={
   harbor:{
     name:'Harbor View Tower',
@@ -3543,7 +3737,34 @@ document.addEventListener('DOMContentLoaded',function(){
   document.getElementById('dot-modal').addEventListener('click',function(e){if(e.target===this)closeDot();});
   document.getElementById('sub-modal').addEventListener('click',function(e){if(e.target===this)closeSubModal();});
   document.querySelectorAll('.btn,.btn-primary').forEach(function(b){if(b.textContent.trim().toLowerCase().indexOf('export')>-1&&!b.getAttribute('onclick')){b.addEventListener('click',function(e){e.stopPropagation();exportPDF();});}});
-  initSiteTeam();
+  // Try loading real data from Supabase, fall back to demo
+  (async function(){
+    var loaded=await loadFromSupabase();
+    if(loaded){
+      // Skip splash screen, go straight to dashboard
+      var hp=document.getElementById('homepage');
+      if(hp)hp.style.display='none';
+
+      // Set role based on profile
+      var role=soterraProfile?soterraProfile.role:'pm';
+      if(role==='director'||role==='pm'){
+        currentRole='executive';
+        document.getElementById('app-exec').classList.add('visible');
+        document.getElementById('app-exec').classList.add('demo-active');
+        nav('exec-overview',document.querySelectorAll('#app-exec .nav-item')[0]);
+      }else{
+        currentRole='site';
+        document.getElementById('app-site').classList.add('visible');
+        document.getElementById('app-site').classList.add('demo-active');
+        nav('site-tracker',document.querySelectorAll('#app-site .nav-item')[0]);
+      }
+
+      // Update user name in topbar
+      var userName=soterraProfile?soterraProfile.full_name:'User';
+      document.querySelectorAll('.user-name').forEach(function(el){el.textContent=userName;});
+    }
+    initSiteTeam();
+  })();
 });
 
 /* ── SCROLL REVEAL ── */
