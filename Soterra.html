@@ -1521,6 +1521,12 @@ function tryLogin(){
           <tr><th>Type</th><th>Lot</th><th>Date</th><th>Inspector</th><th>Failed items</th><th>Result</th><th></th></tr>
           <tbody id="st-reports-body"></tbody>
         </table>
+        <div id="st-reports-more-wrap" style="display:none">
+          <table>
+            <tbody id="st-reports-more-body"></tbody>
+          </table>
+        </div>
+        <div class="view-all-link" id="st-reports-toggle" onclick="toggleMore('st-reports-more-wrap',this)" style="display:none">View more ↓</div>
       </div>
 
       <!-- Issue register -->
@@ -3306,8 +3312,8 @@ async function renderIssueRegister(){
     return statusMatch&&typeMatch&&lotMatch;
   });
 
-  var main=filtered.slice(0,6);
-  var more=filtered.slice(6);
+  var main=filtered.slice(0,3);
+  var more=filtered.slice(3);
 
   function rowHtml(issue){
     var daysOpen=Math.round((new Date()-new Date(issue.created_at))/86400000);
@@ -3420,24 +3426,28 @@ async function updateLiveIssueStatus(newStatus){
 
 /* ── REPORTS ──────────────────────────────────────────── */
 function renderReports(d){
-  var html='';
-  d.reports.forEach(function(r,i){
+  function reportRowHtml(r,i){
     var resultClass=r.result==='passed'?'badge-passed':'badge-failed';
     var failColor=r.result==='passed'?'#10B981':'#EF4444';
     var btn;
     if(r.report_url){
       btn='<a href="'+r.report_url+'" target="_blank" class="btn" style="font-size:11px;height:28px;text-decoration:none">Download ↓</a>';
-    }else if(i===0&&r.fn){
-      btn='<button class="btn" style="font-size:11px;height:28px" onclick="'+r.fn+'('+r.args.map(function(a){return typeof a==='string'?'\''+a+'\'':JSON.stringify(a);}).join(',')+')">Download ↓</button>';
     }else{
       btn='<span style="font-size:10px;color:#999">No report</span>';
     }
-    html+='<tr><td style="font-weight:500">'+r.type+'</td><td>'+r.lot+'</td><td>'+r.date+'</td><td>'+r.inspector+'</td>'
+    return '<tr><td style="font-weight:500">'+r.type+'</td><td>'+r.lot+'</td><td>'+r.date+'</td><td>'+r.inspector+'</td>'
       +'<td style="color:'+failColor+';font-weight:500">'+r.failed+'</td>'
       +'<td><span class="badge '+resultClass+'">'+(r.result==='passed'?'Passed':'Failed')+'</span></td>'
       +'<td>'+btn+'</td></tr>';
-  });
-  document.getElementById('st-reports-body').innerHTML=html;
+  }
+  var main=d.reports.slice(0,3);
+  var more=d.reports.slice(3);
+  document.getElementById('st-reports-body').innerHTML=main.map(reportRowHtml).join('');
+  document.getElementById('st-reports-more-body').innerHTML=more.map(reportRowHtml).join('');
+  var moreWrap=document.getElementById('st-reports-more-wrap');
+  var toggle=document.getElementById('st-reports-toggle');
+  if(more.length===0){moreWrap.style.display='none';toggle.style.display='none';}
+  else{toggle.style.display='inline-flex';toggle.textContent='View more ('+more.length+') ↓';moreWrap.style.display='none';}
 }
 
 /* ── OVERVIEW ─────────────────────────────────────────── */
