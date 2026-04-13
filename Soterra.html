@@ -1529,7 +1529,8 @@ function tryLogin(){
           <div><div class="card-title">Issue register</div><div class="card-sub">Click any row for detail and actions — overdue items highlighted</div></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <select id="st-filter-status" onchange="renderIssues()"><option value="">All status</option><option value="open">Open</option><option value="ready">Ready</option><option value="closed">Closed</option></select>
-            <select id="st-filter-type" onchange="renderIssues()"><option value="">All types</option><option value="Hydraulic">Hydraulic</option><option value="Framing">Framing</option><option value="Fire">Fire</option><option value="Structural">Structural</option><option value="Electrical">Electrical</option></select>
+            <select id="st-filter-type" onchange="renderIssues()"><option value="">All types</option><option value="Preline">Preline</option><option value="Postline">Postline</option><option value="Cavity">Cavity</option><option value="Cladding">Cladding</option><option value="Structural">Structural</option><option value="Prewrap">Prewrap</option><option value="Fire">Fire</option><option value="Defect">Defect</option></select>
+            <select id="st-filter-lot" onchange="renderIssues()"><option value="">All lots</option></select>
           </div>
         </div>
         <table style="table-layout:fixed">
@@ -2250,7 +2251,7 @@ async function loadDotReport(){
   var{data:insp}=await soterraDb.from('inspections').select('report_url,report_filename').eq('id',_currentDotDbId).single();
 
   if(insp&&insp.report_url){
-    area.innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(14,116,189,.04);border:1px solid rgba(14,116,189,.12);border-radius:8px;margin-bottom:8px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="1" width="12" height="14" rx="1.5" stroke="#0E74BD" stroke-width="1.5"/><path d="M5 5h6M5 8h6M5 11h3" stroke="#0E74BD" stroke-width="1.2" stroke-linecap="round"/></svg><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;color:#0A2540;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(insp.report_filename||'Report uploaded')+'</div></div><button class="mabtn" style="height:28px;font-size:11px;padding:0 10px" onclick="openDotReport()">Open</button><button class="mabtn" style="height:28px;font-size:11px;padding:0 10px" onclick="downloadDotReport()">Download</button></div><div style="margin-top:6px"><label style="font-size:11px;color:#0E74BD;cursor:pointer;font-weight:500">Replace report <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display:none" onchange="uploadDotReport(this.files[0])"></label></div>';
+    area.innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(14,116,189,.04);border:1px solid rgba(14,116,189,.12);border-radius:8px;margin-bottom:8px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="1" width="12" height="14" rx="1.5" stroke="#0E74BD" stroke-width="1.5"/><path d="M5 5h6M5 8h6M5 11h3" stroke="#0E74BD" stroke-width="1.2" stroke-linecap="round"/></svg><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;color:#0A2540;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(insp.report_filename||'Report uploaded')+'</div></div><button class="mabtn" style="height:28px;font-size:11px;padding:0 10px" onclick="openDotReport()">Open</button><button class="mabtn" style="height:28px;font-size:11px;padding:0 10px" onclick="downloadDotReport()">Download</button></div><div style="margin-top:6px;display:flex;gap:12px"><label style="font-size:11px;color:#0E74BD;cursor:pointer;font-weight:500">Replace report <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display:none" onchange="uploadDotReport(this.files[0])"></label><span style="font-size:11px;color:#EF4444;cursor:pointer;font-weight:500" onclick="deleteDotReport()">Delete report</span></div>';
   }else{
     area.innerHTML='<div style="border:2px dashed rgba(0,0,0,.1);border-radius:8px;padding:20px;text-align:center;cursor:pointer" onclick="this.querySelector(\'input\').click()"><div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:4px">Drop report here or click to upload</div><div style="font-size:10px;color:#999">PDF, JPG, PNG, DOC — max 10MB</div><input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display:none" onchange="uploadDotReport(this.files[0])"></div>';
   }
@@ -2301,7 +2302,7 @@ async function uploadDotReport(file){
 
     var extractRes=await fetch('/api/extract-issues',{method:'POST',body:formData2});
     var extractData=await extractRes.json();
-    console.log('Issue extraction result:',JSON.stringify(extractData));
+    // Issue extraction complete
 
     // Filter out debug error messages
     var realIssues=(extractData.issues||[]).filter(function(i){return i.title!=='EXTRACTION_ERROR';});
@@ -2358,6 +2359,32 @@ function downloadDotReport(){
       document.body.appendChild(a);a.click();document.body.removeChild(a);
     }
   });
+}
+
+async function deleteDotReport(){
+  if(!_currentDotDbId||!soterraDb)return;
+  if(!confirm('Delete this report? Associated issues will also be removed.'))return;
+
+  // Remove report URL from inspection
+  await soterraDb.from('inspections').update({report_url:null,report_filename:null}).eq('id',_currentDotDbId);
+
+  // Delete associated issues
+  await soterraDb.from('issues').delete().eq('inspection_id',_currentDotDbId);
+
+  // Delete file from storage
+  var filePath=_currentDotDbId+'/report.pdf';
+  await soterraDb.storage.from('inspection-reports').remove([filePath]);
+
+  // Refresh
+  loadDotReport();
+  await loadFromSupabase();
+  var d=siteData[currentSite];
+  if(d){
+    renderReports(d);
+    renderTrackerStats(d);
+    buildCalGrid(currentSite);
+    renderIssueRegister();
+  }
 }
 
 function togglePartialPassConfirm(){
@@ -3224,13 +3251,28 @@ async function renderIssueRegister(){
   var{data:issues,error}=await soterraDb.from('issues').select('*').eq('project_id',projectId).order('created_at',{ascending:false});
   if(error||!issues)issues=[];
 
+  // Populate lot filter dynamically
+  var lotSelect=document.getElementById('st-filter-lot');
+  if(lotSelect){
+    var lots={};
+    issues.forEach(function(i){if(i.lot)lots[i.lot]=1;});
+    var currentLotVal=lotSelect.value;
+    lotSelect.innerHTML='<option value="">All lots</option>';
+    Object.keys(lots).sort().forEach(function(lot){
+      lotSelect.innerHTML+='<option value="'+lot+'">'+lot+'</option>';
+    });
+    lotSelect.value=currentLotVal;
+  }
+
   // Apply filters
   var statusF=document.getElementById('st-filter-status').value;
   var typeF=document.getElementById('st-filter-type').value;
+  var lotF=lotSelect?lotSelect.value:'';
   var filtered=issues.filter(function(i){
-    var statusMatch=!statusF||(statusF==='open'&&i.status==='open')||(statusF==='ready'&&i.status==='ready')||(statusF==='closed'&&i.status==='closed');
+    var statusMatch=!statusF||i.status===statusF;
     var typeMatch=!typeF||i.inspection_type.toLowerCase().indexOf(typeF.toLowerCase())>-1;
-    return statusMatch&&typeMatch;
+    var lotMatch=!lotF||i.lot===lotF;
+    return statusMatch&&typeMatch&&lotMatch;
   });
 
   var main=filtered.slice(0,6);
