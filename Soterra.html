@@ -2301,8 +2301,12 @@ async function uploadDotReport(file){
 
     var extractRes=await fetch('/api/extract-issues',{method:'POST',body:formData2});
     var extractData=await extractRes.json();
+    console.log('Issue extraction result:',JSON.stringify(extractData));
 
-    if(extractData.success&&extractData.issues&&extractData.issues.length>0){
+    // Filter out debug error messages
+    var realIssues=(extractData.issues||[]).filter(function(i){return i.title!=='EXTRACTION_ERROR';});
+    if(extractData.success&&realIssues.length>0){
+      extractData.issues=realIssues;
       // Save extracted issues to database
       var issueRows=extractData.issues.map(function(issue){
         return{
