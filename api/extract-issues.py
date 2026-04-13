@@ -199,7 +199,7 @@ The lot/area is: {lot}
 
 Return ONLY valid JSON. No explanation, no markdown code blocks.
 
-{"VISUAL NOTE: If you can see the report images above, look carefully for any items with strikethrough/crossed-out text — those are COMPLETED and must be excluded." if use_vision else ""}
+{"CRITICAL VISUAL CHECK: You are viewing actual images of the report. CAREFULLY LOOK for any text that has a horizontal line drawn through it (strikethrough text). In construction reports, items with strikethrough/line-through formatting mean they have been COMPLETED and RESOLVED. You MUST EXCLUDE any item where the text has a line drawn through it. Only include items where the text is clean and NOT crossed out. This is extremely important — if an item has strikethrough formatting, it is done and must NOT appear in the issues list." if use_vision else ""}
 
 Report text:
 {text[:12000]}"""})
