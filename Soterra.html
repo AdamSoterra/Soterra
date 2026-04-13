@@ -1497,8 +1497,11 @@ function tryLogin(){
 
       <!-- Calendar grid -->
       <div class="card">
-        <div class="card-title">Inspection status tracker</div>
-        <div class="card-sub">Colour-coded by status — click any box for detail and actions</div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div><div class="card-title">Inspection status tracker</div>
+          <div class="card-sub">Colour-coded by status — click any box for detail and actions</div></div>
+          <button class="btn" style="font-size:11px;height:32px;background:#EEF2FF;color:#4F46E5;border:.5px solid rgba(79,70,229,.3)" onclick="openAddInspectionModal()">+ Add inspection</button>
+        </div>
         <div class="tracker-grid-wrap">
           <table class="tg" id="site-cal-grid">
             <!-- Built by buildCalGrid() -->
@@ -2398,6 +2401,74 @@ async function deleteDotReport(){
     renderTrackerStats(d);
     buildCalGrid(currentSite);
     renderIssueRegister();
+  }
+}
+
+// ── ADD INSPECTION MANUALLY ──
+function openAddInspectionModal(){
+  if(!isLiveData||!soterraDb)return;
+  var d=siteData[currentSite];
+  if(!d)return;
+
+  // Build lot options from current data
+  var lots=new Set();
+  d.calGrid.forEach(function(row){
+    row.lots.forEach(function(lot,i){
+      if(lot.date)lots.add('Lot '+(i+1));
+    });
+  });
+  // Build type options from current data
+  var types=new Set();
+  d.calGrid.forEach(function(row){types.add(row.type);});
+
+  var lotOpts=Array.from(lots).map(function(l){return'<option value="'+l+'">'+l+'</option>';}).join('');
+  var typeOpts=Array.from(types).map(function(t){return'<option value="'+t+'">'+t+'</option>';}).join('')+'<option value="Other">Other</option>';
+
+  var html='<div style="position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center" id="add-insp-modal" onclick="if(event.target===this)this.remove()">'
+    +'<div style="background:#fff;border-radius:14px;width:420px;max-width:94vw;box-shadow:0 20px 60px rgba(0,0,0,.2);overflow:hidden">'
+    +'<div style="padding:18px 20px 14px;border-bottom:.5px solid rgba(0,0,0,.1);display:flex;align-items:center;justify-content:space-between"><div style="font-size:14px;font-weight:500">Add inspection</div><button onclick="document.getElementById(\'add-insp-modal\').remove()" style="background:none;border:none;font-size:18px;color:#999;cursor:pointer">&#10005;</button></div>'
+    +'<div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">'
+    +'<div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999;margin-bottom:5px">Inspection type</div><select id="add-insp-type" style="width:100%;height:36px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 12px;font-size:13px;font-family:var(--font)">'+typeOpts+'</select></div>'
+    +'<div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999;margin-bottom:5px">Custom type (if Other)</div><input id="add-insp-custom-type" type="text" placeholder="e.g. Reinspection" style="width:100%;height:36px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 12px;font-size:13px;font-family:var(--font);outline:none"></div>'
+    +'<div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999;margin-bottom:5px">Lot / Area</div><select id="add-insp-lot" style="width:100%;height:36px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 12px;font-size:13px;font-family:var(--font)">'+lotOpts+'</select></div>'
+    +'<div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999;margin-bottom:5px">Date</div><input id="add-insp-date" type="date" style="width:100%;height:36px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 12px;font-size:13px;font-family:var(--font);outline:none"></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px"><button onclick="document.getElementById(\'add-insp-modal\').remove()" style="height:36px;background:var(--color-background-secondary);border:.5px solid rgba(0,0,0,.15);border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)">Cancel</button><button onclick="saveNewInspection()" style="height:36px;background:#4F46E5;color:#fff;border:none;border-radius:6px;padding:0 18px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)">Add inspection</button></div>'
+    +'</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+
+async function saveNewInspection(){
+  if(!soterraDb||!currentSite)return;
+  var typeSelect=document.getElementById('add-insp-type');
+  var customType=document.getElementById('add-insp-custom-type').value.trim();
+  var type=typeSelect.value==='Other'&&customType?customType:typeSelect.value;
+  var lot=document.getElementById('add-insp-lot').value;
+  var date=document.getElementById('add-insp-date').value;
+
+  if(!type||!lot||!date){alert('Please fill in all fields');return;}
+
+  // Get project_id
+  var projectId=currentSite;
+
+  await soterraDb.from('inspections').insert({
+    project_id:projectId,
+    task:type+' inspection',
+    task_id:'manual_'+Date.now(),
+    lot:lot,
+    start_date:date,
+    duration:'1 day',
+    status:'notstarted',
+    section:'Manual'
+  });
+
+  document.getElementById('add-insp-modal').remove();
+
+  // Refresh
+  await loadFromSupabase();
+  var d=siteData[currentSite];
+  if(d){
+    renderTrackerStats(d);
+    buildCalGrid(currentSite);
   }
 }
 
