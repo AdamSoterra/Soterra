@@ -1534,7 +1534,7 @@ function tryLogin(){
         </div>
         <table style="table-layout:fixed">
           <colgroup><col style="width:32%"><col style="width:14%"><col style="width:18%"><col style="width:14%"><col style="width:12%"><col style="width:10%"></colgroup>
-          <tr><th>Issue</th><th>Type</th><th>Date identified</th><th>Days open</th><th>Re-insp</th><th>Status</th></tr>
+          <tr><th>Issue</th><th>Type</th><th>Lot</th><th>Days open</th><th>Re-insp</th><th>Status</th></tr>
           <tbody id="st-issues-body"></tbody>
         </table>
         <div id="st-issues-more-wrap" style="display:none">
@@ -2286,11 +2286,54 @@ async function uploadDotReport(file){
     alert('Failed to save report link: '+updateErr.message);
   }
 
-  // Refresh the report area and the reports table
+  // Extract failed items from the uploaded report using Claude API
+  area.innerHTML='<div style="padding:16px;text-align:center;font-size:12px;color:var(--color-text-secondary)">Analysing report for failed items...</div>';
+
+  try{
+    var formData2=new FormData();
+    formData2.append('file',file);
+    // Get inspection info for context
+    var{data:inspInfo}=await soterraDb.from('inspections').select('task,lot,project_id').eq('id',_currentDotDbId).single();
+    if(inspInfo){
+      formData2.append('inspection_type',inspInfo.task||'');
+      formData2.append('lot',inspInfo.lot||'');
+    }
+
+    var extractRes=await fetch('/api/extract-issues',{method:'POST',body:formData2});
+    var extractData=await extractRes.json();
+
+    if(extractData.success&&extractData.issues&&extractData.issues.length>0){
+      // Save extracted issues to database
+      var issueRows=extractData.issues.map(function(issue){
+        return{
+          inspection_id:_currentDotDbId,
+          project_id:inspInfo?inspInfo.project_id:null,
+          title:issue.title,
+          description:issue.description||'',
+          lot:inspInfo?inspInfo.lot:'',
+          inspection_type:inspInfo?inspInfo.task:'',
+          status:'open'
+        };
+      });
+      await soterraDb.from('issues').insert(issueRows);
+
+      // Auto-set inspection status to failed if items were found
+      await soterraDb.from('inspections').update({status:'failed'}).eq('id',_currentDotDbId);
+    }
+  }catch(e){
+    console.error('Issue extraction error:',e);
+  }
+
+  // Refresh everything
   loadDotReport();
   await loadFromSupabase();
   var d=siteData[currentSite];
-  if(d){renderReports(d);}
+  if(d){
+    renderReports(d);
+    renderTrackerStats(d);
+    buildCalGrid(currentSite);
+    renderIssueRegister();
+  }
 }
 
 function openDotReport(){
@@ -3139,6 +3182,8 @@ function buildCalGrid(siteKey){
 
 /* ── ISSUE REGISTER ───────────────────────────────────── */
 function renderIssues(){
+  // If live data, use the Supabase issue register instead
+  if(isLiveData){renderIssueRegister();return;}
   var d=siteData[currentSite];
   var statusF=document.getElementById('st-filter-status').value;
   var typeF=document.getElementById('st-filter-type').value;
@@ -3162,6 +3207,94 @@ function renderIssues(){
   var toggle=document.getElementById('st-issues-toggle');
   if(more.length===0){moreWrap.style.display='none';toggle.style.display='none';}
   else{toggle.style.display='inline-flex';toggle.textContent='View more ↓';moreWrap.style.display='none';}
+}
+
+/* ── LIVE ISSUE REGISTER (from Supabase) ─────────────── */
+async function renderIssueRegister(){
+  if(!isLiveData||!soterraDb||!currentSite)return;
+
+  // Get project_id from current site
+  var projectId=currentSite;
+
+  // Load issues from Supabase
+  var{data:issues,error}=await soterraDb.from('issues').select('*').eq('project_id',projectId).order('created_at',{ascending:false});
+  if(error||!issues)issues=[];
+
+  // Apply filters
+  var statusF=document.getElementById('st-filter-status').value;
+  var typeF=document.getElementById('st-filter-type').value;
+  var filtered=issues.filter(function(i){
+    var statusMatch=!statusF||(statusF==='open'&&i.status==='open')||(statusF==='ready'&&i.status==='ready')||(statusF==='closed'&&i.status==='closed');
+    var typeMatch=!typeF||i.inspection_type.toLowerCase().indexOf(typeF.toLowerCase())>-1;
+    return statusMatch&&typeMatch;
+  });
+
+  var main=filtered.slice(0,6);
+  var more=filtered.slice(6);
+
+  function rowHtml(issue){
+    var daysOpen=Math.round((new Date()-new Date(issue.created_at))/86400000);
+    var overdueStyle=daysOpen>14?' style="color:#EF4444;font-weight:500"':'';
+    var sc={open:'badge-open',ready:'badge-ready',closed:'badge-closed'};
+    var statusLabel={open:'Open',ready:'Ready',closed:'Closed'};
+    return '<tr class="clickable" onclick="openLiveIssue(\''+issue.id+'\')">'
+      +'<td>'+issue.title+'</td>'
+      +'<td>'+(issue.inspection_type||'')+'</td>'
+      +'<td>'+(issue.lot||'')+'</td>'
+      +'<td'+overdueStyle+'>'+daysOpen+'</td>'
+      +'<td>'+issue.reinspections+'</td>'
+      +'<td><span class="badge '+(sc[issue.status]||'badge-open')+'">'+(statusLabel[issue.status]||'Open')+'</span></td></tr>';
+  }
+
+  document.getElementById('st-issues-body').innerHTML=main.length?main.map(rowHtml).join(''):'<tr><td colspan="6" style="text-align:center;color:#999;padding:20px">No issues found. Upload an inspection report to extract failed items.</td></tr>';
+  document.getElementById('st-issues-more-body').innerHTML=more.map(rowHtml).join('');
+  var moreWrap=document.getElementById('st-issues-more-wrap');
+  var toggle=document.getElementById('st-issues-toggle');
+  if(more.length===0){moreWrap.style.display='none';toggle.style.display='none';}
+  else{toggle.style.display='inline-flex';toggle.textContent='View more ('+more.length+') ↓';moreWrap.style.display='none';}
+}
+
+// Open a live issue modal
+var _currentIssueId=null;
+async function openLiveIssue(issueId){
+  if(!soterraDb)return;
+  _currentIssueId=issueId;
+
+  var{data:issue}=await soterraDb.from('issues').select('*').eq('id',issueId).single();
+  if(!issue)return;
+
+  var daysOpen=Math.round((new Date()-new Date(issue.created_at))/86400000);
+  var siteName=siteData[currentSite]?siteData[currentSite].name:'';
+
+  document.getElementById('im-title').textContent=issue.title;
+  var sb=document.getElementById('im-status-badge');
+  var sc={open:'badge-open',ready:'badge-ready',closed:'badge-closed'};
+  sb.innerHTML='<span class="badge '+(sc[issue.status]||'badge-open')+'">'+(issue.status==='open'?'Open':issue.status==='ready'?'Ready':'Closed')+'</span>';
+
+  var body=document.getElementById('im-body');
+  body.innerHTML='<div class="mrow"><span class="mlbl">Inspection type</span><span class="mval">'+(issue.inspection_type||'')+'</span></div>'
+    +'<div class="mrow"><span class="mlbl">Lot / Area</span><span class="mval">'+(issue.lot||'')+'</span></div>'
+    +'<div class="mrow"><span class="mlbl">Days open</span><span class="mval"'+(daysOpen>14?' style="color:#EF4444;font-weight:500"':'')+'>'+daysOpen+'</span></div>'
+    +(issue.description?'<div style="margin-top:12px;padding:10px 12px;background:var(--color-background-secondary);border-radius:8px;font-size:12px;color:var(--color-text-secondary);line-height:1.6">'+issue.description+'</div>':'')
+    +'<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(0,0,0,.06)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-secondary);margin-bottom:8px">Update status</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="mabtn" style="background:#DBEAFE;color:#1E40AF;border-color:#3B82F6" onclick="updateLiveIssueStatus(\'ready\')">Mark ready</button><button class="mabtn" style="background:#D1FAE5;color:#065F46;border-color:#10B981" onclick="updateLiveIssueStatus(\'closed\')">Close issue</button><button class="mabtn" onclick="updateLiveIssueStatus(\'open\')">Reopen</button></div></div>';
+
+  var ac=document.getElementById('im-actions');
+  ac.innerHTML='<button class="mabtn" onclick="openSubModal(\''+issue.title+'\',\''+(issue.inspection_type||'')+'\',\''+siteName+'\',\''+(new Date(issue.created_at).toLocaleDateString())+'\')">Send to sub</button>'
+    +'<button class="mabtn" onclick="openDotEmailModal(\''+(issue.inspection_type||'')+'\',\''+siteName+'\',\'\')">Send email</button>'
+    +'<button class="btn-primary" onclick="closeIssue()">Close ✕</button>';
+
+  document.getElementById('issue-modal').classList.add('open');
+}
+
+async function updateLiveIssueStatus(newStatus){
+  if(!_currentIssueId||!soterraDb)return;
+  await soterraDb.from('issues').update({status:newStatus}).eq('id',_currentIssueId);
+  closeIssue();
+  renderIssueRegister();
+  // Update stats
+  await loadFromSupabase();
+  var d=siteData[currentSite];
+  if(d){renderTrackerStats(d);}
 }
 
 /* ── REPORTS ──────────────────────────────────────────── */
