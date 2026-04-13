@@ -145,24 +145,31 @@ def extract_issues_from_pdf(file_data, filename, inspection_type, lot):
 
         content.append({
             "type": "text",
-            "text": f"""You are reading a construction inspection report. Extract ALL items that FAILED or need attention.
+            "text": f"""You are reading a construction inspection report or consultant advice notice from a New Zealand construction project.
 
-For each failed/non-compliant item, provide:
-- title: short description of the issue (e.g. "Fire stopping gap at riser", "Pipe penetration not sealed")
-- description: the full detail from the report about this issue
+Extract ALL items that need action, remediation, or attention. This includes:
+- Items explicitly marked as FAIL or non-compliant
+- Defects noted that need fixing
+- Items described as "needs to be carried out", "requires rectification", "not compliant", "missing", "incomplete"
+- Outstanding works or items requiring follow-up
+- Any issue the inspector/consultant has flagged as needing action
 
-Ignore items that passed or are compliant. Only extract failures, defects, non-conformances, and items requiring action.
+For each item, provide:
+- title: short description (e.g. "Fixings missing on plasterboard", "Fire stopping of wall penetrations incomplete")
+- description: the full detail from the report
+
+Do NOT include items that are explicitly passed, compliant, acceptable, or satisfactory.
 
 The inspection type is: {inspection_type}
 The lot/area is: {lot}
 
 Return ONLY valid JSON array. No explanation. Example:
 [
-  {{"title": "Fire stopping gap at riser", "description": "Gap in fire stopping around service penetration at Level 3 riser. Needs to be sealed to maintain fire rating."}},
-  {{"title": "Smoke detector placement incorrect", "description": "Smoke detector in apartment 4B installed too close to air conditioning vent. Must be relocated as per NZS 4512."}}
+  {{"title": "Fixings missing on plasterboard", "description": "Fixings were missing in some locations. Additional fixings required as discussed on site."}},
+  {{"title": "Fire stopping through walls incomplete", "description": "Fire stopping of penetrations through fire rated walls still needs to be carried out."}}
 ]
 
-If no failed items are found, return: []"""
+If genuinely no issues are found, return: []"""
         })
 
         msg = client.messages.create(
@@ -200,9 +207,9 @@ If no failed items are found, return: []"""
             msg = client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=4000,
-                messages=[{"role": "user", "content": f"""Extract ALL failed/non-compliant items from this inspection report.
+                messages=[{"role": "user", "content": f"""Extract ALL items needing action from this construction inspection report. Include failures, defects, missing items, incomplete works, non-compliances, and anything flagged for remediation.
 
-For each failed item provide: title (short) and description (full detail).
+For each item provide: title (short) and description (full detail).
 Inspection type: {inspection_type}, Lot: {lot}
 
 Return ONLY valid JSON array.
