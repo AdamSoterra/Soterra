@@ -2985,39 +2985,69 @@ function buildCalGrid(siteKey){
   var d=siteData[siteKey];
   if(!d||!d.calGrid||!d.calGrid.length)return;
   var tbl=document.getElementById('site-cal-grid');
-
-  // Build dynamic lot headers from data
   var numLots=d.calGrid[0].lots.length;
-  var html='<tr><th>Inspection type</th>';
-  for(var h=0;h<numLots;h++)html+='<th>Lot '+(h+1)+'</th>';
-  html+='</tr>';
+  var now=new Date();
 
-  d.calGrid.forEach(function(row){
-    html+='<tr><td style="font-weight:500">'+row.type+'</td>';
-    row.lots.forEach(function(lot,i){
-      var cls={passed:'cal-passed',ready:'cal-ready',failed:'cal-failed',notstarted:'cal-notstarted',partialpass:'cal-partialpass'}[lot.status]||'cal-notstarted';
-      // Grey out past dates that are still "notstarted"
-      var pastStyle='';
-      if(lot.isPast&&lot.status==='notstarted'){
-        pastStyle='opacity:.45;';
-      }
-      var inspector=lot.inspector||'';
-      var issues=lot.issues||'';
-      var dbId=lot.dbId||'';
-      var onclick="openDot('"+row.type+"','Lot "+(i+1)+"','"+lot.status+"','"+lot.date+" 2026','"+inspector+"','"+issues+"','"+dbId+"')";
-      html+='<td><span class="cal-box '+cls+'" style="'+pastStyle+'" onclick="'+onclick+'">'+lot.date+'</span></td>';
+  // Build per-lot inspection lists sorted by date
+  var lotInspections=[];
+  for(var li=0;li<numLots;li++){
+    var items=[];
+    d.calGrid.forEach(function(row){
+      var lot=row.lots[li];
+      if(!lot||!lot.date)return;
+      // Parse date for sorting
+      var parts=lot.date.split(' ');
+      var months={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+      var day=parseInt(parts[0])||1;
+      var mon=months[parts[1]]||0;
+      var sortDate=new Date(2026,mon,day);
+      items.push({
+        type:row.type,
+        date:lot.date,
+        status:lot.status||'notstarted',
+        inspector:lot.inspector||'',
+        issues:lot.issues||'',
+        dbId:lot.dbId||'',
+        sortDate:sortDate,
+        isPast:sortDate<now
+      });
     });
-    html+='</tr>';
-  });
-  // Progress row
-  html+='<tr style="background:var(--color-background-secondary)">';
-  html+='<td style="font-size:11px;color:var(--color-text-secondary)">Progress</td>';
-  for(var p=0;p<numLots;p++){
-    var total=d.calGrid.length;
-    var done=d.calGrid.filter(function(r){return r.lots[p]&&(r.lots[p].status==='passed'||r.lots[p].status==='partialpass');}).length;
-    html+='<td style="font-size:11px;font-weight:500">'+Math.round(done/total*100)+'%</td>';
+    // Sort by date within each lot
+    items.sort(function(a,b){return a.sortDate-b.sortDate;});
+    lotInspections.push(items);
+  }
+
+  // Find max rows
+  var maxRows=0;
+  lotInspections.forEach(function(items){if(items.length>maxRows)maxRows=items.length;});
+
+  // Build lot-column layout
+  var html='<tr>';
+  for(var h=0;h<numLots;h++){
+    var total=lotInspections[h].length;
+    var done=lotInspections[h].filter(function(it){return it.status==='passed'||it.status==='partialpass';}).length;
+    var pct=total>0?Math.round(done/total*100):0;
+    html+='<th style="text-align:center;vertical-align:top;padding-bottom:4px">Lot '+(h+1)+'<div style="font-size:9px;font-weight:400;color:var(--color-text-secondary);margin-top:2px">'+pct+'% complete</div></th>';
   }
   html+='</tr>';
+
+  // Build rows — each row is one inspection per lot (by date order)
+  for(var r=0;r<maxRows;r++){
+    html+='<tr>';
+    for(var c=0;c<numLots;c++){
+      var item=lotInspections[c][r];
+      if(!item){
+        html+='<td></td>';
+        continue;
+      }
+      var cls={passed:'cal-passed',ready:'cal-ready',failed:'cal-failed',notstarted:'cal-notstarted',partialpass:'cal-partialpass'}[item.status]||'cal-notstarted';
+      var pastStyle=item.isPast&&item.status==='notstarted'?'opacity:.45;':'';
+      var onclick="openDot('"+item.type+"','Lot "+(c+1)+"','"+item.status+"','"+item.date+" 2026','"+item.inspector+"','"+item.issues+"','"+item.dbId+"')";
+      html+='<td style="text-align:center;padding:5px 4px"><span class="cal-box '+cls+'" style="min-width:100%;display:flex;align-items:center;justify-content:space-between;padding:4px 8px;'+pastStyle+'" onclick="'+onclick+'"><span style="font-size:10px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.type+'</span><span style="font-size:10px;opacity:.7">'+item.date+'</span></span></td>';
+    }
+    html+='</tr>';
+  }
+
   tbl.innerHTML=html;
 }
 
