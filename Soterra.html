@@ -3747,6 +3747,18 @@ document.addEventListener('DOMContentLoaded',function(){
       document.querySelectorAll('.user-name-display').forEach(function(el){el.textContent=userName;});
       document.querySelectorAll('.user-initials-display').forEach(function(el){el.textContent=initials;});
 
+      // Hide the homepage overlay so dashboard is visible
+      var hp=document.getElementById('homepage');
+      if(hp)hp.style.display='none';
+
+      // Hide the login screen too
+      var ls=document.getElementById('login-screen');
+      if(ls)ls.style.display='none';
+
+      // Show the splash/role selection screen
+      var splash=document.getElementById('splash-screen');
+      if(splash)splash.style.display='flex';
+
       // Update splash screen greeting
       var greetEl=document.getElementById('sp-greeting');
       if(greetEl)greetEl.textContent='Welcome back, '+userName.split(' ')[0]+'.';
