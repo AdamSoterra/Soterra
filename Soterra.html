@@ -2678,11 +2678,20 @@ async function loadFromSupabase(){
     var{data:inspections}=await soterraDb.from('inspections').select('*').in('project_id',projectIds);
     if(!inspections)inspections=[];
 
+    // Load all issues for counting per inspection
+    var{data:allIssues}=await soterraDb.from('issues').select('inspection_id').in('project_id',projectIds);
+    if(!allIssues)allIssues=[];
+    // Count issues per inspection
+    var issueCountMap={};
+    allIssues.forEach(function(iss){
+      issueCountMap[iss.inspection_id]=(issueCountMap[iss.inspection_id]||0)+1;
+    });
+
     // Transform into siteData format
     var newSiteData={};
     projects.forEach(function(proj){
       var projInsps=inspections.filter(function(i){return i.project_id===proj.id;});
-      newSiteData[proj.id]=transformProjectToSiteData(proj,projInsps);
+      newSiteData[proj.id]=transformProjectToSiteData(proj,projInsps,issueCountMap);
     });
 
     // Replace siteData
@@ -2702,7 +2711,8 @@ async function loadFromSupabase(){
   }
 }
 
-function transformProjectToSiteData(project,inspections){
+function transformProjectToSiteData(project,inspections,issueCountMap){
+  issueCountMap=issueCountMap||{};
   // Sort inspections by task_id (program order) — this preserves the PM's intended sequence
   inspections.sort(function(a,b){
     var idA=parseInt(a.task_id)||9999;
@@ -2800,7 +2810,7 @@ function transformProjectToSiteData(project,inspections){
       lot:i.lot||'',
       date:d.toLocaleDateString('en-NZ',{day:'2-digit',month:'short',year:'numeric'}),
       inspector:i.inspector||'TBC',
-      failed:i.status==='failed'?1:0,
+      failed:issueCountMap[i.id]||0,
       result:i.status==='passed'?'passed':(i.status==='partialpass'?'passed':'failed'),
       report_url:i.report_url||null,
       report_filename:i.report_filename||null,

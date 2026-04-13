@@ -154,6 +154,13 @@ TYPE 1 — COUNCIL/CONSENTIUM REPORTS: These have a formal inspection checklist 
 
 TYPE 2 — CONSULTANT ADVICE NOTICES: These are letters from fire engineers, structural engineers, or other consultants. They describe site observations, defects, and items needing attention. They do NOT have a formal Pass/Fail outcome. If ANY items need action, extract them ALL — even minor ones. Only return empty if the consultant genuinely found nothing.
 
+IMPORTANT — IGNORE COMPLETED/RESOLVED ITEMS:
+- Items that are crossed out, struck through, or have strikethrough text are COMPLETED — do NOT extract these
+- Items marked as "done", "completed", "closed", "resolved", "rectified", "addressed", "confirmed complete" are NOT active issues
+- Items with notes saying "now compliant", "has been fixed", "work completed" are resolved — skip them
+- Only extract items that are STILL OPEN and need action
+- If a report shows previous items with completion notes alongside new items, only extract the new/open items
+
 Your response must be a JSON object (not array) with this structure:
 {{"report_type": "council" or "consultant", "outcome": "pass" or "fail" or "partial", "issues": [...]}}
 
