@@ -133,7 +133,25 @@ def extract_issues_from_pdf(file_data, filename, inspection_type, lot):
         f.write(file_data)
 
     try:
-        # Extract text from PDF using pdfplumber (reliable on Vercel)
+        # Try Vision first (can see strikethrough/crossed out items)
+        try:
+            import pypdfium2
+            pdf_doc = pypdfium2.PdfDocument(tmp_path)
+            encoded_pages = []
+            for i in range(min(len(pdf_doc), 5)):
+                page = pdf_doc[i]
+                bitmap = page.render(scale=2)
+                img = bitmap.to_pil()
+                buf = _io.BytesIO()
+                img.save(buf, format="JPEG", quality=85)
+                b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
+                encoded_pages.append(b64)
+            use_vision = len(encoded_pages) > 0
+        except Exception:
+            use_vision = False
+            encoded_pages = []
+
+        # Fall back to text extraction if Vision unavailable
         text = ""
         with pdfplumber.open(tmp_path) as pdf:
             for page in pdf.pages:
@@ -141,14 +159,17 @@ def extract_issues_from_pdf(file_data, filename, inspection_type, lot):
                 if t:
                     text += t + "\n"
 
-        if not text.strip():
+        if not text.strip() and not use_vision:
             return []
 
         client = anthropic.Anthropic()
-        msg = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4000,
-            messages=[{"role": "user", "content": f"""You are reading a construction inspection report from a New Zealand construction project. There are two types of reports:
+        # Build message content — use Vision if available
+        content = []
+        if use_vision:
+            for b64 in encoded_pages:
+                content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}})
+
+        content.append({"type": "text", "text": f"""You are reading a construction inspection report from a New Zealand construction project. There are two types of reports:
 
 TYPE 1 — COUNCIL/CONSENTIUM REPORTS: These have a formal inspection checklist with clear Pass/Fail/Partial Pass outcomes. They follow Auckland Council or Consentium format with checklist items. If the overall outcome is PASS, do NOT extract any items. If FAIL or PARTIAL PASS, extract only the failed checklist items.
 
@@ -178,8 +199,15 @@ The lot/area is: {lot}
 
 Return ONLY valid JSON. No explanation, no markdown code blocks.
 
+{"VISUAL NOTE: If you can see the report images above, look carefully for any items with strikethrough/crossed-out text — those are COMPLETED and must be excluded." if use_vision else ""}
+
 Report text:
-{text[:12000]}"""}],
+{text[:12000]}"""})
+
+        msg = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4000,
+            messages=[{"role": "user", "content": content}],
         )
 
         response_text = msg.content[0].text.strip()
