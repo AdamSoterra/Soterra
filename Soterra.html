@@ -3353,14 +3353,54 @@ async function openLiveIssue(issueId){
     +'<div class="mrow"><span class="mlbl">Lot / Area</span><span class="mval">'+(issue.lot||'')+'</span></div>'
     +'<div class="mrow"><span class="mlbl">Days open</span><span class="mval"'+(daysOpen>14?' style="color:#EF4444;font-weight:500"':'')+'>'+daysOpen+'</span></div>'
     +(issue.description?'<div style="margin-top:12px;padding:10px 12px;background:var(--color-background-secondary);border-radius:8px;font-size:12px;color:var(--color-text-secondary);line-height:1.6">'+issue.description+'</div>':'')
-    +'<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(0,0,0,.06)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-secondary);margin-bottom:8px">Update status</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="mabtn" style="background:#DBEAFE;color:#1E40AF;border-color:#3B82F6" onclick="updateLiveIssueStatus(\'ready\')">Mark ready</button><button class="mabtn" style="background:#D1FAE5;color:#065F46;border-color:#10B981" onclick="updateLiveIssueStatus(\'closed\')">Close issue</button><button class="mabtn" onclick="updateLiveIssueStatus(\'open\')">Reopen</button></div></div>';
+    +'<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(0,0,0,.06)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-secondary);margin-bottom:8px">Update status</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="mabtn" style="background:#DBEAFE;color:#1E40AF;border-color:#3B82F6" onclick="updateLiveIssueStatus(\'ready\')">Mark ready</button><button class="mabtn" style="background:#D1FAE5;color:#065F46;border-color:#10B981" onclick="updateLiveIssueStatus(\'closed\')">Close issue</button><button class="mabtn" onclick="updateLiveIssueStatus(\'open\')">Reopen</button></div></div>'
+    +'<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(0,0,0,.06)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-secondary);margin-bottom:8px">Evidence photo</div><div id="issue-photo-area"></div></div>';
+
+  // Load photo if exists
+  setTimeout(function(){loadIssuePhoto(issue);},50);
 
   var ac=document.getElementById('im-actions');
-  ac.innerHTML='<button class="mabtn" onclick="openSubModal(\''+issue.title+'\',\''+(issue.inspection_type||'')+'\',\''+siteName+'\',\''+(new Date(issue.created_at).toLocaleDateString())+'\')">Send to sub</button>'
-    +'<button class="mabtn" onclick="openDotEmailModal(\''+(issue.inspection_type||'')+'\',\''+siteName+'\',\'\')">Send email</button>'
+  var escTitle=issue.title.replace(/'/g,"\\'");
+  var escType=(issue.inspection_type||'').replace(/'/g,"\\'");
+  var escDate=new Date(issue.created_at).toLocaleDateString();
+  ac.innerHTML='<button class="mabtn" onclick="openSubModal(\''+escTitle+'\',\''+escType+'\',\''+siteName+'\',\''+escDate+'\')">Send to sub</button>'
+    +'<button class="mabtn" onclick="openReminderModal(\''+escType+'\',\''+siteName+'\',\'\')">Send to consultant</button>'
     +'<button class="btn-primary" onclick="closeIssue()">Close ✕</button>';
 
   document.getElementById('issue-modal').classList.add('open');
+}
+
+function loadIssuePhoto(issue){
+  var area=document.getElementById('issue-photo-area');
+  if(!area)return;
+  if(issue.photo_url){
+    area.innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(16,185,129,.04);border:1px solid rgba(16,185,129,.15);border-radius:8px;margin-bottom:6px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="12" rx="1.5" stroke="#10B981" stroke-width="1.5"/><circle cx="5.5" cy="6.5" r="1.5" stroke="#10B981" stroke-width="1"/><path d="M1 11l4-3 3 2 3-2 4 3" stroke="#10B981" stroke-width="1.2"/></svg><div style="flex:1"><div style="font-size:12px;font-weight:500;color:#065F46">'+(issue.photo_filename||'Photo attached')+'</div></div><button class="mabtn" style="height:28px;font-size:11px;padding:0 10px" onclick="window.open(\''+issue.photo_url+'\',\'_blank\')">View</button></div><div style="margin-top:4px"><label style="font-size:11px;color:#0E74BD;cursor:pointer;font-weight:500">Replace photo <input type="file" accept=".jpg,.jpeg,.png,.heic" style="display:none" onchange="uploadIssuePhoto(this.files[0])"></label></div>';
+  }else{
+    area.innerHTML='<label style="display:block;border:2px dashed rgba(0,0,0,.1);border-radius:8px;padding:16px;text-align:center;cursor:pointer"><div style="font-size:12px;color:var(--color-text-secondary)">Upload photo evidence</div><div style="font-size:10px;color:#999;margin-top:2px">JPG, PNG — shows issue is fixed</div><input type="file" accept=".jpg,.jpeg,.png,.heic" style="display:none" onchange="uploadIssuePhoto(this.files[0])"></label>';
+  }
+}
+
+async function uploadIssuePhoto(file){
+  if(!file||!_currentIssueId||!soterraDb)return;
+  if(file.size>10*1024*1024){alert('File too large (max 10MB)');return;}
+
+  var area=document.getElementById('issue-photo-area');
+  area.innerHTML='<div style="padding:12px;text-align:center;font-size:12px;color:var(--color-text-secondary)">Uploading...</div>';
+
+  var ext=file.name.split('.').pop();
+  var filePath='issues/'+_currentIssueId+'/photo.'+ext;
+
+  var{error:uploadErr}=await soterraDb.storage.from('inspection-reports').upload(filePath,file,{upsert:true});
+  if(uploadErr){alert('Upload failed: '+uploadErr.message);return;}
+
+  var{data:urlData}=soterraDb.storage.from('inspection-reports').getPublicUrl(filePath);
+  var publicUrl=urlData?urlData.publicUrl:'';
+
+  await soterraDb.from('issues').update({photo_url:publicUrl,photo_filename:file.name}).eq('id',_currentIssueId);
+
+  // Reload issue data and refresh photo area
+  var{data:issue}=await soterraDb.from('issues').select('*').eq('id',_currentIssueId).single();
+  if(issue)loadIssuePhoto(issue);
 }
 
 async function updateLiveIssueStatus(newStatus){
