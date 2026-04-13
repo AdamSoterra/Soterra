@@ -2192,9 +2192,13 @@ function openDot(type,lot,status,date,inspector,issues,dbId){
     body.innerHTML='<div class="mrow"><span class="mlbl">Planned inspection date</span><span class="mval">'+date+'</span></div><div class="mrow"><span class="mlbl">Days until inspection</span><span class="mval"><span style="font-weight:500">'+(isNaN(dn)?'—':dn)+' days</span></span></div><div style="margin-top:12px;padding:10px 12px;background:var(--color-background-secondary);border-radius:8px;font-size:12px;color:var(--color-text-secondary)">Prepare site and book inspection when ready.</div>';
     ac.innerHTML='<button class="mabtn" onclick="openBookModal(&quot;'+type+'&quot;,&quot;'+siteData[currentSite].name+'&quot;,&quot;'+date+'&quot;)">Book inspection</button><button class="mabtn" onclick="openDotEmailModal(&quot;'+type+'&quot;,&quot;'+siteData[currentSite].name+'&quot;,&quot;'+date+'&quot;)">Send email</button>'+(isLiveData&&_currentDotDbId?'<button class="mabtn" onclick="adjustDotDate()">Adjust date</button>':'')+'<button class="btn-primary" onclick="closeDot()">Close ✕</button>';
   }
-  // Add status update buttons to ALL dot modals when using live data
+  // Add status update buttons and report upload to ALL dot modals when using live data
   if(isLiveData&&_currentDotDbId){
     body.innerHTML+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(0,0,0,.06)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-secondary);margin-bottom:8px">Update status</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="mabtn" style="background:#D1FAE5;color:#065F46;border-color:#10B981" onclick="updateDotStatus(\'passed\')">Passed</button><button class="mabtn" style="background:#FEE2E2;color:#991B1B;border-color:#EF4444" onclick="updateDotStatus(\'failed\')">Failed</button><button class="mabtn" style="background:#D1FAE5;color:#065F46;border:2px solid #EF4444" onclick="updateDotStatus(\'partialpass\')">Partial pass</button><button class="mabtn" style="background:#DBEAFE;color:#1E40AF;border-color:#3B82F6" onclick="updateDotStatus(\'ready\')">Ready</button><button class="mabtn" onclick="updateDotStatus(\'notstarted\')">Not started</button></div></div>';
+    // Report upload section
+    body.innerHTML+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(0,0,0,.06)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-secondary);margin-bottom:8px">Inspection report</div><div id="dot-report-area"></div></div>';
+    // Check if report already uploaded
+    setTimeout(function(){loadDotReport();},50);
   }
   document.getElementById('dot-modal').classList.add('open');
 }
@@ -2234,6 +2238,78 @@ async function adjustDotDate(){
   var d=siteData[currentSite];
   if(d){buildCalGrid(currentSite);}
   closeDot();
+}
+
+// ── REPORT UPLOAD/DOWNLOAD ──
+async function loadDotReport(){
+  var area=document.getElementById('dot-report-area');
+  if(!area||!_currentDotDbId||!soterraDb)return;
+
+  // Check if this inspection already has a report
+  var{data:insp}=await soterraDb.from('inspections').select('report_url,report_filename').eq('id',_currentDotDbId).single();
+
+  if(insp&&insp.report_url){
+    area.innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(14,116,189,.04);border:1px solid rgba(14,116,189,.12);border-radius:8px;margin-bottom:8px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="1" width="12" height="14" rx="1.5" stroke="#0E74BD" stroke-width="1.5"/><path d="M5 5h6M5 8h6M5 11h3" stroke="#0E74BD" stroke-width="1.2" stroke-linecap="round"/></svg><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;color:#0A2540;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(insp.report_filename||'Report uploaded')+'</div></div><button class="mabtn" style="height:28px;font-size:11px;padding:0 10px" onclick="openDotReport()">Open</button><button class="mabtn" style="height:28px;font-size:11px;padding:0 10px" onclick="downloadDotReport()">Download</button></div><div style="margin-top:6px"><label style="font-size:11px;color:#0E74BD;cursor:pointer;font-weight:500">Replace report <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display:none" onchange="uploadDotReport(this.files[0])"></label></div>';
+  }else{
+    area.innerHTML='<div style="border:2px dashed rgba(0,0,0,.1);border-radius:8px;padding:20px;text-align:center;cursor:pointer" onclick="this.querySelector(\'input\').click()"><div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:4px">Drop report here or click to upload</div><div style="font-size:10px;color:#999">PDF, JPG, PNG, DOC — max 10MB</div><input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display:none" onchange="uploadDotReport(this.files[0])"></div>';
+  }
+}
+
+async function uploadDotReport(file){
+  if(!file||!_currentDotDbId||!soterraDb)return;
+  if(file.size>10*1024*1024){alert('File too large (max 10MB)');return;}
+
+  var area=document.getElementById('dot-report-area');
+  area.innerHTML='<div style="padding:16px;text-align:center;font-size:12px;color:var(--color-text-secondary)">Uploading...</div>';
+
+  // Upload to Supabase Storage
+  var ext=file.name.split('.').pop();
+  var filePath=_currentDotDbId+'/report.'+ext;
+
+  var{data:uploadData,error:uploadErr}=await soterraDb.storage.from('inspection-reports').upload(filePath,file,{upsert:true});
+
+  if(uploadErr){
+    alert('Upload failed: '+uploadErr.message);
+    loadDotReport();
+    return;
+  }
+
+  // Get public URL
+  var{data:urlData}=soterraDb.storage.from('inspection-reports').getPublicUrl(filePath);
+  var publicUrl=urlData?urlData.publicUrl:'';
+
+  // Save URL to inspection record
+  var{error:updateErr}=await soterraDb.from('inspections').update({report_url:publicUrl,report_filename:file.name}).eq('id',_currentDotDbId);
+
+  if(updateErr){
+    alert('Failed to save report link: '+updateErr.message);
+  }
+
+  // Refresh the report area and the reports table
+  loadDotReport();
+  await loadFromSupabase();
+  var d=siteData[currentSite];
+  if(d){renderReports(d);}
+}
+
+function openDotReport(){
+  if(!_currentDotDbId||!soterraDb)return;
+  soterraDb.from('inspections').select('report_url').eq('id',_currentDotDbId).single().then(function(res){
+    if(res.data&&res.data.report_url)window.open(res.data.report_url,'_blank');
+  });
+}
+
+function downloadDotReport(){
+  if(!_currentDotDbId||!soterraDb)return;
+  soterraDb.from('inspections').select('report_url,report_filename').eq('id',_currentDotDbId).single().then(function(res){
+    if(res.data&&res.data.report_url){
+      var a=document.createElement('a');
+      a.href=res.data.report_url;
+      a.download=res.data.report_filename||'report.pdf';
+      a.target='_blank';
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+    }
+  });
 }
 
 function togglePartialPassConfirm(){
@@ -2626,8 +2702,15 @@ function transformProjectToSiteData(project,inspections){
     };
   });
 
-  // Build reports from passed/failed inspections
-  var reports=inspections.filter(function(i){return i.status==='passed'||i.status==='failed';}).slice(0,5).map(function(i){
+  // Build reports from inspections that have reports uploaded OR are passed/failed
+  var reportsWithUploads=inspections.filter(function(i){return i.report_url||i.status==='passed'||i.status==='failed'||i.status==='partialpass';});
+  // Sort: uploaded reports first, then by date
+  reportsWithUploads.sort(function(a,b){
+    if(a.report_url&&!b.report_url)return -1;
+    if(!a.report_url&&b.report_url)return 1;
+    return (new Date(b.start_date||0))-(new Date(a.start_date||0));
+  });
+  var reports=reportsWithUploads.slice(0,10).map(function(i){
     var d=i.start_date?new Date(i.start_date):new Date();
     return{
       type:normalizeInspectionType(i.task),
@@ -2635,7 +2718,9 @@ function transformProjectToSiteData(project,inspections){
       date:d.toLocaleDateString('en-NZ',{day:'2-digit',month:'short',year:'numeric'}),
       inspector:i.inspector||'TBC',
       failed:i.status==='failed'?1:0,
-      result:i.status==='passed'?'passed':'failed',
+      result:i.status==='passed'?'passed':(i.status==='partialpass'?'passed':'failed'),
+      report_url:i.report_url||null,
+      report_filename:i.report_filename||null,
       fn:null,args:[]
     };
   });
@@ -3084,9 +3169,14 @@ function renderReports(d){
   d.reports.forEach(function(r,i){
     var resultClass=r.result==='passed'?'badge-passed':'badge-failed';
     var failColor=r.result==='passed'?'#10B981':'#EF4444';
-    var btn=i===0&&r.fn?
-      '<button class="btn" style="font-size:11px;height:28px" onclick="'+r.fn+'('+r.args.map(function(a){return typeof a==='string'?'\''+a+'\'':JSON.stringify(a);}).join(',')+')">Download ↓</button>':
-      '<button class="btn" style="font-size:11px;height:28px;opacity:.4;cursor:default">Download ↓</button>';
+    var btn;
+    if(r.report_url){
+      btn='<a href="'+r.report_url+'" target="_blank" class="btn" style="font-size:11px;height:28px;text-decoration:none">Download ↓</a>';
+    }else if(i===0&&r.fn){
+      btn='<button class="btn" style="font-size:11px;height:28px" onclick="'+r.fn+'('+r.args.map(function(a){return typeof a==='string'?'\''+a+'\'':JSON.stringify(a);}).join(',')+')">Download ↓</button>';
+    }else{
+      btn='<span style="font-size:10px;color:#999">No report</span>';
+    }
     html+='<tr><td style="font-weight:500">'+r.type+'</td><td>'+r.lot+'</td><td>'+r.date+'</td><td>'+r.inspector+'</td>'
       +'<td style="color:'+failColor+';font-weight:500">'+r.failed+'</td>'
       +'<td><span class="badge '+resultClass+'">'+(r.result==='passed'?'Passed':'Failed')+'</span></td>'
