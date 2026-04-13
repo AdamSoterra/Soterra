@@ -140,7 +140,7 @@ def extract_issues_from_pdf(file_data, filename, inspection_type, lot):
             encoded_pages = []
             for i in range(min(len(pdf_doc), 5)):
                 page = pdf_doc[i]
-                bitmap = page.render(scale=2)
+                bitmap = page.render(scale=3)
                 img = bitmap.to_pil()
                 buf = _io.BytesIO()
                 img.save(buf, format="JPEG", quality=85)
