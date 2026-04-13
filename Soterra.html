@@ -3884,6 +3884,10 @@ document.addEventListener('DOMContentLoaded',function(){
       }
     }
     initSiteTeam();
+    // If live data loaded, call switchSite to update all titles with real project name
+    if(isLiveData&&currentSite&&siteData[currentSite]){
+      switchSite(currentSite);
+    }
   })();
 });
 
