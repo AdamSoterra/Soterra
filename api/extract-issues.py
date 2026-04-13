@@ -111,41 +111,32 @@ class handler(BaseHTTPRequestHandler):
 
 
 def extract_issues_from_pdf(file_data, filename, inspection_type, lot):
-    """Use Claude API to read inspection report and extract failed items."""
+    """Use Claude API to read inspection report and extract failed items. Text-first approach."""
     import anthropic
+    import pdfplumber
+    import io as _io
 
-    # Convert PDF to images for Claude Vision
     tmp_path = os.path.join(tempfile.gettempdir(), "soterra_report_" + str(os.getpid()) + ".pdf")
     with open(tmp_path, "wb") as f:
         f.write(file_data)
 
     try:
-        import pypdfium2
-        import io
+        # Extract text from PDF using pdfplumber (reliable on Vercel)
+        text = ""
+        with pdfplumber.open(tmp_path) as pdf:
+            for page in pdf.pages:
+                t = page.extract_text()
+                if t:
+                    text += t + "\n"
 
-        pdf = pypdfium2.PdfDocument(tmp_path)
-        encoded_pages = []
-        for i in range(min(len(pdf), 5)):  # Max 5 pages
-            page = pdf[i]
-            bitmap = page.render(scale=2)
-            img = bitmap.to_pil()
-            buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=80)
-            b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
-            encoded_pages.append(b64)
+        if not text.strip():
+            return []
 
         client = anthropic.Anthropic()
-
-        content = []
-        for b64 in encoded_pages:
-            content.append({
-                "type": "image",
-                "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
-            })
-
-        content.append({
-            "type": "text",
-            "text": f"""You are reading a construction inspection report or consultant advice notice from a New Zealand construction project.
+        msg = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4000,
+            messages=[{"role": "user", "content": f"""You are reading a construction inspection report or consultant advice notice from a New Zealand construction project.
 
 Extract ALL items that need action, remediation, or attention. This includes:
 - Items explicitly marked as FAIL or non-compliant
@@ -163,19 +154,13 @@ Do NOT include items that are explicitly passed, compliant, acceptable, or satis
 The inspection type is: {inspection_type}
 The lot/area is: {lot}
 
-Return ONLY valid JSON array. No explanation. Example:
-[
-  {{"title": "Fixings missing on plasterboard", "description": "Fixings were missing in some locations. Additional fixings required as discussed on site."}},
-  {{"title": "Fire stopping through walls incomplete", "description": "Fire stopping of penetrations through fire rated walls still needs to be carried out."}}
-]
+Return ONLY valid JSON array. No explanation, no markdown code blocks. Example:
+[{{"title": "Fixings missing on plasterboard", "description": "Fixings were missing in some locations."}},{{"title": "Fire stopping incomplete", "description": "Fire stopping through walls still needs to be carried out."}}]
 
-If genuinely no issues are found, return: []"""
-        })
+If genuinely no issues are found, return: []
 
-        msg = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4000,
-            messages=[{"role": "user", "content": content}],
+Report text:
+{text[:12000]}"""}],
         )
 
         response_text = msg.content[0].text.strip()
@@ -190,44 +175,7 @@ If genuinely no issues are found, return: []"""
         return issues if isinstance(issues, list) else []
 
     except Exception as e:
-        # If PDF reading fails, try with just text
-        try:
-            import pdfplumber
-            text = ""
-            with pdfplumber.open(tmp_path) as pdf:
-                for page in pdf.pages:
-                    t = page.extract_text()
-                    if t:
-                        text += t + "\n"
-
-            if not text.strip():
-                return []
-
-            client = anthropic.Anthropic()
-            msg = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4000,
-                messages=[{"role": "user", "content": f"""Extract ALL items needing action from this construction inspection report. Include failures, defects, missing items, incomplete works, non-compliances, and anything flagged for remediation.
-
-For each item provide: title (short) and description (full detail).
-Inspection type: {inspection_type}, Lot: {lot}
-
-Return ONLY valid JSON array.
-
-Report text:
-{text[:10000]}"""}],
-            )
-
-            response_text = msg.content[0].text.strip()
-            if "```" in response_text:
-                json_match = re.search(r"```(?:json)?\s*(.*?)\s*```", response_text, re.DOTALL)
-                if json_match:
-                    response_text = json_match.group(1)
-
-            issues = json.loads(response_text)
-            return issues if isinstance(issues, list) else []
-        except:
-            return []
+        return []
     finally:
         try:
             os.unlink(tmp_path)
