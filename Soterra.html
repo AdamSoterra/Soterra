@@ -2551,19 +2551,27 @@ function transformProjectToSiteData(project,inspections){
     return idA-idB;
   });
 
-  // Group inspections by normalized type, preserving first-seen order
-  var typeOrder=[];
+  // Group inspections by normalized type, track min task_id per type for sorting
   var typeMap={};
+  var typeMinId={};
   var lotSet=new Set();
   inspections.forEach(function(insp){
     var type=normalizeInspectionType(insp.task);
     var lot=insp.lot||'General';
+    var tid=parseInt(insp.task_id)||9999;
     lotSet.add(lot);
     if(!typeMap[type]){
       typeMap[type]={};
-      typeOrder.push(type); // preserve first-seen order (from task_id sort)
+      typeMinId[type]=tid;
     }
+    // Use the earliest (lowest) task_id for this type across all lots
+    if(tid<typeMinId[type])typeMinId[type]=tid;
     if(!typeMap[type][lot])typeMap[type][lot]=insp;
+  });
+
+  // Sort types by their minimum task_id (program sequence order)
+  var typeOrder=Object.keys(typeMap).sort(function(a,b){
+    return (typeMinId[a]||9999)-(typeMinId[b]||9999);
   });
 
   var lots=Array.from(lotSet).sort(function(a,b){
