@@ -3319,7 +3319,7 @@ async function renderIssueRegister(){
       +'<td>'+(issue.inspection_type||'')+'</td>'
       +'<td>'+(issue.lot||'')+'</td>'
       +'<td'+overdueStyle+'>'+daysOpen+'</td>'
-      +'<td>'+issue.reinspections+'</td>'
+      +'<td>'+(issue.reinspections||0)+'</td>'
       +'<td><span class="badge '+(sc[issue.status]||'badge-open')+'">'+(statusLabel[issue.status]||'Open')+'</span></td></tr>';
   }
 
@@ -3348,11 +3348,15 @@ async function openLiveIssue(issueId){
   var sc={open:'badge-open',ready:'badge-ready',closed:'badge-closed'};
   sb.innerHTML='<span class="badge '+(sc[issue.status]||'badge-open')+'">'+(issue.status==='open'?'Open':issue.status==='ready'?'Ready':'Closed')+'</span>';
 
-  var body=document.getElementById('im-body');
-  body.innerHTML='<div class="mrow"><span class="mlbl">Inspection type</span><span class="mval">'+(issue.inspection_type||'')+'</span></div>'
-    +'<div class="mrow"><span class="mlbl">Lot / Area</span><span class="mval">'+(issue.lot||'')+'</span></div>'
-    +'<div class="mrow"><span class="mlbl">Days open</span><span class="mval"'+(daysOpen>14?' style="color:#EF4444;font-weight:500"':'')+'>'+daysOpen+'</span></div>'
-    +(issue.description?'<div style="margin-top:12px;padding:10px 12px;background:var(--color-background-secondary);border-radius:8px;font-size:12px;color:var(--color-text-secondary);line-height:1.6">'+issue.description+'</div>':'')
+  // Use the existing modal fields
+  document.getElementById('im-site').textContent=siteName;
+  document.getElementById('im-type').textContent=issue.inspection_type||'';
+  document.getElementById('im-date').textContent=new Date(issue.created_at).toLocaleDateString('en-NZ',{day:'2-digit',month:'short',year:'numeric'});
+  document.getElementById('im-days').textContent=daysOpen;
+  document.getElementById('im-days').style.color=daysOpen>14?'#EF4444':'';
+  document.getElementById('im-days').style.fontWeight=daysOpen>14?'500':'';
+  document.getElementById('im-reinspect').textContent=issue.reinspections||0;
+  document.getElementById('im-note').innerHTML=(issue.description?'<div style="padding:10px 12px;background:var(--color-background-secondary);border-radius:8px;font-size:12px;color:var(--color-text-secondary);line-height:1.6">'+issue.description+'</div>':'')
     +'<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(0,0,0,.06)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-secondary);margin-bottom:8px">Update status</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="mabtn" style="background:#DBEAFE;color:#1E40AF;border-color:#3B82F6" onclick="updateLiveIssueStatus(\'ready\')">Mark ready</button><button class="mabtn" style="background:#D1FAE5;color:#065F46;border-color:#10B981" onclick="updateLiveIssueStatus(\'closed\')">Close issue</button><button class="mabtn" onclick="updateLiveIssueStatus(\'open\')">Reopen</button></div></div>'
     +'<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(0,0,0,.06)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--color-text-secondary);margin-bottom:8px">Evidence photo</div><div id="issue-photo-area"></div></div>';
 
