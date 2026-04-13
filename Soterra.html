@@ -2450,9 +2450,13 @@ async function saveNewInspection(){
   // Get project_id
   var projectId=currentSite;
 
+  // Check if this type+lot combo already exists — if so, mark as reinspection
+  var{data:existing}=await soterraDb.from('inspections').select('id').eq('project_id',projectId).eq('lot',lot).ilike('task','%'+type+'%');
+  var taskName=existing&&existing.length>0?type+' (Reinspection)':type;
+
   await soterraDb.from('inspections').insert({
     project_id:projectId,
-    task:type+' inspection',
+    task:taskName,
     task_id:'manual_'+Date.now(),
     lot:lot,
     start_date:date,
