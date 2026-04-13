@@ -175,7 +175,7 @@ Report text:
         return issues if isinstance(issues, list) else []
 
     except Exception as e:
-        return []
+        return [{"title": "EXTRACTION_ERROR", "description": str(e)}]
     finally:
         try:
             os.unlink(tmp_path)
