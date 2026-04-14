@@ -79,6 +79,20 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
     <div class="header-sub">Upload historical inspection reports to build your company intelligence</div>
   </div>
 
+  <div class="card" id="auth-section" style="display:none">
+    <div class="step-tag">Sign in</div>
+    <div class="step-title">Sign in to continue</div>
+    <div class="step-sub">Use your Soterra account to upload reports.</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <input id="login-email" type="email" placeholder="Email" class="field-input" style="height:42px;border:1.5px solid rgba(0,0,0,.12);border-radius:8px;padding:0 14px;font-size:14px;font-family:var(--font)">
+      <input id="login-pass" type="password" placeholder="Password" class="field-input" style="height:42px;border:1.5px solid rgba(0,0,0,.12);border-radius:8px;padding:0 14px;font-size:14px;font-family:var(--font)">
+      <div id="login-error" style="color:var(--red);font-size:12px"></div>
+      <button id="login-btn" class="btn btn-primary" onclick="loginFromUpload()" style="width:100%;justify-content:center">Sign in</button>
+    </div>
+  </div>
+
+  <div id="auth-status" style="text-align:right;font-size:11px;color:var(--slate);margin-bottom:8px"></div>
+
   <div class="card" id="upload-card">
     <div class="step-tag">The Brain</div>
     <div class="step-title">Upload inspection reports</div>
@@ -142,28 +156,44 @@ var projectId='';
 var selectedFiles=[];
 var results=[];
 
-// Auth check — get company_id (wait for session to load)
+// Auth check — get company_id
 async function init(){
-  // Wait for auth state to settle
+  // Try to get existing session
   var{data:{session}}=await soterraDb.auth.getSession();
-  if(!session){
-    // Try waiting a moment for session restore
-    await new Promise(function(r){setTimeout(r,1500);});
-    var retry=await soterraDb.auth.getSession();
-    session=retry.data.session;
+  if(session){
+    var{data:{user}}=await soterraDb.auth.getUser();
+    if(user){
+      var{data:profile}=await soterraDb.from('profiles').select('company_id').eq('id',user.id).single();
+      if(profile&&profile.company_id){
+        companyId=profile.company_id;
+        var{data:projects}=await soterraDb.from('projects').select('id').eq('company_id',companyId).limit(1);
+        if(projects&&projects.length)projectId=projects[0].id;
+        document.getElementById('auth-status').textContent='Logged in as '+user.email;
+        document.getElementById('auth-section').style.display='none';
+        return;
+      }
+    }
   }
-  if(!session){window.location='auth.html';return;}
-
-  var{data:{user}}=await soterraDb.auth.getUser();
-  if(!user){window.location='auth.html';return;}
-  var{data:profile}=await soterraDb.from('profiles').select('company_id').eq('id',user.id).single();
-  if(!profile||!profile.company_id){alert('No company found. Please complete setup first.');window.location='setup.html';return;}
-  companyId=profile.company_id;
-  // Get first project as default
-  var{data:projects}=await soterraDb.from('projects').select('id').eq('company_id',companyId).limit(1);
-  if(projects&&projects.length)projectId=projects[0].id;
+  // Not logged in — show inline login
+  document.getElementById('auth-section').style.display='block';
 }
 init();
+
+async function loginFromUpload(){
+  var email=document.getElementById('login-email').value.trim();
+  var pass=document.getElementById('login-pass').value;
+  var btn=document.getElementById('login-btn');
+  btn.textContent='Signing in...';btn.disabled=true;
+  var{data,error}=await soterraDb.auth.signInWithPassword({email:email,password:pass});
+  if(error){
+    document.getElementById('login-error').textContent=error.message;
+    btn.textContent='Sign in';btn.disabled=false;
+    return;
+  }
+  // Reload to pick up session
+  init();
+  btn.textContent='Sign in';btn.disabled=false;
+}
 
 // Type detection from filename
 function detectType(filename){
