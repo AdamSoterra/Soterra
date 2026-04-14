@@ -3873,32 +3873,14 @@ function calSendToEmail(){
   var d=getCalEventDate();
   if(!d||!title)return;
 
-  var toEmail=prompt('Enter email address to send this event to:');
-  if(!toEmail||!toEmail.trim())return;
-  toEmail=toEmail.trim();
-
   var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var dateStr=d.day+' '+monthNames[d.month]+' '+d.year;
-  var subject=type+' — '+title+' — '+dateStr;
-  var message='Hi,\n\nHere are the details for an upcoming site event:\n\nEvent: '+title+'\nType: '+type+'\nDate: '+dateStr+(note?'\nNote: '+note:'')+'\n\nRegards,\nSoterra';
 
-  var btn=document.getElementById('cal-modal-send');
-  btn.textContent='Sending...';
-  btn.disabled=true;
-
-  emailjs.send('service_mnv0ack','template_ohsp3wb',{
-    to_email:toEmail,
-    subject:subject,
-    message:message,
-    name:'Soterra'
-  }).then(function(){
-    btn.textContent='Sent ✓';
-    setTimeout(function(){btn.textContent='Send to...';btn.disabled=false;},3000);
-  },function(err){
-    btn.textContent='Send to...';
-    btn.disabled=false;
-    alert('Failed to send: '+(err.text||err.message||'Unknown error'));
-  });
+  // Reuse the existing reminder modal
+  document.getElementById('reminder-email-subject').value=type+' — '+title+' — '+dateStr;
+  document.getElementById('reminder-email-body').value='Hi,\n\nHere are the details for an upcoming site event:\n\nEvent: '+title+'\nType: '+type+'\nDate: '+dateStr+(note?'\nNote: '+note:'')+'\n\nRegards';
+  document.getElementById('reminder-recipients').innerHTML='<div class="reminder-recip-row" style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><input type="email" placeholder="recipient@email.com" style="flex:1;height:36px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 12px;font-size:13px;font-family:var(--font);outline:none"></div>';
+  document.getElementById('reminder-modal').style.display='flex';
 }
 
 async function loadCalendarEvents(){
