@@ -3681,7 +3681,7 @@ function calEditEvent(dk,evtId){
   setTimeout(function(){document.getElementById('cal-evt-title').focus();},50);
 }
 
-function saveCalEvent(){
+async function saveCalEvent(){
   var title=document.getElementById('cal-evt-title').value.trim();
   if(!title)return;
   var type=document.getElementById('cal-evt-type').value;
@@ -3691,23 +3691,82 @@ function saveCalEvent(){
   var assignee=document.getElementById('cal-evt-assignee').value;
   var assigneeEmail=document.getElementById('cal-evt-assignee-email').value.trim();
   var reminder=document.getElementById('cal-evt-reminder').value;
-  if(calEditMode&&calEditKey){
-    var evts=calEvents[dk];
-    var idx=evts.findIndex(function(e){return e.id===calEditKey;});
-    if(idx>-1){evts[idx].title=title;evts[idx].type=type;evts[idx].note=note;evts[idx].assignee=assignee;evts[idx].assigneeEmail=assigneeEmail;evts[idx].reminder=reminder;}
+
+  // Extract date from dateKey (format: siteKey|YYYY-MM-DD)
+  var datePart=dk.split('|')[1];
+
+  if(isLiveData&&soterraDb){
+    if(calEditMode&&calEditKey){
+      // Update existing event in Supabase
+      await soterraDb.from('calendar_events').update({
+        title:title,type:type,note:note,
+        assignee:assignee,assignee_email:assigneeEmail,reminder:reminder
+      }).eq('id',calEditKey);
+    }else{
+      // Insert new event into Supabase
+      await soterraDb.from('calendar_events').insert({
+        project_id:currentSite,
+        title:title,type:type,note:note,
+        event_date:datePart,
+        assignee:assignee,assignee_email:assigneeEmail,reminder:reminder,
+        created_by:soterraUser?soterraUser.id:null
+      });
+    }
+    // Reload events from database
+    await loadCalendarEvents();
   }else{
-    calEvents[dk].push({id:'ev_'+Date.now()+'_'+Math.random().toString(36).slice(2),title:title,type:type,note:note,assignee:assignee,assigneeEmail:assigneeEmail,reminder:reminder});
+    // Demo mode — in-memory only
+    if(calEditMode&&calEditKey){
+      var evts=calEvents[dk];
+      var idx=evts.findIndex(function(e){return e.id===calEditKey;});
+      if(idx>-1){evts[idx].title=title;evts[idx].type=type;evts[idx].note=note;evts[idx].assignee=assignee;evts[idx].assigneeEmail=assigneeEmail;evts[idx].reminder=reminder;}
+    }else{
+      calEvents[dk].push({id:'ev_'+Date.now()+'_'+Math.random().toString(36).slice(2),title:title,type:type,note:note,assignee:assignee,assigneeEmail:assigneeEmail,reminder:reminder});
+    }
   }
   closeCalModal();
   buildCalendar();
 }
 
-function deleteCalEvent(){
+async function deleteCalEvent(){
   var dk=calEditDateKey;
-  if(!calEvents[dk])return;
-  calEvents[dk]=calEvents[dk].filter(function(e){return e.id!==calEditKey;});
+  if(isLiveData&&soterraDb&&calEditKey){
+    await soterraDb.from('calendar_events').delete().eq('id',calEditKey);
+    await loadCalendarEvents();
+  }else{
+    if(!calEvents[dk])return;
+    calEvents[dk]=calEvents[dk].filter(function(e){return e.id!==calEditKey;});
+  }
   closeCalModal();
   buildCalendar();
+}
+
+async function loadCalendarEvents(){
+  if(!isLiveData||!soterraDb||!currentSite)return;
+  var{data:events}=await soterraDb.from('calendar_events').select('*').eq('project_id',currentSite);
+  if(!events)return;
+
+  // Clear existing live events (keep demo events if any)
+  var livePrefix=currentSite+'|';
+  Object.keys(calEvents).forEach(function(k){
+    if(k.startsWith(livePrefix))delete calEvents[k];
+  });
+
+  // Populate calEvents from database
+  events.forEach(function(evt){
+    var d=new Date(evt.event_date);
+    var dk=calDateKey(currentSite,d.getFullYear(),d.getMonth(),d.getDate());
+    if(!calEvents[dk])calEvents[dk]=[];
+    calEvents[dk].push({
+      id:evt.id,
+      title:evt.title,
+      type:evt.type||'Other',
+      note:evt.note||'',
+      assignee:evt.assignee||'',
+      assigneeEmail:evt.assignee_email||'',
+      reminder:evt.reminder||''
+    });
+  });
 }
 
 function closeCalModal(){
@@ -4308,6 +4367,7 @@ document.addEventListener('DOMContentLoaded',function(){
     initSiteTeam();
     // If live data loaded, call switchSite to update all titles with real project name
     if(isLiveData&&currentSite&&siteData[currentSite]){
+      await loadCalendarEvents();
       switchSite(currentSite);
     }
   })();
