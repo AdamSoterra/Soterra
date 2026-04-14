@@ -1833,9 +1833,11 @@ function tryLogin(){
       <div id="cal-notify-section" style="display:none;margin-top:4px">
         <div id="cal-notify-status" style="display:none;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:8px"></div>
       </div>
-      <div id="cal-modal-actions" style="display:flex;gap:8px;margin-top:4px;justify-content:flex-end">
-        <button id="cal-modal-delete" onclick="deleteCalEvent()" style="height:36px;background:#FEE2E2;border:.5px solid #FCA5A5;border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);color:#991B1B;display:none">Delete event</button>
+      <div id="cal-modal-actions-top" style="display:flex;gap:8px;margin-top:4px;display:none">
+        <button id="cal-modal-delete" onclick="deleteCalEvent()" style="height:36px;background:#FEE2E2;border:.5px solid #FCA5A5;border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);color:#991B1B">Delete event</button>
         <button id="cal-modal-delete-series" onclick="deleteCalSeries()" style="height:36px;background:#FEE2E2;border:.5px solid #FCA5A5;border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);color:#991B1B;display:none">Delete all future</button>
+      </div>
+      <div id="cal-modal-actions" style="display:flex;gap:8px;margin-top:4px;justify-content:flex-end">
         <button id="cal-modal-notify" onclick="notifyAssignee()" style="height:36px;background:#D1FAE5;border:.5px solid #10B981;border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);color:#065F46;display:none">Notify assignee</button>
         <button id="cal-modal-send" onclick="calSendToEmail()" style="height:36px;background:#DBEAFE;border:.5px solid #3B82F6;border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);color:#1E40AF;display:none">Send to...</button>
         <button id="cal-modal-ics" onclick="downloadIcs()" style="height:36px;background:#EEF2FF;border:.5px solid rgba(79,70,229,.3);border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);color:#4F46E5;display:none">⬇ .ics</button>
@@ -3682,8 +3684,7 @@ function calDayClick(y,m,d,dk){
   document.getElementById('cal-evt-title').value='';
   document.getElementById('cal-evt-type').value='Delivery';
   document.getElementById('cal-evt-note').value='';
-  document.getElementById('cal-modal-delete').style.display='none';
-  document.getElementById('cal-modal-delete-series').style.display='none';
+  document.getElementById('cal-modal-actions-top').style.display='none';
   document.getElementById('cal-modal-save').textContent='Add event';
   document.getElementById('cal-evt-assignee').value='';
   document.getElementById('cal-evt-assignee-email').value='';
@@ -3710,7 +3711,7 @@ function calEditEvent(dk,evtId){
   document.getElementById('cal-evt-title').value=ev.title;
   document.getElementById('cal-evt-type').value=ev.type;
   document.getElementById('cal-evt-note').value=ev.note||'';
-  document.getElementById('cal-modal-delete').style.display='inline-block';
+  document.getElementById('cal-modal-actions-top').style.display='flex';
   document.getElementById('cal-modal-delete-series').style.display=ev.seriesId?'inline-block':'none';
   document.getElementById('cal-modal-save').textContent='Save changes';
   document.getElementById('cal-evt-assignee').value=ev.assignee||'';
