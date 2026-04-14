@@ -142,14 +142,24 @@ var projectId='';
 var selectedFiles=[];
 var results=[];
 
-// Auth check — get company_id
+// Auth check — get company_id (wait for session to load)
 async function init(){
+  // Wait for auth state to settle
+  var{data:{session}}=await soterraDb.auth.getSession();
+  if(!session){
+    // Try waiting a moment for session restore
+    await new Promise(function(r){setTimeout(r,1500);});
+    var retry=await soterraDb.auth.getSession();
+    session=retry.data.session;
+  }
+  if(!session){window.location='auth.html';return;}
+
   var{data:{user}}=await soterraDb.auth.getUser();
   if(!user){window.location='auth.html';return;}
   var{data:profile}=await soterraDb.from('profiles').select('company_id').eq('id',user.id).single();
   if(!profile||!profile.company_id){alert('No company found. Please complete setup first.');window.location='setup.html';return;}
   companyId=profile.company_id;
-  // Get first project as default (can be changed later)
+  // Get first project as default
   var{data:projects}=await soterraDb.from('projects').select('id').eq('company_id',companyId).limit(1);
   if(projects&&projects.length)projectId=projects[0].id;
 }
