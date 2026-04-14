@@ -1795,6 +1795,15 @@ function tryLogin(){
         <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999;margin-bottom:5px">Note (optional)</div>
         <input id="cal-evt-note" type="text" placeholder="Any extra detail..." style="width:100%;height:36px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 12px;font-size:13px;font-family:var(--font);outline:none">
       </div>
+      <div>
+        <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999;margin-bottom:5px">Repeat</div>
+        <select id="cal-evt-repeat" style="width:100%;height:36px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 12px;font-size:13px;font-family:var(--font)">
+          <option value="none">No repeat</option>
+          <option value="weekly">Every week</option>
+          <option value="fortnightly">Every 2 weeks</option>
+          <option value="monthly">Every month</option>
+        </select>
+      </div>
       <div style="border-top:.5px solid rgba(0,0,0,.08);padding-top:12px;margin-top:4px">
         <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999;margin-bottom:5px">Assign to (optional)</div>
         <div style="display:flex;gap:8px">
@@ -1826,7 +1835,9 @@ function tryLogin(){
       </div>
       <div id="cal-modal-actions" style="display:flex;gap:8px;margin-top:4px;justify-content:flex-end">
         <button id="cal-modal-delete" onclick="deleteCalEvent()" style="height:36px;background:#FEE2E2;border:.5px solid #FCA5A5;border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);color:#991B1B;display:none">Delete event</button>
+        <button id="cal-modal-delete-series" onclick="deleteCalSeries()" style="height:36px;background:#FEE2E2;border:.5px solid #FCA5A5;border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);color:#991B1B;display:none">Delete all future</button>
         <button id="cal-modal-notify" onclick="notifyAssignee()" style="height:36px;background:#D1FAE5;border:.5px solid #10B981;border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);color:#065F46;display:none">Notify assignee</button>
+        <button id="cal-modal-send" onclick="calSendToEmail()" style="height:36px;background:#DBEAFE;border:.5px solid #3B82F6;border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);color:#1E40AF;display:none">Send to...</button>
         <button id="cal-modal-ics" onclick="downloadIcs()" style="height:36px;background:#EEF2FF;border:.5px solid rgba(79,70,229,.3);border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);color:#4F46E5;display:none">⬇ .ics</button>
         <button onclick="closeCalModal()" style="height:36px;background:var(--color-background-secondary);border:.5px solid rgba(0,0,0,.15);border-radius:6px;padding:0 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)">Cancel</button>
         <button id="cal-modal-save" onclick="saveCalEvent()" style="height:36px;background:#4F46E5;color:#fff;border:none;border-radius:6px;padding:0 18px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)">Add event</button>
@@ -3672,13 +3683,17 @@ function calDayClick(y,m,d,dk){
   document.getElementById('cal-evt-type').value='Delivery';
   document.getElementById('cal-evt-note').value='';
   document.getElementById('cal-modal-delete').style.display='none';
+  document.getElementById('cal-modal-delete-series').style.display='none';
   document.getElementById('cal-modal-save').textContent='Add event';
   document.getElementById('cal-evt-assignee').value='';
   document.getElementById('cal-evt-assignee-email').value='';
   document.getElementById('cal-evt-reminder').value='1';
+  document.getElementById('cal-evt-repeat').value='none';
+  document.getElementById('cal-evt-repeat').disabled=false;
   document.getElementById('cal-reminder-section').style.display='none';
   document.getElementById('cal-notify-section').style.display='none';
   document.getElementById('cal-modal-notify').style.display='none';
+  document.getElementById('cal-modal-send').style.display='none';
   document.getElementById('cal-modal-ics').style.display='none';
   document.getElementById('cal-modal').style.display='flex';
   setTimeout(function(){document.getElementById('cal-evt-title').focus();},50);
@@ -3696,17 +3711,42 @@ function calEditEvent(dk,evtId){
   document.getElementById('cal-evt-type').value=ev.type;
   document.getElementById('cal-evt-note').value=ev.note||'';
   document.getElementById('cal-modal-delete').style.display='inline-block';
+  document.getElementById('cal-modal-delete-series').style.display=ev.seriesId?'inline-block':'none';
   document.getElementById('cal-modal-save').textContent='Save changes';
   document.getElementById('cal-evt-assignee').value=ev.assignee||'';
   document.getElementById('cal-evt-assignee-email').value=ev.assigneeEmail||'';
   document.getElementById('cal-evt-reminder').value=ev.reminder||'1';
+  document.getElementById('cal-evt-repeat').value='none';
+  document.getElementById('cal-evt-repeat').disabled=true;
   var hasAssignee=(ev.assignee&&ev.assignee!=='');
   document.getElementById('cal-reminder-section').style.display=hasAssignee?'block':'none';
   document.getElementById('cal-notify-section').style.display=hasAssignee?'block':'none';
   document.getElementById('cal-modal-notify').style.display=hasAssignee?'inline-block':'none';
-  document.getElementById('cal-modal-ics').style.display=hasAssignee?'inline-block':'none';
+  document.getElementById('cal-modal-send').style.display='inline-block';
+  document.getElementById('cal-modal-ics').style.display='inline-block';
   document.getElementById('cal-modal').style.display='flex';
   setTimeout(function(){document.getElementById('cal-evt-title').focus();},50);
+}
+
+function getRecurringDates(startDate,repeat){
+  // Generate dates for 3 months from startDate
+  var dates=[];
+  var d=new Date(startDate);
+  var end=new Date(startDate);end.setMonth(end.getMonth()+3);
+  var step=repeat==='weekly'?7:repeat==='fortnightly'?14:0;
+  if(step>0){
+    d.setDate(d.getDate()+step); // skip first — it's the original
+    while(d<=end){dates.push(new Date(d));d.setDate(d.getDate()+step);}
+  }else if(repeat==='monthly'){
+    var origDay=d.getDate();
+    for(var i=1;i<=3;i++){
+      var nd=new Date(startDate);nd.setMonth(nd.getMonth()+i);
+      // Handle months with fewer days (e.g. 31st → 28th)
+      if(nd.getDate()!==origDay)nd.setDate(0);
+      dates.push(nd);
+    }
+  }
+  return dates;
 }
 
 async function saveCalEvent(){
@@ -3719,9 +3759,11 @@ async function saveCalEvent(){
   var assignee=document.getElementById('cal-evt-assignee').value;
   var assigneeEmail=document.getElementById('cal-evt-assignee-email').value.trim();
   var reminder=document.getElementById('cal-evt-reminder').value;
+  var repeat=document.getElementById('cal-evt-repeat').value;
 
   // Extract date from dateKey (format: siteKey|YYYY-MM-DD)
   var datePart=dk.split('|')[1];
+  var seriesId=(repeat!=='none')?'series_'+Date.now()+'_'+Math.random().toString(36).slice(2):null;
 
   if(isLiveData&&soterraDb){
     if(calEditMode&&calEditKey){
@@ -3731,15 +3773,30 @@ async function saveCalEvent(){
         assignee:assignee,assignee_email:assigneeEmail,reminder:reminder
       }).eq('id',calEditKey);
     }else{
-      // Insert new event into Supabase
+      // Insert the first event
       var{error:calErr}=await soterraDb.from('calendar_events').insert({
         project_id:currentSite,
         title:title,type:type,note:note,
         event_date:datePart,
         assignee:assignee,assignee_email:assigneeEmail,reminder:reminder,
+        series_id:seriesId,
         created_by:soterraUser?soterraUser.id:null
       });
       if(calErr)console.error('Calendar save error:',calErr.message);
+
+      // Generate recurring events
+      if(repeat!=='none'){
+        var startD=new Date(datePart+'T00:00:00');
+        var futureDates=getRecurringDates(startD,repeat);
+        var inserts=futureDates.map(function(fd){
+          var dp=fd.getFullYear()+'-'+(fd.getMonth()<9?'0':'')+(fd.getMonth()+1)+'-'+(fd.getDate()<10?'0':'')+fd.getDate();
+          return{project_id:currentSite,title:title,type:type,note:note,event_date:dp,assignee:assignee,assignee_email:assigneeEmail,reminder:reminder,series_id:seriesId,created_by:soterraUser?soterraUser.id:null};
+        });
+        if(inserts.length>0){
+          var{error:seriesErr}=await soterraDb.from('calendar_events').insert(inserts);
+          if(seriesErr)console.error('Series save error:',seriesErr.message);
+        }
+      }
     }
     // Reload events from database
     await loadCalendarEvents();
@@ -3750,7 +3807,18 @@ async function saveCalEvent(){
       var idx=evts.findIndex(function(e){return e.id===calEditKey;});
       if(idx>-1){evts[idx].title=title;evts[idx].type=type;evts[idx].note=note;evts[idx].assignee=assignee;evts[idx].assigneeEmail=assigneeEmail;evts[idx].reminder=reminder;}
     }else{
-      calEvents[dk].push({id:'ev_'+Date.now()+'_'+Math.random().toString(36).slice(2),title:title,type:type,note:note,assignee:assignee,assigneeEmail:assigneeEmail,reminder:reminder});
+      var baseId='ev_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+      calEvents[dk].push({id:baseId,title:title,type:type,note:note,assignee:assignee,assigneeEmail:assigneeEmail,reminder:reminder,seriesId:seriesId});
+      // Generate recurring events in demo mode
+      if(repeat!=='none'){
+        var startD=new Date(datePart+'T00:00:00');
+        var futureDates=getRecurringDates(startD,repeat);
+        futureDates.forEach(function(fd){
+          var fdk=calDateKey(currentSite,fd.getFullYear(),fd.getMonth(),fd.getDate());
+          if(!calEvents[fdk])calEvents[fdk]=[];
+          calEvents[fdk].push({id:'ev_'+Date.now()+'_'+Math.random().toString(36).slice(2),title:title,type:type,note:note,assignee:assignee,assigneeEmail:assigneeEmail,reminder:reminder,seriesId:seriesId});
+        });
+      }
     }
   }
   closeCalModal();
@@ -3768,6 +3836,69 @@ async function deleteCalEvent(){
   }
   closeCalModal();
   buildCalendar();
+}
+
+async function deleteCalSeries(){
+  // Find the series ID from the current event
+  var dk=calEditDateKey;
+  var evts=calEvents[dk]||[];
+  var ev=evts.find(function(e){return e.id===calEditKey;});
+  if(!ev||!ev.seriesId)return;
+  var sid=ev.seriesId;
+  if(!confirm('Delete this event and all future events in this series?'))return;
+
+  if(isLiveData&&soterraDb){
+    // Delete all events with this series_id that are on or after this event's date
+    var eventDate=dk.split('|')[1];
+    await soterraDb.from('calendar_events').delete().eq('series_id',sid).gte('event_date',eventDate);
+    await loadCalendarEvents();
+  }else{
+    // Demo mode — remove all events with this seriesId on or after current date
+    var eventDate=dk.split('|')[1];
+    Object.keys(calEvents).forEach(function(k){
+      var keyDate=k.split('|')[1];
+      if(keyDate>=eventDate){
+        calEvents[k]=calEvents[k].filter(function(e){return e.seriesId!==sid;});
+      }
+    });
+  }
+  closeCalModal();
+  buildCalendar();
+}
+
+function calSendToEmail(){
+  var title=document.getElementById('cal-evt-title').value.trim();
+  var type=document.getElementById('cal-evt-type').value;
+  var note=document.getElementById('cal-evt-note').value.trim();
+  var d=getCalEventDate();
+  if(!d||!title)return;
+
+  var toEmail=prompt('Enter email address to send this event to:');
+  if(!toEmail||!toEmail.trim())return;
+  toEmail=toEmail.trim();
+
+  var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var dateStr=d.day+' '+monthNames[d.month]+' '+d.year;
+  var subject=type+' — '+title+' — '+dateStr;
+  var message='Hi,\n\nHere are the details for an upcoming site event:\n\nEvent: '+title+'\nType: '+type+'\nDate: '+dateStr+(note?'\nNote: '+note:'')+'\n\nRegards,\nSoterra';
+
+  var btn=document.getElementById('cal-modal-send');
+  btn.textContent='Sending...';
+  btn.disabled=true;
+
+  emailjs.send('service_mnv0ack','template_ohsp3wb',{
+    to_email:toEmail,
+    subject:subject,
+    message:message,
+    name:'Soterra'
+  }).then(function(){
+    btn.textContent='Sent ✓';
+    setTimeout(function(){btn.textContent='Send to...';btn.disabled=false;},3000);
+  },function(err){
+    btn.textContent='Send to...';
+    btn.disabled=false;
+    alert('Failed to send: '+(err.text||err.message||'Unknown error'));
+  });
 }
 
 async function loadCalendarEvents(){
@@ -3793,7 +3924,8 @@ async function loadCalendarEvents(){
       note:evt.note||'',
       assignee:evt.assignee||'',
       assigneeEmail:evt.assignee_email||'',
-      reminder:evt.reminder||''
+      reminder:evt.reminder||'',
+      seriesId:evt.series_id||null
     });
   });
 }
