@@ -7,8 +7,18 @@
     "api/extract-issues.py": {
       "runtime": "@vercel/python@4.7.0",
       "maxDuration": 60
+    },
+    "api/send-reminders.py": {
+      "runtime": "@vercel/python@4.7.0",
+      "maxDuration": 30
     }
   },
+  "crons": [
+    {
+      "path": "/api/send-reminders",
+      "schedule": "0 18 * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" }
   ]
