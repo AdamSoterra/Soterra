@@ -134,8 +134,8 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
         <div class="summary-label">Items extracted</div>
       </div>
       <div class="summary-stat">
-        <div class="summary-val" id="sum-fail">0%</div>
-        <div class="summary-label">Failure rate</div>
+        <div class="summary-val" id="sum-types">0</div>
+        <div class="summary-label">Inspection types</div>
       </div>
     </div>
 
@@ -330,8 +330,7 @@ async function startAnalysis(){
   var doneCount=selectedFiles.filter(function(f){return f._status==='done';}).length;
   document.getElementById('sum-files').textContent=doneCount;
   document.getElementById('sum-items').textContent=totalItems;
-  var failRate=doneCount>0?Math.round((failCount/doneCount)*100):0;
-  document.getElementById('sum-fail').textContent=failRate+'%';
+  document.getElementById('sum-types').textContent=Object.keys(typeCounts).length;
 
   var typesHtml='';
   Object.keys(typeCounts).sort().forEach(function(t){
