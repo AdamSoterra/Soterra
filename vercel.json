@@ -8,6 +8,10 @@
       "runtime": "@vercel/python@4.7.0",
       "maxDuration": 60
     },
+    "api/analyze-reports.py": {
+      "runtime": "@vercel/python@4.7.0",
+      "maxDuration": 60
+    },
     "api/send-reminders.py": {
       "runtime": "@vercel/python@4.7.0",
       "maxDuration": 30

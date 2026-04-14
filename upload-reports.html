@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soterra — Upload Inspection Reports</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--font:'DM Sans',system-ui,sans-serif;--blue:#0E74BD;--navy:#0A2540;--slate:#4A6080;--bg:#F0F7FF;--card:#fff;--border:rgba(0,0,0,.08);--green:#10B981;--red:#EF4444;--amber:#F59E0B}
+body{font-family:var(--font);background:var(--bg);color:var(--navy);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 20px}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(rgba(14,116,189,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(14,116,189,.05) 1px,transparent 1px);background-size:44px 44px;z-index:0}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse 70% 50% at 50% -10%,rgba(56,189,248,.12) 0%,transparent 60%);z-index:0}
+
+.shell{position:relative;z-index:1;width:100%;max-width:700px}
+.header{text-align:center;margin-bottom:32px}
+.logo{font-size:24px;font-weight:700;color:var(--blue);margin-bottom:4px;cursor:pointer}
+.logo span{color:var(--navy)}
+.header-sub{font-size:13px;color:var(--slate);margin-top:8px}
+
+.card{background:var(--card);border-radius:16px;border:1px solid var(--border);box-shadow:0 8px 30px rgba(0,0,0,.06);padding:32px;animation:fadeUp .4s ease;margin-bottom:20px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+.step-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--blue);background:rgba(14,116,189,.08);padding:4px 12px;border-radius:4px;margin-bottom:16px}
+.step-title{font-size:20px;font-weight:600;color:var(--navy);margin-bottom:6px}
+.step-sub{font-size:13px;color:var(--slate);margin-bottom:20px;line-height:1.6}
+
+.upload-zone{border:2.5px dashed rgba(14,116,189,.2);border-radius:14px;padding:40px 20px;text-align:center;cursor:pointer;transition:all .2s;background:rgba(14,116,189,.02)}
+.upload-zone:hover,.upload-zone.drag-over{border-color:var(--blue);background:rgba(14,116,189,.05)}
+.upload-icon{font-size:36px;margin-bottom:8px;opacity:.4}
+.upload-title{font-size:15px;font-weight:600;color:var(--navy);margin-bottom:4px}
+.upload-sub{font-size:12px;color:var(--slate)}
+
+.file-list{margin-top:20px}
+.file-row{display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(14,116,189,.03);border:1.5px solid rgba(14,116,189,.1);border-radius:10px;margin-bottom:8px;transition:all .2s}
+.file-row.processing{border-color:var(--blue);background:rgba(14,116,189,.06)}
+.file-row.done{border-color:var(--green);background:rgba(16,185,129,.04)}
+.file-row.error{border-color:var(--red);background:rgba(239,68,68,.04)}
+.file-icon{font-size:18px;flex-shrink:0}
+.file-info{flex:1;min-width:0}
+.file-name{font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-status{font-size:11px;color:var(--slate);margin-top:2px}
+.file-type{flex-shrink:0}
+.file-type select{height:32px;border:1px solid rgba(0,0,0,.12);border-radius:6px;padding:0 8px;font-size:12px;font-family:var(--font);color:var(--navy);background:#fff}
+.file-remove{flex-shrink:0;width:28px;height:28px;border:none;background:rgba(0,0,0,.05);border-radius:6px;cursor:pointer;font-size:14px;color:#999;display:flex;align-items:center;justify-content:center}
+.file-remove:hover{background:rgba(239,68,68,.1);color:var(--red)}
+.file-items{flex-shrink:0;font-size:12px;font-weight:600;color:var(--green)}
+
+.progress-bar{height:6px;background:rgba(14,116,189,.1);border-radius:3px;margin:20px 0;overflow:hidden;display:none}
+.progress-fill{height:100%;background:var(--blue);border-radius:3px;transition:width .3s;width:0%}
+
+.btn-row{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
+.btn{height:44px;padding:0 24px;border-radius:9px;font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px;border:none}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:#0A5C97;transform:translateY(-1px)}
+.btn-primary:disabled{background:#ccc;cursor:not-allowed;transform:none}
+.btn-secondary{background:transparent;color:var(--slate);border:1.5px solid rgba(0,0,0,.12)}
+.btn-secondary:hover{background:rgba(0,0,0,.02)}
+
+.summary{display:none}
+.summary-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}
+.summary-stat{text-align:center;padding:18px;background:rgba(14,116,189,.03);border-radius:12px}
+.summary-val{font-size:28px;font-weight:700;color:var(--blue)}
+.summary-label{font-size:11px;color:var(--slate);margin-top:4px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.summary-types{margin-top:16px}
+.summary-type-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.05);font-size:13px}
+.summary-type-row:last-child{border-bottom:none}
+
+.status-msg{text-align:center;padding:16px;font-size:14px;font-weight:500;color:var(--blue);display:none}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <div class="header">
+    <div class="logo" onclick="window.location='Soterra.html'">S<span>oterra</span></div>
+    <div class="header-sub">Upload historical inspection reports to build your company intelligence</div>
+  </div>
+
+  <div class="card" id="upload-card">
+    <div class="step-tag">The Brain</div>
+    <div class="step-title">Upload inspection reports</div>
+    <div class="step-sub">Drop your PDF inspection reports below. Soterra will analyze each one, extract issues, and build your company's failure patterns and risk predictions.</div>
+
+    <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <div class="upload-icon">&#128196;</div>
+      <div class="upload-title">Drop PDF files here or click to browse</div>
+      <div class="upload-sub">Supports council reports, consultant advice notices, and engineer reports</div>
+    </div>
+    <input type="file" id="file-input" multiple accept=".pdf" style="display:none">
+
+    <div class="file-list" id="file-list"></div>
+
+    <div class="progress-bar" id="progress-bar">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+
+    <div class="status-msg" id="status-msg"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="window.location='Soterra.html'">Back to dashboard</button>
+      <button class="btn btn-primary" id="analyze-btn" onclick="startAnalysis()" disabled>Analyze reports</button>
+    </div>
+  </div>
+
+  <div class="card summary" id="summary-card">
+    <div class="step-tag">Complete</div>
+    <div class="step-title">Analysis complete</div>
+    <div class="step-sub">Your inspection intelligence has been built. The dashboard now shows real data from your reports.</div>
+
+    <div class="summary-grid">
+      <div class="summary-stat">
+        <div class="summary-val" id="sum-files">0</div>
+        <div class="summary-label">Reports analyzed</div>
+      </div>
+      <div class="summary-stat">
+        <div class="summary-val" id="sum-items">0</div>
+        <div class="summary-label">Items extracted</div>
+      </div>
+      <div class="summary-stat">
+        <div class="summary-val" id="sum-fail">0%</div>
+        <div class="summary-label">Failure rate</div>
+      </div>
+    </div>
+
+    <div class="summary-types" id="summary-types"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="window.location='Soterra.html'">Go to dashboard</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var SUPABASE_URL='https://pffwyxygovfswchxlxun.supabase.co';
+var SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmZnd5eHlnb3Zmc3djaHhseHVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQxNjEzOTYsImV4cCI6MjA1OTczNzM5Nn0.sb_publishable_HbvNAWlqxpiFYDZDcORntg_q2uu4Ooy';
+var soterraDb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+var companyId='';
+var projectId='';
+var selectedFiles=[];
+var results=[];
+
+// Auth check — get company_id
+async function init(){
+  var{data:{user}}=await soterraDb.auth.getUser();
+  if(!user){window.location='auth.html';return;}
+  var{data:profile}=await soterraDb.from('profiles').select('company_id').eq('id',user.id).single();
+  if(!profile||!profile.company_id){alert('No company found. Please complete setup first.');window.location='setup.html';return;}
+  companyId=profile.company_id;
+  // Get first project as default (can be changed later)
+  var{data:projects}=await soterraDb.from('projects').select('id').eq('company_id',companyId).limit(1);
+  if(projects&&projects.length)projectId=projects[0].id;
+}
+init();
+
+// Type detection from filename
+function detectType(filename){
+  var fn=filename.toLowerCase();
+  if(/fire|canf|passive/.test(fn))return 'fire';
+  if(/electri|building services/.test(fn))return 'electrical';
+  if(/hydraul|plumb|drain|site visit report/.test(fn))return 'hydraulic';
+  if(/mechani|hvac/.test(fn))return 'mechanical';
+  if(/structur/.test(fn))return 'structural';
+  if(/architect|sor |site observation|facade|façade/.test(fn))return 'architectural';
+  if(/acousti|cpr/.test(fn))return 'acoustic';
+  if(/seism/.test(fn))return 'seismic';
+  if(/bco|council|consentium|_ipl|_ipp|_ipb|_ime/.test(fn))return 'council';
+  return '';
+}
+
+// File drop zone
+var dropZone=document.getElementById('drop-zone');
+var fileInput=document.getElementById('file-input');
+
+dropZone.addEventListener('dragover',function(e){e.preventDefault();dropZone.classList.add('drag-over');});
+dropZone.addEventListener('dragleave',function(){dropZone.classList.remove('drag-over');});
+dropZone.addEventListener('drop',function(e){
+  e.preventDefault();dropZone.classList.remove('drag-over');
+  addFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change',function(){addFiles(fileInput.files);fileInput.value='';});
+
+function addFiles(files){
+  for(var i=0;i<files.length;i++){
+    if(files[i].type!=='application/pdf')continue;
+    // Skip duplicates
+    if(selectedFiles.some(function(f){return f.name===files[i].name;}))continue;
+    selectedFiles.push(files[i]);
+  }
+  renderFileList();
+  document.getElementById('analyze-btn').disabled=selectedFiles.length===0;
+}
+
+function removeFile(idx){
+  selectedFiles.splice(idx,1);
+  renderFileList();
+  document.getElementById('analyze-btn').disabled=selectedFiles.length===0;
+}
+
+function renderFileList(){
+  var list=document.getElementById('file-list');
+  if(!selectedFiles.length){list.innerHTML='';return;}
+  var html='';
+  selectedFiles.forEach(function(f,i){
+    var type=detectType(f.name);
+    var status=f._status||'pending';
+    var cls=status==='done'?'done':status==='error'?'error':status==='processing'?'processing':'';
+    var icon=status==='done'?'&#9989;':status==='error'?'&#10060;':status==='processing'?'&#9203;':'&#128196;';
+    var statusText=status==='done'?(f._items||0)+' items extracted':status==='error'?'Error: '+(f._error||'Unknown'):status==='processing'?'Analyzing...':'Ready';
+
+    html+='<div class="file-row '+cls+'">';
+    html+='<div class="file-icon">'+icon+'</div>';
+    html+='<div class="file-info"><div class="file-name">'+f.name+'</div><div class="file-status">'+statusText+'</div></div>';
+    if(status==='pending'){
+      html+='<div class="file-type"><select onchange="selectedFiles['+i+']._type=this.value">';
+      html+='<option value="">Auto-detect</option>';
+      ['council','fire','electrical','hydraulic','mechanical','structural','architectural','acoustic','seismic'].forEach(function(t){
+        html+='<option value="'+t+'"'+(type===t?' selected':'')+'>'+t.charAt(0).toUpperCase()+t.slice(1)+'</option>';
+      });
+      html+='</select></div>';
+      html+='<button class="file-remove" onclick="removeFile('+i+')">&#10005;</button>';
+    }
+    if(status==='done'){
+      html+='<div class="file-items">'+f._outcome+'</div>';
+    }
+    html+='</div>';
+  });
+  list.innerHTML=html;
+}
+
+async function startAnalysis(){
+  var btn=document.getElementById('analyze-btn');
+  btn.disabled=true;btn.textContent='Analyzing...';
+  var bar=document.getElementById('progress-bar');bar.style.display='block';
+  var fill=document.getElementById('progress-fill');
+  var msg=document.getElementById('status-msg');msg.style.display='block';
+  results=[];
+  var totalItems=0;
+  var failCount=0;
+  var typeCounts={};
+
+  for(var i=0;i<selectedFiles.length;i++){
+    var f=selectedFiles[i];
+    f._status='processing';
+    renderFileList();
+    fill.style.width=((i/selectedFiles.length)*100)+'%';
+    msg.textContent='Analyzing report '+(i+1)+' of '+selectedFiles.length+'... '+f.name;
+
+    try{
+      var formData=new FormData();
+      formData.append('file',f);
+      formData.append('company_id',companyId);
+      if(projectId)formData.append('project_id',projectId);
+      var type=f._type||detectType(f.name);
+      if(type)formData.append('inspection_type',type);
+
+      var resp=await fetch('/api/analyze-reports',{method:'POST',body:formData});
+      var data=await resp.json();
+
+      if(data.success){
+        f._status='done';
+        f._items=data.total_items;
+        f._outcome=data.outcome;
+        totalItems+=data.total_items;
+        if(data.outcome==='fail'||data.outcome==='partial')failCount++;
+        var t=data.inspection_type||type||'other';
+        typeCounts[t]=(typeCounts[t]||0)+1;
+        results.push(data);
+      }else{
+        f._status='error';
+        f._error=data.error||'Analysis failed';
+      }
+    }catch(err){
+      f._status='error';
+      f._error=err.message||'Network error';
+    }
+    renderFileList();
+
+    // Small delay between requests
+    if(i<selectedFiles.length-1)await new Promise(function(r){setTimeout(r,500);});
+  }
+
+  fill.style.width='100%';
+  msg.style.display='none';
+  bar.style.display='none';
+
+  // Show summary
+  var doneCount=selectedFiles.filter(function(f){return f._status==='done';}).length;
+  document.getElementById('sum-files').textContent=doneCount;
+  document.getElementById('sum-items').textContent=totalItems;
+  var failRate=doneCount>0?Math.round((failCount/doneCount)*100):0;
+  document.getElementById('sum-fail').textContent=failRate+'%';
+
+  var typesHtml='';
+  Object.keys(typeCounts).sort().forEach(function(t){
+    typesHtml+='<div class="summary-type-row"><span>'+t.charAt(0).toUpperCase()+t.slice(1)+'</span><span>'+typeCounts[t]+' reports</span></div>';
+  });
+  document.getElementById('summary-types').innerHTML=typesHtml;
+  document.getElementById('summary-card').style.display='block';
+  document.getElementById('upload-card').style.display='none';
+}
+</script>
+</body>
+</html>
