@@ -3704,13 +3704,14 @@ async function saveCalEvent(){
       }).eq('id',calEditKey);
     }else{
       // Insert new event into Supabase
-      await soterraDb.from('calendar_events').insert({
+      var{error:calErr}=await soterraDb.from('calendar_events').insert({
         project_id:currentSite,
         title:title,type:type,note:note,
         event_date:datePart,
         assignee:assignee,assignee_email:assigneeEmail,reminder:reminder,
         created_by:soterraUser?soterraUser.id:null
       });
+      if(calErr)console.error('Calendar save error:',calErr.message);
     }
     // Reload events from database
     await loadCalendarEvents();
