@@ -2743,6 +2743,8 @@ var soterraDb=null;
 var soterraUser=null;
 var soterraProfile=null;
 var isLiveData=false;
+var companyItems=[];
+var companyIntelligence=null;
 try{soterraDb=window.supabase?window.supabase.createClient(SOTERRA_SB_URL,SOTERRA_SB_KEY):null;}catch(e){}
 
 /* ── LOAD REAL DATA FROM SUPABASE ──────────────────── */
@@ -2757,6 +2759,10 @@ async function loadFromSupabase(){
     var{data:profile}=await soterraDb.from('profiles').select('*,companies(name,join_code)').eq('id',soterraUser.id).single();
     if(!profile||!profile.company_id)return false;
     soterraProfile=profile;
+
+    // Load company-level inspection intelligence (The Brain)
+    companyItems=await loadInspectionItems(profile.company_id);
+    companyIntelligence=computeCompanyIntelligence(companyItems);
 
     // Load all projects for this company
     var{data:projects}=await soterraDb.from('projects').select('*').eq('company_id',profile.company_id);
@@ -2780,7 +2786,7 @@ async function loadFromSupabase(){
     var newSiteData={};
     projects.forEach(function(proj){
       var projInsps=inspections.filter(function(i){return i.project_id===proj.id;});
-      newSiteData[proj.id]=transformProjectToSiteData(proj,projInsps,issueCountMap);
+      newSiteData[proj.id]=transformProjectToSiteData(proj,projInsps,issueCountMap,companyIntelligence);
     });
 
     // Replace siteData
@@ -2800,7 +2806,176 @@ async function loadFromSupabase(){
   }
 }
 
-function transformProjectToSiteData(project,inspections,issueCountMap){
+/* ── THE BRAIN: load & aggregate company inspection intelligence ── */
+
+async function loadInspectionItems(companyId){
+  try{
+    var{data,error}=await soterraDb.from('inspection_items').select('*').eq('company_id',companyId).order('inspection_date',{ascending:false});
+    if(error||!data)return[];
+    return data;
+  }catch(e){
+    console.error('inspection_items load error:',e);
+    return[];
+  }
+}
+
+function computeCompanyIntelligence(items){
+  if(!items||items.length===0){
+    return{
+      hasData:false,totalItems:0,totalInspections:0,
+      companyFailRate:0,companyIPI:'0',
+      typeCounts:{},riskItemsByType:null,
+      rootCauses:[],riskAreas:[],patterns:[],
+      monthlyTrend:[0,0,0,0,0,0,0,0,0,0,0,0]
+    };
+  }
+
+  var FAIL_OUTCOMES=['fail','partial'];
+  function isFail(it){return FAIL_OUTCOMES.indexOf((it.outcome||'').toLowerCase())>-1;}
+  function inspectionKey(it){return(it.inspection_date||'')+'|'+(it.source_filename||'')+'|'+(it.inspection_type||'');}
+  function normalizeItemTitle(t){return(t||'Unspecified').trim().replace(/\s+/g,' ');}
+  function capitalize(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+
+  // Build inspection map (key = one uploaded report)
+  var inspMap={};
+  items.forEach(function(it){
+    var k=inspectionKey(it);
+    if(!inspMap[k])inspMap[k]={anyFail:false,date:it.inspection_date,type:it.inspection_type};
+    if(isFail(it))inspMap[k].anyFail=true;
+  });
+  var inspKeys=Object.keys(inspMap);
+  var totalInspections=inspKeys.length;
+  var failedInspections=inspKeys.filter(function(k){return inspMap[k].anyFail;}).length;
+  var failItems=items.filter(isFail);
+  var companyFailRate=totalInspections?Math.round(failedInspections/totalInspections*100):0;
+  var companyIPI=totalInspections?(failItems.length/totalInspections).toFixed(1):'0';
+
+  // Type counts
+  var typeCounts={};
+  items.forEach(function(it){
+    var t=(it.inspection_type||'other').toLowerCase();
+    typeCounts[t]=(typeCounts[t]||0)+1;
+  });
+
+  // Build risk items per type
+  function buildRiskForType(type){
+    var typeItems=items.filter(function(it){return(it.inspection_type||'').toLowerCase()===type&&isFail(it);});
+    var totalFailItems=typeItems.length;
+    var typeInspKeys={};
+    items.forEach(function(it){
+      if((it.inspection_type||'').toLowerCase()===type)typeInspKeys[inspectionKey(it)]=true;
+    });
+    var typeInspCount=Object.keys(typeInspKeys).length;
+
+    var groups={};
+    typeItems.forEach(function(it){
+      var key=normalizeItemTitle(it.item_title);
+      if(!groups[key])groups[key]={count:0,inspKeys:{}};
+      groups[key].count++;
+      groups[key].inspKeys[inspectionKey(it)]=true;
+    });
+
+    var arr=Object.keys(groups).map(function(k){
+      var g=groups[k];
+      var pct=totalFailItems?Math.round(g.count/totalFailItems*100):0;
+      var recurPct=typeInspCount?Math.round(Object.keys(g.inspKeys).length/typeInspCount*100):0;
+      return{
+        issue:k,count:g.count,pct:pct+'%',
+        recur:recurPct+'%',
+        recurColor:recurPct>=50?'#EF4444':recurPct>=30?'#F59E0B':'#10B981'
+      };
+    }).sort(function(a,b){return b.count-a.count;}).slice(0,10);
+
+    return{
+      title:capitalize(type)+' — recurring failure items',
+      sub:'Based on '+typeInspCount+' '+type+' inspection'+(typeInspCount===1?'':'s')+' across your company',
+      items:arr
+    };
+  }
+
+  var riskItemsByType={
+    hydraulic:buildRiskForType('hydraulic'),
+    fire:buildRiskForType('fire'),
+    structural:buildRiskForType('structural'),
+    electrical:buildRiskForType('electrical')
+  };
+
+  // Root causes: top item_titles among fails
+  var titleCounts={};
+  failItems.forEach(function(it){
+    var k=normalizeItemTitle(it.item_title);
+    titleCounts[k]=(titleCounts[k]||0)+1;
+  });
+  var rootCauses=Object.keys(titleCounts).sort(function(a,b){return titleCounts[b]-titleCounts[a];}).slice(0,5);
+
+  // Risk areas: top locations among fails
+  var locCounts={};
+  failItems.forEach(function(it){
+    if(!it.location||!it.location.trim())return;
+    var k=it.location.trim();
+    locCounts[k]=(locCounts[k]||0)+1;
+  });
+  var riskAreas=Object.keys(locCounts).sort(function(a,b){return locCounts[b]-locCounts[a];}).slice(0,5);
+
+  // Patterns: top failing titles with trend
+  var now=new Date();
+  var cutoff=new Date(now.getFullYear(),now.getMonth()-3,1);
+  function computeTrend(title){
+    var recent=0,prior=0;
+    failItems.forEach(function(it){
+      if(normalizeItemTitle(it.item_title)!==title)return;
+      var d=it.inspection_date?new Date(it.inspection_date):null;
+      if(!d||isNaN(d))return;
+      if(d>=cutoff)recent++;else prior++;
+    });
+    if(recent>prior*1.25)return{trend:'↑ Increasing',trendColor:'#EF4444'};
+    if(recent<prior*0.75&&prior>0)return{trend:'↓ Improving',trendColor:'#10B981'};
+    return{trend:'→ Stable',trendColor:'#F59E0B'};
+  }
+  var patterns=Object.keys(titleCounts).sort(function(a,b){return titleCounts[b]-titleCounts[a];}).slice(0,8).map(function(title){
+    var c=titleCounts[title];
+    var pct=totalInspections?Math.round(c/totalInspections*100):0;
+    var tr=computeTrend(title);
+    return{issue:title,pct:pct+'%',trend:tr.trend,trendColor:tr.trendColor};
+  });
+
+  // Monthly trend (12 months, oldest → newest)
+  var months=[];
+  for(var i=11;i>=0;i--){
+    var m=new Date(now.getFullYear(),now.getMonth()-i,1);
+    months.push({y:m.getFullYear(),m:m.getMonth(),total:0,failed:0});
+  }
+  inspKeys.forEach(function(k){
+    var info=inspMap[k];
+    if(!info.date)return;
+    var d=new Date(info.date);
+    if(isNaN(d))return;
+    var b=null;
+    for(var j=0;j<months.length;j++){
+      if(months[j].y===d.getFullYear()&&months[j].m===d.getMonth()){b=months[j];break;}
+    }
+    if(!b)return;
+    b.total++;
+    if(info.anyFail)b.failed++;
+  });
+  var monthlyTrend=months.map(function(mo){return mo.total?Math.round(mo.failed/mo.total*100):0;});
+
+  return{
+    hasData:true,
+    totalItems:items.length,
+    totalInspections:totalInspections,
+    companyFailRate:companyFailRate,
+    companyIPI:companyIPI,
+    typeCounts:typeCounts,
+    riskItemsByType:riskItemsByType,
+    rootCauses:rootCauses,
+    riskAreas:riskAreas,
+    patterns:patterns,
+    monthlyTrend:monthlyTrend
+  };
+}
+
+function transformProjectToSiteData(project,inspections,issueCountMap,companyIntel){
   issueCountMap=issueCountMap||{};
   // Sort inspections by task_id (program order) — this preserves the PM's intended sequence
   inspections.sort(function(a,b){
@@ -2907,35 +3082,73 @@ function transformProjectToSiteData(project,inspections,issueCountMap){
     };
   });
 
+  var projectIPI=totalDone>0?parseFloat((totalFailed/Math.max(totalDone,1)).toFixed(1)):0;
+  var overdueCount=inspections.filter(function(i){
+    if(i.status!=='failed')return false;
+    var d=i.start_date?new Date(i.start_date):null;
+    return d&&(new Date()-d)/86400000>14;
+  }).length;
+
+  // Build "vs company" comparison from companyIntel
+  function vsBadge(projVal,compVal,higherIsWorse,suffix){
+    suffix=suffix||'';
+    if(compVal==null||isNaN(compVal))return{badge:'—',badgeClass:'badge-neutral',avg:'—'};
+    var diff=projVal-compVal;
+    var threshold=Math.max(Math.abs(compVal)*0.1,1);
+    if(Math.abs(diff)<threshold)return{badge:'On par',badgeClass:'badge-neutral',avg:compVal+suffix};
+    var worse=higherIsWorse?diff>0:diff<0;
+    return{
+      badge:worse?'Higher':'Lower',
+      badgeClass:worse?'badge-high':'badge-low',
+      avg:compVal+suffix
+    };
+  }
+
+  var hasCompanyData=companyIntel&&companyIntel.hasData;
+  var vsFail=hasCompanyData
+    ?vsBadge(failRate,companyIntel.companyFailRate,true,'%')
+    :{badge:'—',badgeClass:'badge-neutral',avg:'—'};
+  var vsIPI=hasCompanyData
+    ?vsBadge(projectIPI,parseFloat(companyIntel.companyIPI),true,'')
+    :{badge:'—',badgeClass:'badge-neutral',avg:'—'};
+
+  // Default trend data (placeholder when no company data)
+  var defaultTrend=[50,48,46,44,42,40,38,failRate,failRate,failRate,failRate,failRate];
+  var useCompanyTrend=hasCompanyData&&companyIntel.monthlyTrend.some(function(n){return n>0;});
+
+  // Default insights (empty state)
+  var defaultInsights={
+    rootCauses:['Upload historical reports via admin-setup.html to see company intelligence'],
+    riskAreas:['Upload historical reports via admin-setup.html to see company intelligence'],
+    patterns:[]
+  };
+
   return{
     name:project.name,
     kpi:{
       insp:totalDone,
       fail:failRate+'%',
       failColor:failRate>45?'#EF4444':failRate>30?'#F59E0B':'#10B981',
-      ipi:totalDone>0?(totalFailed/Math.max(totalDone,1)).toFixed(1):'0',
+      ipi:projectIPI.toFixed(1),
       open:openIssues,
-      overdue:inspections.filter(function(i){
-        if(i.status!=='failed')return false;
-        var d=i.start_date?new Date(i.start_date):null;
-        return d&&(new Date()-d)/86400000>14;
-      }).length
+      overdue:overdueCount
     },
-    trendData:[50,48,46,44,42,40,38,failRate,failRate,failRate,failRate,failRate],
+    trendData:useCompanyTrend?companyIntel.monthlyTrend:defaultTrend,
     vs:{
-      fail:{val:failRate+'%',color:failRate>45?'#EF4444':'#F59E0B',avg:'—',badge:'—',badgeClass:'badge-neutral'},
-      ipi:{val:'—',color:'#4A6080',avg:'—',badge:'—',badgeClass:'badge-neutral'},
-      overdue:{val:'0',color:'#10B981',avg:'—',badge:'—',badgeClass:'badge-neutral'}
+      fail:{val:failRate+'%',color:failRate>45?'#EF4444':'#F59E0B',avg:vsFail.avg,badge:vsFail.badge,badgeClass:vsFail.badgeClass},
+      ipi:{val:projectIPI.toFixed(1),color:'#4A6080',avg:vsIPI.avg,badge:vsIPI.badge,badgeClass:vsIPI.badgeClass},
+      overdue:{val:String(overdueCount),color:overdueCount>0?'#EF4444':'#10B981',avg:'—',badge:'—',badgeClass:'badge-neutral'}
     },
     stats:{open:openIssues,ready:readyCount,closed:passedCount},
     issues:issues,
     reports:reports,
     calGrid:calGrid,
-    insights:{
-      rootCauses:['Data loading — patterns will build over time','Upload more inspection reports to generate insights'],
-      riskAreas:['Data loading — risk areas will appear as more inspections are recorded'],
-      patterns:[]
-    }
+    insights:hasCompanyData?{
+      rootCauses:companyIntel.rootCauses.length?companyIntel.rootCauses:['No failure patterns detected yet — more reports needed'],
+      riskAreas:companyIntel.riskAreas.length?companyIntel.riskAreas:['Location data will populate as more reports are uploaded'],
+      patterns:companyIntel.patterns
+    }:defaultInsights,
+    riskItemsData:hasCompanyData&&companyIntel.riskItemsByType?companyIntel.riskItemsByType:null
   };
 }
 
@@ -3216,6 +3429,9 @@ var currentSite='harbor';
 function switchSite(siteKey){
   currentSite=siteKey;
   var d=siteData[siteKey];
+  // Swap global riskItemsData to this project's company-level intelligence
+  // If no real data exists, fall back to demo data (dashboard still looks populated)
+  riskItemsData=(d&&d.riskItemsData)?d.riskItemsData:riskItemsDataDemo;
   // Update all page titles
   document.getElementById('st-tracker-title').textContent='Live tracker — '+d.name;
   document.getElementById('st-risk-title').textContent='Upcoming inspection risk — '+d.name;
@@ -4294,7 +4510,9 @@ function initSiteTeam(){
 }
 
 /* ── RISK ITEMS DATA ──────────────────────────────────── */
-var riskItemsData={
+/* riskItemsDataDemo is the hardcoded fallback used when no company data exists.
+   The live riskItemsData is swapped per-project in switchSite() based on The Brain's data. */
+var riskItemsDataDemo={
   hydraulic:{
     title:'Hydraulic — recurring failure items',
     sub:'Based on 73 hydraulic inspections across 7 projects (2021–2024)',
@@ -4349,6 +4567,9 @@ var riskItemsData={
   }
 };
 
+// Live riskItemsData — defaults to demo, swapped in switchSite() when real data exists
+var riskItemsData=riskItemsDataDemo;
+
 function renderRiskItems(typeKey,titleId,subId,bodyId,moreId,toggleId){
   var data=riskItemsData[typeKey];
   document.getElementById(titleId).innerHTML=data.title;
@@ -4360,6 +4581,13 @@ function renderRiskItems(typeKey,titleId,subId,bodyId,moreId,toggleId){
       +'<td>'+it.pct+'</td>'
       +'<td style="color:'+it.recurColor+';font-weight:500">'+it.recur+'</td>'
       +'</tr>';
+  }
+  // Empty-state: if no items, show a placeholder row
+  if(!data.items||data.items.length===0){
+    document.getElementById(bodyId).innerHTML='<tr><td colspan="4" style="text-align:center;color:#999;padding:14px">No data yet — upload reports for this inspection type</td></tr>';
+    if(document.getElementById(moreId))document.getElementById(moreId).innerHTML='';
+    if(document.getElementById(toggleId))document.getElementById(toggleId).textContent='';
+    return;
   }
   var allRows=data.items.slice(0,3).map(function(it){return row(it,false);})
     .concat(data.items.slice(3).map(function(it){return row(it,true);}));
