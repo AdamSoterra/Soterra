@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soterra — Company Onboarding</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--font:'DM Sans',system-ui,sans-serif;--blue:#0E74BD;--navy:#0A2540;--slate:#4A6080;--bg:#F0F7FF;--card:#fff;--border:rgba(0,0,0,.08);--green:#10B981;--red:#EF4444;--amber:#F59E0B}
+body{font-family:var(--font);background:var(--bg);color:var(--navy);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(rgba(14,116,189,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(14,116,189,.05) 1px,transparent 1px);background-size:44px 44px;z-index:0}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse 70% 50% at 50% -10%,rgba(56,189,248,.12) 0%,transparent 60%);z-index:0}
+
+.shell{position:relative;z-index:1;width:100%;max-width:620px;padding:24px}
+.header{text-align:center;margin-bottom:32px}
+.logo{font-size:24px;font-weight:700;color:var(--blue);margin-bottom:4px}
+.logo span{color:var(--navy)}
+.header-sub{font-size:12px;color:var(--slate);margin-top:4px}
+
+.progress-wrap{display:flex;align-items:center;gap:8px;margin-bottom:28px}
+.progress-step{flex:1;height:4px;background:rgba(14,116,189,.1);border-radius:2px;overflow:hidden;transition:all .3s}
+.progress-step.active{background:var(--blue)}
+.progress-step.done{background:var(--green)}
+.progress-label{font-size:11px;color:var(--slate);text-align:center;margin-top:6px}
+
+.card{background:var(--card);border-radius:16px;border:1px solid var(--border);box-shadow:0 8px 30px rgba(0,0,0,.06);padding:32px;animation:fadeUp .4s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+.step{display:none}.step.active{display:block}
+
+.step-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--blue);background:rgba(14,116,189,.08);padding:4px 12px;border-radius:4px;margin-bottom:16px}
+.step-title{font-size:22px;font-weight:600;color:var(--navy);margin-bottom:6px}
+.step-sub{font-size:13px;color:var(--slate);margin-bottom:24px;line-height:1.6}
+
+.field{margin-bottom:16px}
+.field-label{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--slate);margin-bottom:5px}
+.field-input{width:100%;height:42px;border:1.5px solid rgba(0,0,0,.12);border-radius:8px;padding:0 14px;font-size:14px;font-family:var(--font);color:var(--navy);outline:none;transition:border-color .15s}
+.field-input:focus{border-color:var(--blue)}
+
+.btn-row{display:flex;gap:10px;margin-top:24px;justify-content:flex-end}
+.btn{height:44px;padding:0 24px;border-radius:9px;font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px;border:none}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:#0A5C97;transform:translateY(-1px)}
+.btn-primary:disabled{background:#ccc;cursor:not-allowed;transform:none}
+.btn-secondary{background:transparent;color:var(--slate);border:1.5px solid rgba(0,0,0,.12)}
+
+.upload-zone{border:2.5px dashed rgba(14,116,189,.2);border-radius:14px;padding:40px 20px;text-align:center;cursor:pointer;transition:all .2s;background:rgba(14,116,189,.02)}
+.upload-zone:hover,.upload-zone.drag-over{border-color:var(--blue);background:rgba(14,116,189,.05)}
+.upload-icon{font-size:36px;margin-bottom:8px;opacity:.4}
+.upload-title{font-size:15px;font-weight:600;color:var(--navy);margin-bottom:4px}
+.upload-sub{font-size:12px;color:var(--slate)}
+
+.file-list{margin-top:20px;max-height:300px;overflow-y:auto}
+.file-row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(14,116,189,.03);border:1.5px solid rgba(14,116,189,.1);border-radius:10px;margin-bottom:6px;transition:all .2s}
+.file-row.processing{border-color:var(--blue);background:rgba(14,116,189,.06)}
+.file-row.done{border-color:var(--green);background:rgba(16,185,129,.04)}
+.file-row.error{border-color:var(--red);background:rgba(239,68,68,.04)}
+.file-icon{font-size:16px;flex-shrink:0}
+.file-info{flex:1;min-width:0}
+.file-name{font-size:12px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-status{font-size:10px;color:var(--slate);margin-top:1px}
+.file-type select{height:28px;border:1px solid rgba(0,0,0,.12);border-radius:6px;padding:0 6px;font-size:11px;font-family:var(--font);color:var(--navy);background:#fff}
+.file-remove{width:24px;height:24px;border:none;background:rgba(0,0,0,.05);border-radius:6px;cursor:pointer;font-size:12px;color:#999;display:flex;align-items:center;justify-content:center}
+.file-remove:hover{background:rgba(239,68,68,.1);color:var(--red)}
+
+.progress-bar{height:6px;background:rgba(14,116,189,.1);border-radius:3px;margin:20px 0;overflow:hidden;display:none}
+.progress-fill{height:100%;background:var(--blue);border-radius:3px;transition:width .3s;width:0%}
+.status-msg{text-align:center;padding:12px;font-size:13px;font-weight:500;color:var(--blue);display:none}
+
+.summary-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}
+.summary-stat{text-align:center;padding:18px;background:rgba(14,116,189,.03);border-radius:12px}
+.summary-val{font-size:28px;font-weight:700;color:var(--blue)}
+.summary-label{font-size:11px;color:var(--slate);margin-top:4px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+
+.join-code-box{text-align:center;padding:24px;background:rgba(14,116,189,.04);border:2px solid rgba(14,116,189,.15);border-radius:14px;margin:20px 0}
+.join-code-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--slate);margin-bottom:8px}
+.join-code{font-size:36px;font-weight:700;letter-spacing:.15em;color:var(--blue);font-family:monospace}
+.join-code-copy{margin-top:12px}
+.join-code-copy button{height:32px;padding:0 16px;border:1.5px solid rgba(14,116,189,.2);border-radius:6px;background:transparent;color:var(--blue);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font)}
+.join-code-copy button:hover{background:rgba(14,116,189,.05)}
+
+.success-icon{width:64px;height:64px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px}
+
+.summary-types{margin-top:16px}
+.summary-type-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.05);font-size:13px}
+.summary-type-row:last-child{border-bottom:none}
+
+.msg{padding:10px 14px;border-radius:8px;font-size:12px;margin-top:12px;display:none}
+.msg-error{background:#FEE2E2;color:#991B1B;display:block}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <div class="header">
+    <div class="logo">S<span>oterra</span></div>
+    <div class="header-sub">Company Onboarding — Admin</div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-step active" id="prog-1"></div>
+    <div class="progress-step" id="prog-2"></div>
+    <div class="progress-step" id="prog-3"></div>
+  </div>
+  <div class="progress-label" id="progress-label">Step 1 of 3</div>
+
+  <!-- ═══ STEP 1: CREATE COMPANY ═══ -->
+  <div class="step active" id="step-1">
+    <div class="card">
+      <div class="step-tag">Step 1</div>
+      <div class="step-title">Create company</div>
+      <div class="step-sub">Set up a new company in Soterra. Their team will use the join code to connect.</div>
+
+      <div class="field">
+        <div class="field-label">Company name</div>
+        <input class="field-input" id="company-name" placeholder="e.g. Apex Construction Ltd">
+      </div>
+
+      <div id="step1-msg" class="msg"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="createCompany()">Create company &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ STEP 2: UPLOAD REPORTS ═══ -->
+  <div class="step" id="step-2">
+    <div class="card">
+      <div class="step-tag">Step 2</div>
+      <div class="step-title">Upload inspection reports</div>
+      <div class="step-sub">Upload historical inspection reports (up to 5 projects worth). Soterra will analyze each one and build the company's intelligence baseline.</div>
+
+      <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <div class="upload-icon">&#128196;</div>
+        <div class="upload-title">Drop PDF files here or click to browse</div>
+        <div class="upload-sub">Council reports, consultant advice notices, engineer reports</div>
+      </div>
+      <input type="file" id="file-input" multiple accept=".pdf" style="display:none">
+
+      <div class="file-list" id="file-list"></div>
+
+      <div class="progress-bar" id="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="status-msg" id="status-msg"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="skipUpload()">Skip for now</button>
+        <button class="btn btn-primary" id="analyze-btn" onclick="startAnalysis()" disabled>Analyze reports &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ STEP 3: COMPLETE ═══ -->
+  <div class="step" id="step-3">
+    <div class="card">
+      <div class="success-icon">&#10003;</div>
+      <div class="step-tag">Complete</div>
+      <div class="step-title" style="text-align:center" id="complete-title">Company ready</div>
+      <div class="step-sub" style="text-align:center" id="complete-sub">The company has been set up and their inspection intelligence is ready.</div>
+
+      <div class="summary-grid" id="summary-grid" style="display:none">
+        <div class="summary-stat">
+          <div class="summary-val" id="sum-files">0</div>
+          <div class="summary-label">Reports</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-val" id="sum-items">0</div>
+          <div class="summary-label">Items extracted</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-val" id="sum-types">0</div>
+          <div class="summary-label">Inspection types</div>
+        </div>
+      </div>
+
+      <div class="summary-types" id="summary-types"></div>
+
+      <div class="join-code-box">
+        <div class="join-code-label">Company join code</div>
+        <div class="join-code" id="join-code-display">------</div>
+        <div class="join-code-copy">
+          <button onclick="copyJoinCode()">Copy code</button>
+        </div>
+      </div>
+
+      <div style="text-align:center;font-size:12px;color:var(--slate);margin-top:8px">
+        Share this code with the company's PMs. They'll use it when creating their account to connect to this company.
+      </div>
+
+      <div class="btn-row" style="justify-content:center;margin-top:24px">
+        <button class="btn btn-secondary" onclick="window.location='admin-setup.html'">Set up another company</button>
+        <button class="btn btn-primary" onclick="window.location='Soterra.html'">Go to dashboard</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var SUPABASE_URL='https://pffwyxygovfswchxlxun.supabase.co';
+var SUPABASE_KEY='sb_publishable_HbvNAWlqxpiFYDZDcORntg_q2uu4Ooy';
+var soterraDb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+var companyId='';
+var joinCode='';
+var selectedFiles=[];
+
+// Auth check
+async function init(){
+  var{data:{session}}=await soterraDb.auth.getSession();
+  if(!session){
+    // Show inline login for admin
+    document.getElementById('step-1').innerHTML='<div class="card"><div class="step-tag">Admin Login</div><div class="step-title">Sign in</div><div class="step-sub">Sign in with your Soterra admin account.</div><div class="field"><div class="field-label">Email</div><input class="field-input" id="admin-email" type="email" placeholder="Email"></div><div class="field"><div class="field-label">Password</div><input class="field-input" id="admin-pass" type="password" placeholder="Password"></div><div id="login-err" class="msg"></div><div class="btn-row"><button class="btn btn-primary" onclick="adminLogin()">Sign in</button></div></div>';
+  }
+}
+init();
+
+async function adminLogin(){
+  var email=document.getElementById('admin-email').value.trim();
+  var pass=document.getElementById('admin-pass').value;
+  var{error}=await soterraDb.auth.signInWithPassword({email:email,password:pass});
+  if(error){
+    var el=document.getElementById('login-err');
+    el.textContent=error.message;el.className='msg msg-error';
+    return;
+  }
+  // Reload to show step 1
+  location.reload();
+}
+
+// Step navigation
+function goStep(n){
+  document.querySelectorAll('.step').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('step-'+n).classList.add('active');
+  for(var i=1;i<=3;i++){
+    var p=document.getElementById('prog-'+i);
+    p.className='progress-step'+(i<n?' done':'')+(i===n?' active':'');
+  }
+  document.getElementById('progress-label').textContent='Step '+n+' of 3';
+}
+
+// Step 1: Create company
+async function createCompany(){
+  var name=document.getElementById('company-name').value.trim();
+  if(!name){
+    var el=document.getElementById('step1-msg');
+    el.textContent='Please enter a company name.';el.className='msg msg-error';
+    return;
+  }
+
+  // Generate join code
+  var chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  joinCode='';
+  for(var i=0;i<6;i++)joinCode+=chars.charAt(Math.floor(Math.random()*chars.length));
+
+  // Create company in Supabase
+  var{data:company,error}=await soterraDb.from('companies').insert({name:name,join_code:joinCode}).select().single();
+  if(error){
+    var el=document.getElementById('step1-msg');
+    el.textContent='Error: '+error.message;el.className='msg msg-error';
+    return;
+  }
+  companyId=company.id;
+  goStep(2);
+}
+
+// Type detection
+function detectType(filename){
+  var fn=filename.toLowerCase();
+  if(/fire|canf|passive/.test(fn))return 'fire';
+  if(/electri|building services/.test(fn))return 'electrical';
+  if(/hydraul|plumb|drain|site visit report/.test(fn))return 'hydraulic';
+  if(/mechani|hvac/.test(fn))return 'mechanical';
+  if(/structur/.test(fn))return 'structural';
+  if(/architect|sor |site observation|facade|façade/.test(fn))return 'architectural';
+  if(/acousti|cpr/.test(fn))return 'acoustic';
+  if(/seism/.test(fn))return 'seismic';
+  if(/bco|council|consentium|_ipl|_ipp|_ipb|_ime/.test(fn))return 'council';
+  return '';
+}
+
+// File handling
+var dropZone,fileInput;
+window.addEventListener('DOMContentLoaded',function(){
+  dropZone=document.getElementById('drop-zone');
+  fileInput=document.getElementById('file-input');
+  dropZone.addEventListener('dragover',function(e){e.preventDefault();dropZone.classList.add('drag-over');});
+  dropZone.addEventListener('dragleave',function(){dropZone.classList.remove('drag-over');});
+  dropZone.addEventListener('drop',function(e){e.preventDefault();dropZone.classList.remove('drag-over');addFiles(e.dataTransfer.files);});
+  fileInput.addEventListener('change',function(){addFiles(fileInput.files);fileInput.value='';});
+});
+
+function addFiles(files){
+  for(var i=0;i<files.length;i++){
+    if(files[i].type!=='application/pdf')continue;
+    if(selectedFiles.some(function(f){return f.name===files[i].name;}))continue;
+    selectedFiles.push(files[i]);
+  }
+  renderFileList();
+  document.getElementById('analyze-btn').disabled=selectedFiles.length===0;
+}
+
+function removeFile(idx){
+  selectedFiles.splice(idx,1);
+  renderFileList();
+  document.getElementById('analyze-btn').disabled=selectedFiles.length===0;
+}
+
+function renderFileList(){
+  var list=document.getElementById('file-list');
+  if(!selectedFiles.length){list.innerHTML='';return;}
+  var html='';
+  selectedFiles.forEach(function(f,i){
+    var type=f._type||detectType(f.name);
+    var status=f._status||'pending';
+    var cls=status==='done'?'done':status==='error'?'error':status==='processing'?'processing':'';
+    var icon=status==='done'?'&#9989;':status==='error'?'&#10060;':status==='processing'?'&#9203;':'&#128196;';
+    var statusText=status==='done'?(f._items||0)+' items extracted':status==='error'?'Error: '+(f._error||'Unknown'):status==='processing'?'Analyzing...':'Ready';
+    html+='<div class="file-row '+cls+'">';
+    html+='<div class="file-icon">'+icon+'</div>';
+    html+='<div class="file-info"><div class="file-name">'+f.name+'</div><div class="file-status">'+statusText+'</div></div>';
+    if(status==='pending'){
+      html+='<div class="file-type"><select onchange="selectedFiles['+i+']._type=this.value">';
+      html+='<option value="">Auto-detect</option>';
+      ['council','fire','electrical','hydraulic','mechanical','structural','architectural','acoustic','seismic'].forEach(function(t){
+        html+='<option value="'+t+'"'+(type===t?' selected':'')+'>'+t.charAt(0).toUpperCase()+t.slice(1)+'</option>';
+      });
+      html+='</select></div>';
+      html+='<button class="file-remove" onclick="removeFile('+i+')">&#10005;</button>';
+    }
+    html+='</div>';
+  });
+  list.innerHTML=html;
+}
+
+// Analysis
+async function startAnalysis(){
+  var btn=document.getElementById('analyze-btn');
+  btn.disabled=true;btn.textContent='Analyzing...';
+  var bar=document.getElementById('progress-bar');bar.style.display='block';
+  var fill=document.getElementById('progress-fill');
+  var msg=document.getElementById('status-msg');msg.style.display='block';
+  var totalItems=0;
+  var typeCounts={};
+  var doneCount=0;
+
+  for(var i=0;i<selectedFiles.length;i++){
+    var f=selectedFiles[i];
+    f._status='processing';
+    renderFileList();
+    fill.style.width=((i/selectedFiles.length)*100)+'%';
+    msg.textContent='Analyzing report '+(i+1)+' of '+selectedFiles.length+'... '+f.name;
+
+    try{
+      var formData=new FormData();
+      formData.append('file',f);
+      formData.append('company_id',companyId);
+      var type=f._type||detectType(f.name);
+      if(type)formData.append('inspection_type',type);
+
+      var resp=await fetch('/api/analyze-reports',{method:'POST',body:formData});
+      var data=await resp.json();
+
+      if(data.success){
+        f._status='done';
+        f._items=data.total_items;
+        totalItems+=data.total_items;
+        doneCount++;
+        var t=data.inspection_type||type||'other';
+        typeCounts[t]=(typeCounts[t]||0)+1;
+      }else{
+        f._status='error';
+        f._error=data.error||'Analysis failed';
+      }
+    }catch(err){
+      f._status='error';
+      f._error=err.message||'Network error';
+    }
+    renderFileList();
+    if(i<selectedFiles.length-1)await new Promise(function(r){setTimeout(r,500);});
+  }
+
+  fill.style.width='100%';
+  msg.style.display='none';
+  bar.style.display='none';
+  showComplete(doneCount,totalItems,typeCounts);
+}
+
+function skipUpload(){
+  showComplete(0,0,{});
+}
+
+function showComplete(fileCount,itemCount,typeCounts){
+  if(fileCount>0){
+    document.getElementById('summary-grid').style.display='grid';
+    document.getElementById('sum-files').textContent=fileCount;
+    document.getElementById('sum-items').textContent=itemCount;
+    document.getElementById('sum-types').textContent=Object.keys(typeCounts).length;
+    var typesHtml='';
+    Object.keys(typeCounts).sort().forEach(function(t){
+      typesHtml+='<div class="summary-type-row"><span>'+t.charAt(0).toUpperCase()+t.slice(1)+'</span><span>'+typeCounts[t]+' reports</span></div>';
+    });
+    document.getElementById('summary-types').innerHTML=typesHtml;
+    document.getElementById('complete-sub').textContent='Inspection intelligence has been built from '+fileCount+' reports.';
+  }else{
+    document.getElementById('complete-sub').textContent='Company created. Upload historical reports later to build intelligence.';
+  }
+  document.getElementById('join-code-display').textContent=joinCode;
+  goStep(3);
+}
+
+function copyJoinCode(){
+  navigator.clipboard.writeText(joinCode).then(function(){
+    var btn=event.target;
+    btn.textContent='Copied!';
+    setTimeout(function(){btn.textContent='Copy code';},2000);
+  });
+}
+</script>
+</body>
+</html>
