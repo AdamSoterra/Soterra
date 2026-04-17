@@ -12,6 +12,10 @@
       "runtime": "@vercel/python@4.7.0",
       "maxDuration": 60
     },
+    "api/chat.py": {
+      "runtime": "@vercel/python@4.7.0",
+      "maxDuration": 30
+    },
     "api/send-reminders.py": {
       "runtime": "@vercel/python@4.7.0",
       "maxDuration": 30

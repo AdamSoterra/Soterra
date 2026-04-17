@@ -979,6 +979,37 @@ function tryLogin(){
 .sp-role.selected .sp-role-desc{color:#0A2540}
 .sp-role-check{color:rgba(14,116,189,.2);flex-shrink:0;transition:color .2s}
 .sp-role.selected .sp-role-check{color:#0E74BD}
+
+/* ── SOTERRA ASSISTANT CHAT WIDGET ── */
+#soterra-chat-bubble{position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#0E74BD 0%,#0A2540 100%);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 8px 28px rgba(14,116,189,.4);z-index:1100;transition:transform .15s,box-shadow .15s}
+#soterra-chat-bubble:hover{transform:scale(1.06);box-shadow:0 10px 32px rgba(14,116,189,.55)}
+#soterra-chat-panel{position:fixed;bottom:92px;right:24px;width:380px;max-width:calc(100vw - 48px);height:560px;max-height:calc(100vh - 120px);background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.25);z-index:1100;display:flex;flex-direction:column;overflow:hidden;font-family:'DM Sans',system-ui,sans-serif}
+.chat-header{background:linear-gradient(135deg,#0A2540 0%,#0E74BD 100%);padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.chat-logo{width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.15);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+.chat-close{background:none;border:none;color:rgba(255,255,255,.7);font-size:16px;cursor:pointer;width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center}
+.chat-close:hover{background:rgba(255,255,255,.1);color:#fff}
+.chat-disclaimer{padding:8px 14px;font-size:10px;color:#4A6080;background:#F0F7FF;line-height:1.4;border-bottom:.5px solid rgba(14,116,189,.12)}
+.chat-messages{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:#FAFBFC}
+.chat-msg{display:flex;gap:8px;max-width:88%;animation:chatFade .2s ease-out}
+@keyframes chatFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.chat-msg-bot{align-self:flex-start}
+.chat-msg-user{align-self:flex-end;flex-direction:row-reverse}
+.chat-bubble-icon{width:26px;height:26px;border-radius:8px;background:#0E74BD;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.chat-msg-user .chat-bubble-icon{background:#0A2540}
+.chat-bubble-text{padding:8px 12px;border-radius:12px;font-size:12.5px;line-height:1.55;color:#0A2540;white-space:pre-wrap;word-wrap:break-word}
+.chat-msg-bot .chat-bubble-text{background:#fff;border:.5px solid rgba(0,0,0,.08)}
+.chat-msg-user .chat-bubble-text{background:#0E74BD;color:#fff;border:none}
+.chat-typing{display:flex;gap:3px;padding:10px 12px;background:#fff;border:.5px solid rgba(0,0,0,.08);border-radius:12px;width:fit-content}
+.chat-typing span{width:6px;height:6px;border-radius:50%;background:#bfcfe2;animation:chatTyping 1.2s infinite}
+.chat-typing span:nth-child(2){animation-delay:.2s}
+.chat-typing span:nth-child(3){animation-delay:.4s}
+@keyframes chatTyping{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+.chat-input-row{display:flex;gap:8px;padding:10px 12px;border-top:.5px solid rgba(0,0,0,.08);background:#fff}
+#chat-input{flex:1;height:38px;border:1px solid rgba(0,0,0,.12);border-radius:8px;padding:0 12px;font-size:13px;font-family:'DM Sans',system-ui,sans-serif;color:#0A2540;outline:none}
+#chat-input:focus{border-color:#0E74BD}
+#chat-send-btn{height:38px;padding:0 16px;background:#0E74BD;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',system-ui,sans-serif}
+#chat-send-btn:hover{background:#0A5C97}
+#chat-send-btn:disabled{background:#ccc;cursor:not-allowed}
 </style>
 
 <!-- ═══ SEND TO SUB MODAL ════════════════════════════════ -->
@@ -1748,6 +1779,39 @@ function tryLogin(){
 
   </div><!-- /content -->
 </div><!-- /main -->
+
+<!-- ═══ SOTERRA ASSISTANT CHAT WIDGET ═══════════════════════ -->
+<div id="soterra-chat-bubble" onclick="toggleChat()" title="Ask Soterra Assistant">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+  </svg>
+</div>
+<div id="soterra-chat-panel" style="display:none">
+  <div class="chat-header">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="chat-logo">S</div>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#fff">Soterra Assistant</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.75)">Your construction intelligence guide</div>
+      </div>
+    </div>
+    <button onclick="toggleChat()" class="chat-close">✕</button>
+  </div>
+  <div class="chat-disclaimer">
+    Advisory only — cites your uploaded reports for company data. Always verify general construction knowledge against official codes (NZBC, NZS).
+  </div>
+  <div id="chat-messages" class="chat-messages">
+    <div class="chat-msg chat-msg-bot">
+      <div class="chat-bubble-icon">S</div>
+      <div class="chat-bubble-text">Kia ora! I'm Soterra Assistant. Ask me about your company's inspection patterns, specific issues in your projects, or general NZ construction practices. Try: <i>"What fails most often in our fire inspections?"</i></div>
+    </div>
+  </div>
+  <div class="chat-input-row">
+    <input id="chat-input" type="text" placeholder="Ask about inspections or construction practices..." onkeydown="if(event.key==='Enter')sendChat()">
+    <button onclick="sendChat()" id="chat-send-btn">Send</button>
+  </div>
+</div>
+
 </div><!-- /app-site -->
 
 <!-- ═══ CALENDAR EVENT MODAL ══════════════════════════════ -->
@@ -5159,6 +5223,155 @@ window.addEventListener('load',function(){
   if(hp) hp.addEventListener('scroll',revealOnScroll);
   window.addEventListener('scroll',revealOnScroll);
 });
+
+/* ══════════════════════════════════════════════════════════
+   SOTERRA ASSISTANT CHAT
+   ══════════════════════════════════════════════════════════ */
+
+var chatHistory=[];
+
+function toggleChat(){
+  var panel=document.getElementById('soterra-chat-panel');
+  var isOpen=panel.style.display==='flex';
+  if(isOpen){
+    panel.style.display='none';
+  }else{
+    panel.style.display='flex';
+    setTimeout(function(){
+      var input=document.getElementById('chat-input');
+      if(input)input.focus();
+    },50);
+  }
+}
+
+function buildChatCompanySummary(){
+  if(!companyIntelligence||!companyIntelligence.hasData){
+    return 'No company data uploaded yet. Admin should upload historical inspection reports via admin-setup.html.';
+  }
+  var ci=companyIntelligence;
+  var parts=[];
+  parts.push('Company baseline: '+ci.totalItems+' inspection items from '+ci.totalInspections+' unique reports.');
+  parts.push('Inspection types present: '+(ci.availableTypes||[]).join(', ')+'.');
+  // Per-type summary
+  var typeLines=[];
+  (ci.availableTypes||[]).forEach(function(t){
+    var rd=(ci.riskItemsByType||{})[t];
+    if(!rd||!rd.items||!rd.items.length)return;
+    var top=rd.items.slice(0,5).map(function(it){return it.issue+' ('+it.count+'×)';}).join(', ');
+    var rate=(ci.typeFailRates||{})[t];
+    typeLines.push('- '+t+' (fail rate '+(rate==null?'—':rate+'%')+'): top failures: '+top);
+  });
+  if(typeLines.length)parts.push('Top failures by type:\n'+typeLines.join('\n'));
+  if(ci.rootCauses&&ci.rootCauses.length){
+    parts.push('Top root causes across all types: '+ci.rootCauses.slice(0,5).join(', ')+'.');
+  }
+  if(ci.riskAreas&&ci.riskAreas.length){
+    parts.push('High risk areas (locations with most failures): '+ci.riskAreas.slice(0,5).join(', ')+'.');
+  }
+  return parts.join('\n\n');
+}
+
+function buildChatProjectSummary(){
+  if(typeof siteData==='undefined'||!siteData[currentSite])return 'No current project loaded.';
+  var d=siteData[currentSite];
+  var parts=[];
+  parts.push('Project: '+d.name);
+  if(d.kpi){
+    parts.push('KPIs: '+d.kpi.insp+' inspections done, '+d.kpi.fail+' failure rate, '+d.kpi.ipi+' issues per inspection, '+d.kpi.open+' open issues, '+d.kpi.overdue+' overdue (>14 days).');
+  }
+  // Upcoming inspections
+  if(d.upcomingInspections&&d.upcomingInspections.length){
+    var upc=d.upcomingInspections.slice(0,10).map(function(u){
+      return u.type+' on '+u.date+' ('+u.days+' days away, risk: '+u.riskLabel+')';
+    }).join('; ');
+    parts.push('Upcoming inspections: '+upc);
+  }
+  // Open issues (first 10, truncated)
+  if(d.issues&&d.issues.length){
+    var iss=d.issues.slice(0,10).map(function(i){
+      var title=i.title.length>100?i.title.substring(0,97)+'...':i.title;
+      return title+' (type: '+i.type+', '+i.days+' days old)';
+    }).join('; ');
+    parts.push('Open issues on this project: '+iss);
+  }
+  return parts.join('\n');
+}
+
+function renderChatMessage(role,text){
+  var container=document.getElementById('chat-messages');
+  if(!container)return;
+  var div=document.createElement('div');
+  div.className='chat-msg chat-msg-'+(role==='user'?'user':'bot');
+  var icon=role==='user'?'U':'S';
+  // Simple markdown-ish rendering: *italic*, line breaks preserved via CSS white-space:pre-wrap
+  var safeText=text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  safeText=safeText.replace(/\*([^*]+)\*/g,'<i>$1</i>');
+  div.innerHTML='<div class="chat-bubble-icon">'+icon+'</div><div class="chat-bubble-text">'+safeText+'</div>';
+  container.appendChild(div);
+  container.scrollTop=container.scrollHeight;
+}
+
+function renderChatTyping(){
+  var container=document.getElementById('chat-messages');
+  if(!container)return;
+  var div=document.createElement('div');
+  div.id='chat-typing-indicator';
+  div.className='chat-msg chat-msg-bot';
+  div.innerHTML='<div class="chat-bubble-icon">S</div><div class="chat-typing"><span></span><span></span><span></span></div>';
+  container.appendChild(div);
+  container.scrollTop=container.scrollHeight;
+}
+
+function removeChatTyping(){
+  var t=document.getElementById('chat-typing-indicator');
+  if(t)t.remove();
+}
+
+async function sendChat(){
+  var input=document.getElementById('chat-input');
+  var btn=document.getElementById('chat-send-btn');
+  if(!input)return;
+  var msg=input.value.trim();
+  if(!msg)return;
+  input.value='';
+  btn.disabled=true;
+
+  renderChatMessage('user',msg);
+  renderChatTyping();
+
+  var payload={
+    message:msg,
+    history:chatHistory.slice(-10),
+    context:{
+      company_summary:buildChatCompanySummary(),
+      project_summary:buildChatProjectSummary(),
+      project_name:(siteData&&siteData[currentSite])?siteData[currentSite].name:''
+    }
+  };
+
+  try{
+    var resp=await fetch('/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    var data=await resp.json();
+    removeChatTyping();
+    if(data.success&&data.reply){
+      renderChatMessage('assistant',data.reply);
+      chatHistory.push({role:'user',content:msg});
+      chatHistory.push({role:'assistant',content:data.reply});
+    }else{
+      renderChatMessage('assistant','Sorry, I hit an error: '+(data.error||'Unknown')+'. Please try again.');
+    }
+  }catch(err){
+    removeChatTyping();
+    renderChatMessage('assistant','Sorry, I couldn\'t reach the server. Check your connection and try again.');
+  }finally{
+    btn.disabled=false;
+    input.focus();
+  }
+}
 </script>
 </body>
 </html>
