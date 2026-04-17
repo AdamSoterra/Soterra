@@ -1634,7 +1634,7 @@ function tryLogin(){
           <tbody id="site-upcoming-body"></tbody>
           <tbody id="site-upcoming-more" style="display:none"></tbody>
         </table>
-        <div class="view-all-link" id="site-upcoming-toggle" onclick="toggleMore('site-upcoming-more',this)" style="display:none">View more ↓</div>
+        <div class="view-all-link" id="site-upcoming-toggle" onclick="toggleMore('site-upcoming-more',this)" style="display:none">View all ↓</div>
       </div>
 
       <div class="card">
@@ -1707,31 +1707,6 @@ function tryLogin(){
         </div>
       </div>
 
-      <!-- Recurring failure items -->
-      <div class="card">
-        <div class="sh">
-          <div>
-            <div class="card-title" id="ov-risk-title">Hydraulic — recurring failure items</div>
-            <div class="card-sub" id="ov-risk-sub">Most common issues in hydraulic inspections — based on historical data</div>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <select id="ov-risk-type-select" style="height:28px;font-size:11px" onchange="switchOverviewRiskType(this.value)">
-              <option value="hydraulic">Hydraulic</option>
-              <option value="fire">Fire</option>
-              <option value="structural">Structural</option>
-              <option value="electrical">Electrical</option>
-            </select>
-            <button class="btn" style="font-size:11px;height:28px" onclick="exportPDF()">Export ↓</button>
-          </div>
-        </div>
-        <table style="table-layout:fixed">
-          <colgroup><col style="width:38%"><col style="width:20%"><col style="width:18%"><col style="width:24%"></colgroup>
-          <tr><th>Issue</th><th>Fail count</th><th>% of failures</th><th>Recurrence likelihood</th></tr>
-          <tbody id="ov-risk-body"></tbody>
-          <tbody id="ov-risk-more" style="display:none"></tbody>
-        </table>
-        <div class="view-all-link" id="ov-risk-view-all" onclick="toggleRiskItems('ov-risk-body',this)">View all ↓</div>
-      </div>
     </div>
 
     <!-- ─ SITE: INSIGHTS ─────────────────────────────────── -->
@@ -1761,14 +1736,13 @@ function tryLogin(){
           <div><div class="card-title">Problem patterns</div><div class="card-sub" id="st-patterns-sub">Issues appearing repeatedly across this project's inspections</div></div>
           <button class="btn" onclick="exportPDF()">Export ↓</button>
         </div>
-        <table>
+        <table style="table-layout:fixed">
+          <colgroup><col style="width:60%"><col style="width:22%"><col style="width:18%"></colgroup>
           <tr><th>Issue</th><th>% of failed inspections</th><th>Trend</th></tr>
           <tbody id="st-patterns-body"></tbody>
+          <tbody id="st-patterns-more-body" style="display:none"></tbody>
         </table>
-        <div id="st-patterns-more" style="display:none">
-          <table><tbody id="st-patterns-more-body"></tbody></table>
-        </div>
-        <div class="view-all-link" onclick="toggleMore('st-patterns-more',this)">View all ↓</div>
+        <div class="view-all-link" id="st-patterns-toggle" onclick="toggleMore('st-patterns-more-body',this)">View all ↓</div>
       </div>
     </div>
 
@@ -2172,7 +2146,8 @@ function nav(page,el){
 function toggleMore(id,linkEl){
   var el=document.getElementById(id);if(!el)return;
   var showing=el.style.display!=='none';
-  el.style.display=showing?'none':'block';
+  // Use '' (default) not 'block' so tbody renders as table-row-group correctly
+  el.style.display=showing?'none':'';
   linkEl.textContent=showing?'View all ↓':'Show less ↑';
 }
 
@@ -2941,11 +2916,14 @@ function computeCompanyIntelligence(items){
     var arr=Object.keys(groups).map(function(k){
       var g=groups[k];
       var pct=totalFailItems?Math.round(g.count/totalFailItems*100):0;
-      var recurPct=typeInspCount?Math.round(Object.keys(g.inspKeys).length/typeInspCount*100):0;
+      // Recurrence likelihood: only meaningful with enough inspections (5+) of this type.
+      // With 1-2 bulk-uploaded reports, every item appears ~100% which is misleading.
+      // Real recurrence emerges once live inspections accumulate.
+      var recurPct=typeInspCount>=5?Math.round(Object.keys(g.inspKeys).length/typeInspCount*100):null;
       return{
         issue:k,count:g.count,pct:pct+'%',
-        recur:recurPct+'%',
-        recurColor:recurPct>=50?'#EF4444':recurPct>=30?'#F59E0B':'#10B981'
+        recur:recurPct==null?'—':recurPct+'%',
+        recurColor:recurPct==null?'#999':(recurPct>=50?'#EF4444':recurPct>=30?'#F59E0B':'#10B981')
       };
     }).sort(function(a,b){return b.count-a.count;}).slice(0,10);
 
@@ -3550,7 +3528,6 @@ function switchSite(siteKey){
   renderOverview(d);
   renderInsights(d);
   renderRiskItems(defaultType,'site-risk-card-title','site-risk-card-sub','site-risk-items-body','site-risk-items-more','site-risk-view-all');
-  renderRiskItems(defaultType,'ov-risk-title','ov-risk-sub','ov-risk-body','ov-risk-more','ov-risk-view-all');
   renderUpcomingInspections(d);
   updateAttachBtn();
   // Navigate to Live Tracker
@@ -3905,7 +3882,9 @@ function renderInsights(d){
   }
   document.getElementById('st-patterns-body').innerHTML=ins.patterns.slice(0,3).map(patternRow).join('');
   document.getElementById('st-patterns-more-body').innerHTML=ins.patterns.slice(3).map(patternRow).join('');
-  document.getElementById('st-patterns-more').style.display='none';
+  document.getElementById('st-patterns-more-body').style.display='none';
+  var pt=document.getElementById('st-patterns-toggle');
+  if(pt)pt.style.display=ins.patterns.length>3?'':'none';
   // Reset view-all toggles
   document.querySelectorAll('#page-site-insights .view-all-link').forEach(function(l){l.textContent='View all ↓';});
 }
@@ -4720,7 +4699,7 @@ function renderUpcomingInspections(d){
   if(more)more.innerHTML=rest;
   if(toggle){
     toggle.style.display=rest?'':'none';
-    toggle.textContent='View more ↓';
+    toggle.textContent='View all ↓';
   }
 }
 
@@ -4731,7 +4710,7 @@ function populateRiskTypeDropdowns(){
     :['hydraulic','fire','structural','electrical'];
   var defaultType=types[0];
   function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
-  ['site-risk-type-select','ov-risk-type-select'].forEach(function(id){
+  ['site-risk-type-select'].forEach(function(id){
     var sel=document.getElementById(id);
     if(!sel)return;
     sel.innerHTML=types.map(function(t){return'<option value="'+t+'">'+cap(t)+'</option>';}).join('');
