@@ -2761,8 +2761,11 @@ async function loadFromSupabase(){
     soterraProfile=profile;
 
     // Load company-level inspection intelligence (The Brain)
+    console.log('[Brain] Loading inspection items for company:',profile.company_id);
     companyItems=await loadInspectionItems(profile.company_id);
+    console.log('[Brain] Loaded',companyItems.length,'inspection items');
     companyIntelligence=computeCompanyIntelligence(companyItems);
+    console.log('[Brain] Intelligence computed:',companyIntelligence);
 
     // Load all projects for this company
     var{data:projects}=await soterraDb.from('projects').select('*').eq('company_id',profile.company_id);
@@ -2811,10 +2814,17 @@ async function loadFromSupabase(){
 async function loadInspectionItems(companyId){
   try{
     var{data,error}=await soterraDb.from('inspection_items').select('*').eq('company_id',companyId).order('inspection_date',{ascending:false});
-    if(error||!data)return[];
+    if(error){
+      console.error('[Brain] Query error:',error);
+      return[];
+    }
+    if(!data){
+      console.warn('[Brain] Query returned null data');
+      return[];
+    }
     return data;
   }catch(e){
-    console.error('inspection_items load error:',e);
+    console.error('[Brain] inspection_items load error:',e);
     return[];
   }
 }
