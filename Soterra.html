@@ -1658,7 +1658,7 @@ function tryLogin(){
         </table>
         <div style="display:flex;gap:12px;align-items:center;margin-top:8px">
           <div class="view-all-link" id="site-risk-view-all" onclick="toggleRiskItems('site-risk-items-body',this)">View all ↓</div>
-          <div class="view-all-link" onclick="exportPDF()">Export full list ↓</div>
+          <div class="view-all-link" onclick="exportPDF(document.getElementById('site-risk-type-select').value)">Export full list ↓</div>
         </div>
         <div style="margin-top:14px;padding:12px;background:#EEF2FF;border-radius:8px;font-size:12px;color:#4338CA">
           <strong>Early close-out effect:</strong> Issues closed within 7–10 days → 12–18% recurrence likelihood &nbsp;·&nbsp; Issues left open beyond 14 days → 35–45% recurrence likelihood
@@ -1734,7 +1734,7 @@ function tryLogin(){
       <div class="card">
         <div class="sh">
           <div><div class="card-title">Problem patterns</div><div class="card-sub" id="st-patterns-sub">Issues appearing repeatedly across this project's inspections</div></div>
-          <button class="btn" onclick="exportPDF()">Export ↓</button>
+          <button class="btn" onclick="exportPatternsPDF()">Export ↓</button>
         </div>
         <table style="table-layout:fixed">
           <colgroup><col style="width:60%"><col style="width:22%"><col style="width:18%"></colgroup>
@@ -2700,22 +2700,304 @@ function downloadReport(type,site,lot,date,inspector,items){
 }
 
 /* ── EXPORT PDF ───────────────────────────────────────── */
-function exportPDF(){
+function exportPDF(type){
   if(typeof window.jspdf==='undefined'){alert('PDF library still loading — please try again in a moment.');return;}
-  var jsPDF=window.jspdf.jsPDF,doc=new jsPDF('p','mm','a4'),today=new Date().toLocaleDateString('en-NZ',{day:'numeric',month:'long',year:'numeric'}),W=210,pad=15;
-  doc.setFillColor(79,70,229);doc.rect(0,0,W,32,'F');doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(18);doc.text('SOTERRA',pad,14);doc.setFontSize(9);doc.setFont('helvetica','normal');doc.text('Hydraulic Inspection Risk Report',pad,23);doc.text('soterra.co.nz',W-pad,23,{align:'right'});
-  doc.setTextColor(110,110,110);doc.setFontSize(9);doc.text('Generated '+today,pad,42);doc.setDrawColor(220,220,220);doc.line(pad,46,W-pad,46);
-  doc.setTextColor(79,70,229);doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('UPCOMING INSPECTION',pad,55);doc.setTextColor(30,30,30);doc.setFontSize(9);doc.setFont('helvetica','normal');doc.text('Hydraulic  ·  Bayfront Site A  ·  12 April 2026  ·  5 days away',pad,62);doc.setFillColor(254,226,226);doc.roundedRect(pad,65,30,8,1.5,1.5,'F');doc.setTextColor(153,27,27);doc.setFontSize(8);doc.setFont('helvetica','bold');doc.text('HIGH RISK',pad+15,70.5,{align:'center'});doc.setDrawColor(220,220,220);doc.line(pad,78,W-pad,78);
-  doc.setTextColor(79,70,229);doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('PREDICTED FAILURE ITEMS',pad,87);doc.setTextColor(140,140,140);doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text('Based on 73 hydraulic inspections across 7 projects (2021–2024)',pad,93);
-  doc.setFillColor(238,242,255);doc.rect(pad,96,W-pad*2,8,'F');doc.setTextColor(79,70,229);doc.setFontSize(7.5);doc.setFont('helvetica','bold');doc.text('ISSUE',pad+2,101.5);doc.text('FAIL COUNT',88,101.5);doc.text('% FAILURES',115,101.5);doc.text('RE-INSP RATE',150,101.5);
-  var rows=[['Pipe Supports & Fixings','60','29%','37%'],['Pressure Testing & Leaks','50','24%','18%'],['Pipe Penetrations','43','21%','42%'],['Seismic Restraints','16','8%','44%'],['Incorrect Pipe Falls','14','7%','43%']];
-  var y=112;rows.forEach(function(r,i){if(i%2===0){doc.setFillColor(249,250,251);doc.rect(pad,y-4.5,W-pad*2,8,'F');}doc.setTextColor(30,30,30);doc.setFontSize(9);doc.setFont('helvetica','normal');doc.text(r[0],pad+2,y);doc.text(r[1],96,y,{align:'center'});doc.text(r[2],123,y,{align:'center'});doc.text(r[3],162,y,{align:'center'});y+=9;});
-  doc.setDrawColor(220,220,220);doc.line(pad,y+2,W-pad,y+2);y+=10;
-  doc.setFillColor(238,242,255);doc.roundedRect(pad,y,W-pad*2,26,2,2,'F');doc.setTextColor(79,70,229);doc.setFontSize(9);doc.setFont('helvetica','bold');doc.text('EARLY CLOSE-OUT EFFECT',pad+4,y+8);doc.setTextColor(55,48,163);doc.setFont('helvetica','normal');doc.text('Issues closed within 7-10 days:    12-18% recurrence likelihood',pad+4,y+16);doc.text('Issues left open beyond 14 days:  35-45% recurrence likelihood',pad+4,y+23);y+=34;doc.setDrawColor(220,220,220);doc.line(pad,y,W-pad,y);y+=8;
-  doc.setTextColor(79,70,229);doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('FIRST-TIME-PASS CHECKLIST',pad,y);y+=8;
-  ['Pressure testing completed and recorded before inspection','Pipe supports and fixings compliant with manufacturer specification','Penetrations sealed after final pipe alignment — not before','Correct falls achieved and confirmed before board-up','All previous inspection comments closed out','Documentation available on site at time of inspection'].forEach(function(c){doc.setFillColor(79,70,229);doc.roundedRect(pad,y-3,2.5,2.5,0.4,0.4,'F');doc.setTextColor(30,30,30);doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(c,pad+5,y);y+=7.5;});
-  doc.setFillColor(248,248,250);doc.rect(0,275,W,22,'F');doc.setDrawColor(220,220,220);doc.line(0,275,W,275);doc.setTextColor(160,160,160);doc.setFontSize(7.5);doc.text('Soterra  ·  soterra.co.nz  ·  adam@soterra.co.nz  ·  '+today,W/2,284,{align:'center'});doc.setFontSize(7);doc.text('Based on historical inspection data. Results are indicative only.',W/2,290,{align:'center'});
-  doc.save('Soterra-Risk-Report-Hydraulic.pdf');
+  type=(type||'hydraulic').toLowerCase();
+  var jsPDF=window.jspdf.jsPDF,doc=new jsPDF('p','mm','a4');
+  var today=new Date().toLocaleDateString('en-NZ',{day:'numeric',month:'long',year:'numeric'});
+  var W=210,pad=15;
+
+  // Soterra brand colors
+  var BLUE=[14,116,189];         // primary blue
+  var NAVY=[10,37,64];            // navy
+  var LIGHT=[240,247,255];        // light blue background
+  var ACCENT=[56,189,248];        // light blue accent
+
+  // Get data
+  var data=(riskItemsData&&riskItemsData[type])||{items:[],title:'',sub:''};
+  var typeName=type.charAt(0).toUpperCase()+type.slice(1);
+  var siteInfo=(typeof siteData!=='undefined'&&siteData[currentSite])||{};
+  var siteName=siteInfo.name||'';
+  var upcoming=((siteInfo.upcomingInspections)||[]).filter(function(u){
+    return u.type.toLowerCase()===type;
+  })[0];
+
+  // HEADER — Soterra navy bar with brand
+  doc.setFillColor(NAVY[0],NAVY[1],NAVY[2]);
+  doc.rect(0,0,W,42,'F');
+  // Logo mark — blue S with soterra blue
+  doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.rect(pad,12,4,22,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(24);
+  doc.text('Soterra',pad+8,25);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.setTextColor(ACCENT[0],ACCENT[1],ACCENT[2]);
+  doc.text('Construction Intelligence',pad+8,32);
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(9);
+  doc.text('soterra.co.nz',W-pad,32,{align:'right'});
+
+  // Title band
+  doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.rect(0,42,W,10,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(12);
+  doc.text(typeName+' — Inspection Risk Report',pad,49);
+
+  // Generated meta
+  doc.setTextColor(110,110,110);
+  doc.setFontSize(9);
+  doc.setFont('helvetica','normal');
+  doc.text('Generated '+today+(siteName?'  ·  '+siteName:''),pad,60);
+
+  var y=70;
+
+  // Upcoming inspection section (if available)
+  if(upcoming){
+    doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
+    doc.setFontSize(10);
+    doc.setFont('helvetica','bold');
+    doc.text('UPCOMING INSPECTION',pad,y);
+    y+=7;
+
+    doc.setTextColor(NAVY[0],NAVY[1],NAVY[2]);
+    doc.setFontSize(10);
+    doc.setFont('helvetica','normal');
+    doc.text(typeName+'  ·  '+upcoming.date+'  ·  '+upcoming.days+' days away',pad,y);
+    y+=2;
+
+    // Risk badge
+    var riskColor=upcoming.riskLabel==='High'?[239,68,68]:
+                  upcoming.riskLabel==='Medium'?[245,158,11]:
+                  upcoming.riskLabel==='Low'?[16,185,129]:[150,150,150];
+    doc.setFillColor(riskColor[0],riskColor[1],riskColor[2]);
+    doc.roundedRect(pad,y+1,32,7,1.5,1.5,'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(8);
+    doc.setFont('helvetica','bold');
+    doc.text(upcoming.riskLabel.toUpperCase()+' RISK',pad+16,y+5.8,{align:'center'});
+    y+=14;
+  }
+
+  // Separator
+  doc.setDrawColor(220,230,240);
+  doc.line(pad,y,W-pad,y);
+  y+=8;
+
+  // Predicted failure items
+  doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.setFontSize(11);
+  doc.setFont('helvetica','bold');
+  doc.text('PREDICTED FAILURE ITEMS',pad,y);
+  y+=6;
+  doc.setTextColor(140,140,140);
+  doc.setFontSize(8);
+  doc.setFont('helvetica','normal');
+  doc.text(data.sub||'Based on historical company data',pad,y);
+  y+=6;
+
+  // Table header
+  doc.setFillColor(LIGHT[0],LIGHT[1],LIGHT[2]);
+  doc.rect(pad,y,W-pad*2,8,'F');
+  doc.setTextColor(NAVY[0],NAVY[1],NAVY[2]);
+  doc.setFontSize(8);
+  doc.setFont('helvetica','bold');
+  doc.text('ISSUE',pad+2,y+5.5);
+  doc.text('FAIL COUNT',110,y+5.5,{align:'center'});
+  doc.text('% FAILURES',145,y+5.5,{align:'center'});
+  doc.text('RECURRENCE',175,y+5.5,{align:'center'});
+  y+=10;
+
+  // Table rows
+  var items=data.items||[];
+  if(items.length===0){
+    doc.setTextColor(140,140,140);
+    doc.setFontSize(9);
+    doc.setFont('helvetica','italic');
+    doc.text('No data available for this inspection type yet.',pad+2,y+2);
+    y+=10;
+  }else{
+    items.slice(0,10).forEach(function(r,i){
+      if(i%2===0){
+        doc.setFillColor(249,251,253);
+        doc.rect(pad,y-4,W-pad*2,8,'F');
+      }
+      doc.setTextColor(NAVY[0],NAVY[1],NAVY[2]);
+      doc.setFontSize(9);
+      doc.setFont('helvetica','normal');
+      var issueText=r.issue.length>50?r.issue.substring(0,47)+'...':r.issue;
+      doc.text(issueText,pad+2,y+1);
+      doc.text(String(r.count),110,y+1,{align:'center'});
+      doc.text(r.pct,145,y+1,{align:'center'});
+      doc.text(r.recur,175,y+1,{align:'center'});
+      y+=8;
+    });
+  }
+
+  y+=4;
+  doc.setDrawColor(220,230,240);
+  doc.line(pad,y,W-pad,y);
+  y+=8;
+
+  // Early close-out effect
+  doc.setFillColor(LIGHT[0],LIGHT[1],LIGHT[2]);
+  doc.roundedRect(pad,y,W-pad*2,26,2,2,'F');
+  doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.setFontSize(9);
+  doc.setFont('helvetica','bold');
+  doc.text('EARLY CLOSE-OUT EFFECT',pad+4,y+8);
+  doc.setTextColor(NAVY[0],NAVY[1],NAVY[2]);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.text('Issues closed within 7-10 days:    12-18% recurrence likelihood',pad+4,y+16);
+  doc.text('Issues left open beyond 14 days:  35-45% recurrence likelihood',pad+4,y+23);
+  y+=34;
+  doc.setDrawColor(220,230,240);
+  doc.line(pad,y,W-pad,y);
+  y+=8;
+
+  // First-time-pass checklist (generic + data-driven)
+  doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.setFontSize(11);
+  doc.setFont('helvetica','bold');
+  doc.text('FIRST-TIME-PASS CHECKLIST',pad,y);
+  y+=8;
+  var checklist=[
+    'All previous inspection items closed out',
+    'Documentation available on site at time of inspection',
+    'Work completed to specification before inspection booked',
+    'Relevant drawings and compliance certificates on site'
+  ];
+  if(items.length>0){
+    items.slice(0,3).forEach(function(item){
+      checklist.push('Check: '+(item.issue.length>60?item.issue.substring(0,57)+'...':item.issue));
+    });
+  }
+  doc.setTextColor(NAVY[0],NAVY[1],NAVY[2]);
+  doc.setFontSize(9);
+  doc.setFont('helvetica','normal');
+  checklist.forEach(function(c){
+    if(y>265)return;
+    doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]);
+    doc.roundedRect(pad,y-3,2.5,2.5,0.4,0.4,'F');
+    doc.setTextColor(NAVY[0],NAVY[1],NAVY[2]);
+    doc.text(c,pad+5,y);
+    y+=7;
+  });
+
+  // Footer
+  doc.setFillColor(248,250,253);
+  doc.rect(0,275,W,22,'F');
+  doc.setDrawColor(220,230,240);
+  doc.line(0,275,W,275);
+  doc.setTextColor(120,130,150);
+  doc.setFontSize(7.5);
+  doc.text('Soterra  ·  soterra.co.nz  ·  Generated '+today,W/2,284,{align:'center'});
+  doc.setFontSize(7);
+  doc.text('Based on historical inspection data from this company. Results are indicative only.',W/2,290,{align:'center'});
+
+  doc.save('Soterra-Risk-'+typeName+'.pdf');
+}
+
+// Export problem patterns as a PDF
+function exportPatternsPDF(){
+  if(typeof window.jspdf==='undefined'){alert('PDF library still loading — please try again in a moment.');return;}
+  var jsPDF=window.jspdf.jsPDF,doc=new jsPDF('p','mm','a4');
+  var today=new Date().toLocaleDateString('en-NZ',{day:'numeric',month:'long',year:'numeric'});
+  var W=210,pad=15;
+  var BLUE=[14,116,189],NAVY=[10,37,64],LIGHT=[240,247,255],ACCENT=[56,189,248];
+
+  var siteInfo=(typeof siteData!=='undefined'&&siteData[currentSite])||{};
+  var siteName=siteInfo.name||'';
+  var patterns=(siteInfo.insights&&siteInfo.insights.patterns)||[];
+
+  // Header
+  doc.setFillColor(NAVY[0],NAVY[1],NAVY[2]);
+  doc.rect(0,0,W,42,'F');
+  doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.rect(pad,12,4,22,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(24);
+  doc.text('Soterra',pad+8,25);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.setTextColor(ACCENT[0],ACCENT[1],ACCENT[2]);
+  doc.text('Construction Intelligence',pad+8,32);
+  doc.setTextColor(255,255,255);
+  doc.text('soterra.co.nz',W-pad,32,{align:'right'});
+
+  doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.rect(0,42,W,10,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(12);
+  doc.text('Problem Patterns Report',pad,49);
+
+  doc.setTextColor(110,110,110);
+  doc.setFontSize(9);
+  doc.setFont('helvetica','normal');
+  doc.text('Generated '+today+(siteName?'  ·  '+siteName:''),pad,60);
+
+  var y=70;
+  doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
+  doc.setFontSize(11);
+  doc.setFont('helvetica','bold');
+  doc.text('RECURRING ISSUES',pad,y);
+  y+=6;
+  doc.setTextColor(140,140,140);
+  doc.setFontSize(8);
+  doc.setFont('helvetica','normal');
+  doc.text('Issues appearing repeatedly across your company\'s inspection history',pad,y);
+  y+=6;
+
+  doc.setFillColor(LIGHT[0],LIGHT[1],LIGHT[2]);
+  doc.rect(pad,y,W-pad*2,8,'F');
+  doc.setTextColor(NAVY[0],NAVY[1],NAVY[2]);
+  doc.setFontSize(8);
+  doc.setFont('helvetica','bold');
+  doc.text('ISSUE',pad+2,y+5.5);
+  doc.text('% OF FAILED INSPECTIONS',145,y+5.5,{align:'center'});
+  y+=10;
+
+  if(patterns.length===0){
+    doc.setTextColor(140,140,140);
+    doc.setFontSize(9);
+    doc.setFont('helvetica','italic');
+    doc.text('No pattern data yet — upload historical inspection reports.',pad+2,y+2);
+    y+=10;
+  }else{
+    patterns.forEach(function(p,i){
+      if(i%2===0){
+        doc.setFillColor(249,251,253);
+        doc.rect(pad,y-4,W-pad*2,8,'F');
+      }
+      doc.setTextColor(NAVY[0],NAVY[1],NAVY[2]);
+      doc.setFontSize(9);
+      doc.setFont('helvetica','normal');
+      var issueText=p.issue.length>65?p.issue.substring(0,62)+'...':p.issue;
+      doc.text(issueText,pad+2,y+1);
+      doc.text(p.pct,145,y+1,{align:'center'});
+      y+=8;
+    });
+  }
+
+  // Footer
+  doc.setFillColor(248,250,253);
+  doc.rect(0,275,W,22,'F');
+  doc.setDrawColor(220,230,240);
+  doc.line(0,275,W,275);
+  doc.setTextColor(120,130,150);
+  doc.setFontSize(7.5);
+  doc.text('Soterra  ·  soterra.co.nz  ·  Generated '+today,W/2,284,{align:'center'});
+  doc.setFontSize(7);
+  doc.text('Based on historical inspection data from this company. Results are indicative only.',W/2,290,{align:'center'});
+
+  doc.save('Soterra-Patterns.pdf');
 }
 
 
@@ -4685,12 +4967,13 @@ function renderUpcomingInspections(d){
   }
   function row(it){
     var dayColor=it.days<=7?'color:#EF4444;font-weight:500':(it.days<=14?'color:#F59E0B;font-weight:500':'');
+    var typeKey=it.type.toLowerCase();
     return'<tr>'
       +'<td style="font-weight:500">'+it.type+'</td>'
       +'<td>'+it.date+'</td>'
       +'<td style="'+dayColor+'">'+it.days+'</td>'
       +'<td><span class="badge '+it.riskClass+'">'+it.riskLabel+'</span></td>'
-      +'<td><button class="btn" style="font-size:11px;height:28px" onclick="exportPDF()">Export risks ↓</button></td>'
+      +'<td><button class="btn" style="font-size:11px;height:28px" onclick="exportPDF(\''+typeKey+'\')">Export risks ↓</button></td>'
       +'</tr>';
   }
   var first=list.slice(0,3).map(row).join('');
