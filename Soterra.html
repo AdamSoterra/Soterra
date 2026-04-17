@@ -2838,57 +2838,6 @@ function exportPDF(type){
     });
   }
 
-  y+=4;
-  doc.setDrawColor(220,230,240);
-  doc.line(pad,y,W-pad,y);
-  y+=8;
-
-  // Early close-out effect
-  doc.setFillColor(LIGHT[0],LIGHT[1],LIGHT[2]);
-  doc.roundedRect(pad,y,W-pad*2,26,2,2,'F');
-  doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
-  doc.setFontSize(9);
-  doc.setFont('helvetica','bold');
-  doc.text('EARLY CLOSE-OUT EFFECT',pad+4,y+8);
-  doc.setTextColor(NAVY[0],NAVY[1],NAVY[2]);
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(9);
-  doc.text('Issues closed within 7-10 days:    12-18% recurrence likelihood',pad+4,y+16);
-  doc.text('Issues left open beyond 14 days:  35-45% recurrence likelihood',pad+4,y+23);
-  y+=34;
-  doc.setDrawColor(220,230,240);
-  doc.line(pad,y,W-pad,y);
-  y+=8;
-
-  // First-time-pass checklist (generic + data-driven)
-  doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);
-  doc.setFontSize(11);
-  doc.setFont('helvetica','bold');
-  doc.text('FIRST-TIME-PASS CHECKLIST',pad,y);
-  y+=8;
-  var checklist=[
-    'All previous inspection items closed out',
-    'Documentation available on site at time of inspection',
-    'Work completed to specification before inspection booked',
-    'Relevant drawings and compliance certificates on site'
-  ];
-  if(items.length>0){
-    items.slice(0,3).forEach(function(item){
-      checklist.push('Check: '+(item.issue.length>60?item.issue.substring(0,57)+'...':item.issue));
-    });
-  }
-  doc.setTextColor(NAVY[0],NAVY[1],NAVY[2]);
-  doc.setFontSize(9);
-  doc.setFont('helvetica','normal');
-  checklist.forEach(function(c){
-    if(y>265)return;
-    doc.setFillColor(BLUE[0],BLUE[1],BLUE[2]);
-    doc.roundedRect(pad,y-3,2.5,2.5,0.4,0.4,'F');
-    doc.setTextColor(NAVY[0],NAVY[1],NAVY[2]);
-    doc.text(c,pad+5,y);
-    y+=7;
-  });
-
   // Footer
   doc.setFillColor(248,250,253);
   doc.rect(0,275,W,22,'F');
