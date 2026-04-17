@@ -1522,7 +1522,7 @@ function tryLogin(){
         </select>
       </div>
       <button onclick="window.location='setup.html'" style="height:28px;border:.5px solid #0E74BD;border-radius:6px;padding:0 12px;font-size:12px;background:rgba(14,116,189,.06);color:#0E74BD;cursor:pointer;font-weight:600;font-family:var(--font);display:flex;align-items:center;gap:4px" title="Add a new project"><span style="font-size:14px;line-height:1">+</span>Add project</button>
-      <button onclick="openDocsModal()" style="height:28px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 12px;font-size:12px;background:var(--color-background-primary);color:var(--color-text-primary);cursor:pointer;font-weight:500;font-family:var(--font);display:flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 11.5h9M6.5 1.5v7M6.5 8.5L4 6M6.5 8.5L9 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Attach docs</button>
+      <button id="st-attach-docs-btn" onclick="openDocsModal()" style="height:28px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 12px;font-size:12px;background:var(--color-background-primary);color:var(--color-text-primary);cursor:pointer;font-weight:500;font-family:var(--font);display:flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 11.5h9M6.5 1.5v7M6.5 8.5L4 6M6.5 8.5L9 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Attach docs</button>
       <div class="user-menu-wrap" style="position:relative">
         <div onclick="toggleUserMenu('site-user-menu')" style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <span class="user-name-display" style="font-size:12px;color:var(--color-text-secondary)">Sam Carter</span>
@@ -2198,8 +2198,12 @@ function nav(page,el){
   var app=document.getElementById(appId);if(!app)return;
   app.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
   app.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active')});
-  // Empty-state intercept: authenticated user with no projects — always show empty state for Site Team pages
-  if(isSite&&isLiveData&&(!currentSite||!siteData[currentSite])){
+  // Empty-state intercept: when the user has no real project, show empty state
+  // for project-specific pages (tracker, calendar, overview).
+  // Risk and Insights are company-level and can still render.
+  var isEmptyState=isLiveData&&currentSite==='_company_baseline';
+  var projectSpecificPages=['site-tracker','site-calendar','site-overview'];
+  if(isSite&&isEmptyState&&projectSpecificPages.indexOf(page)>-1){
     showEmptyProjectState();
     if(el)el.classList.add('active');
     return;
@@ -3060,13 +3064,41 @@ async function loadFromSupabase(){
     // Load all projects for this company
     var{data:projects}=await soterraDb.from('projects').select('*').eq('company_id',profile.company_id);
     if(!projects||projects.length===0){
-      // Authenticated but no projects yet — still show dashboard with company intelligence + empty state
-      siteData={};
+      // Authenticated but no projects yet — build a "virtual" company-baseline site
+      // so Risk/Insights pages can show company intelligence even without a project.
+      // Tracker/Calendar/Overview will show empty state via nav intercept.
+      var hasCI=companyIntelligence&&companyIntelligence.hasData;
+      var virtualSite={
+        name:'Company baseline',
+        kpi:{insp:0,fail:'0%',failColor:'#10B981',ipi:'0.0',open:0,overdue:0},
+        trendData:[0,0,0,0,0,0,0,0,0,0,0,0],
+        hasLiveTrend:false,
+        vs:{
+          fail:{val:'0%',color:'#10B981',avg:'—',badge:'—',badgeClass:'badge-neutral'},
+          ipi:{val:'0.0',color:'#4A6080',avg:'—',badge:'—',badgeClass:'badge-neutral'},
+          overdue:{val:'0',color:'#10B981',avg:'—',badge:'—',badgeClass:'badge-neutral'}
+        },
+        stats:{open:0,ready:0,closed:0},
+        issues:[],
+        upcomingInspections:[],
+        reports:[],
+        calGrid:[],
+        insights:hasCI?{
+          rootCauses:companyIntelligence.rootCauses.length?companyIntelligence.rootCauses:['No patterns yet — upload historical reports'],
+          riskAreas:companyIntelligence.riskAreas.length?companyIntelligence.riskAreas:['Location data will appear as more reports are uploaded'],
+          patterns:companyIntelligence.patterns
+        }:{
+          rootCauses:['No company data yet — upload historical reports'],
+          riskAreas:['No company data yet'],
+          patterns:[]
+        },
+        riskItemsData:hasCI&&companyIntelligence.riskItemsByType?companyIntelligence.riskItemsByType:null
+      };
+      siteData={'_company_baseline':virtualSite};
       isLiveData=true;
-      currentSite=null;
-      // Clear site selector so demo site options don't show
+      currentSite='_company_baseline';
       var sel=document.getElementById('site-selector');
-      if(sel)sel.innerHTML='<option value="">No projects yet</option>';
+      if(sel)sel.innerHTML='<option value="_company_baseline">Company baseline (no project yet)</option>';
       return true;
     }
 
@@ -4926,12 +4958,17 @@ function showEmptyProjectState(){
 }
 
 function initSiteTeam(){
-  // Empty state: authenticated user with no projects yet
-  if(isLiveData&&(!currentSite||!siteData[currentSite])){
+  var d=siteData[currentSite];
+  // Empty state for tracker when no real project
+  var isEmptyState=isLiveData&&currentSite==='_company_baseline';
+  if(isEmptyState){
+    // Render Risk/Insights with company data in case user clicks them,
+    // but tracker/calendar/overview will be empty via nav intercept.
+    renderInsights(d);
+    renderRiskItems('hydraulic','site-risk-card-title','site-risk-card-sub','site-risk-items-body','site-risk-items-more','site-risk-view-all');
     showEmptyProjectState();
     return;
   }
-  var d=siteData[currentSite];
   renderTrackerStats(d);
   buildCalGrid(currentSite);
   renderIssues();
@@ -5188,7 +5225,7 @@ function renderDocsList(){
 }
 function updateAttachBtn(){
   var siteDocs=attachedDocs.filter(function(d){return d.site===currentSite;});
-  var btn=document.querySelector('#app-site .topbar button');
+  var btn=document.getElementById('st-attach-docs-btn');
   if(!btn)return;
   if(siteDocs.length>0){
     btn.innerHTML='<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 11.5h9M6.5 1.5v7M6.5 8.5L4 6M6.5 8.5L9 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Docs ('+siteDocs.length+')';
