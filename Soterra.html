@@ -1695,9 +1695,6 @@ function tryLogin(){
           <div class="view-all-link" id="site-risk-view-all" onclick="toggleRiskItems('site-risk-items-body',this)">View all ↓</div>
           <div class="view-all-link" onclick="exportPDF(document.getElementById('site-risk-type-select').value)">Export full list ↓</div>
         </div>
-        <div style="margin-top:14px;padding:12px;background:#EEF2FF;border-radius:8px;font-size:12px;color:#4338CA">
-          <strong>Early close-out effect:</strong> Issues closed within 7–10 days → 12–18% recurrence likelihood &nbsp;·&nbsp; Issues left open beyond 14 days → 35–45% recurrence likelihood
-        </div>
       </div>
     </div>
 
@@ -2201,6 +2198,12 @@ function nav(page,el){
   var app=document.getElementById(appId);if(!app)return;
   app.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
   app.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active')});
+  // Empty-state intercept: authenticated user with no projects — always show empty state for Site Team pages
+  if(isSite&&isLiveData&&(!currentSite||!siteData[currentSite])){
+    showEmptyProjectState();
+    if(el)el.classList.add('active');
+    return;
+  }
   var t=document.getElementById('page-'+page);if(t)t.classList.add('active');
   if(el)el.classList.add('active');
   var labels={'exec-overview':'Overview','exec-company':'Company','exec-analysis':'Performance','exec-insights':'Insights','exec-project':'Project','site-overview':'Overview','site-tracker':'Live tracker','site-calendar':'Calendar','site-risk':'Risk','site-insights':'Insights'};
