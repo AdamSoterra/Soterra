@@ -444,6 +444,7 @@ function showResults(data) {
 function getTypeCount(inspections) {
   var types = {};
   inspections.forEach(function(i) {
+    if (!i.task) return;  // skip malformed entries
     var name = i.task.replace(/^\*/, '').trim().toLowerCase();
     // Normalize
     if (name.includes('cavity')) types['Cavity'] = 1;
