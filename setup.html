@@ -320,6 +320,12 @@ var currentProfile = null;
     document.getElementById('pm-name').value = profile.full_name || '';
     document.getElementById('pm-email').value = profile.email || currentUser.email || '';
     if (profile.role) document.getElementById('pm-role').value = profile.role;
+
+    // If user already has a company (joined via code, or setting up a new project),
+    // skip Step 1 (Company Setup) — they don't need to re-enter company info
+    if (profile.company_id) {
+      setTimeout(function(){ goStep(2); }, 50);
+    }
   }
 })();
 

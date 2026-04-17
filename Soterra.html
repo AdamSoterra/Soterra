@@ -1521,6 +1521,7 @@ function tryLogin(){
           <option value="rail">Union Rail Depot</option>
         </select>
       </div>
+      <button onclick="window.location='setup.html'" style="height:28px;border:.5px solid #0E74BD;border-radius:6px;padding:0 12px;font-size:12px;background:rgba(14,116,189,.06);color:#0E74BD;cursor:pointer;font-weight:600;font-family:var(--font);display:flex;align-items:center;gap:4px" title="Add a new project"><span style="font-size:14px;line-height:1">+</span>Add project</button>
       <button onclick="openDocsModal()" style="height:28px;border:.5px solid rgba(0,0,0,.2);border-radius:6px;padding:0 12px;font-size:12px;background:var(--color-background-primary);color:var(--color-text-primary);cursor:pointer;font-weight:500;font-family:var(--font);display:flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 11.5h9M6.5 1.5v7M6.5 8.5L4 6M6.5 8.5L9 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Attach docs</button>
       <div class="user-menu-wrap" style="position:relative">
         <div onclick="toggleUserMenu('site-user-menu')" style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -3055,7 +3056,16 @@ async function loadFromSupabase(){
 
     // Load all projects for this company
     var{data:projects}=await soterraDb.from('projects').select('*').eq('company_id',profile.company_id);
-    if(!projects||projects.length===0)return false;
+    if(!projects||projects.length===0){
+      // Authenticated but no projects yet — still show dashboard with company intelligence + empty state
+      siteData={};
+      isLiveData=true;
+      currentSite=null;
+      // Clear site selector so demo site options don't show
+      var sel=document.getElementById('site-selector');
+      if(sel)sel.innerHTML='<option value="">No projects yet</option>';
+      return true;
+    }
 
     // Load all inspections for these projects
     var projectIds=projects.map(function(p){return p.id;});
@@ -4882,7 +4892,42 @@ function openShareMailto(){
 
 
 /* ── INIT SITE TEAM ───────────────────────────────────── */
+function showEmptyProjectState(){
+  // Show a welcoming empty state when user has no projects yet.
+  // Hide tracker/calendar/etc, show an Add Project card on the active page.
+  var content=document.querySelector('#app-site .content');
+  if(!content)return;
+  // Hide all page divs
+  document.querySelectorAll('#app-site .page').forEach(function(p){p.classList.remove('active');});
+  // Inject empty-state card if not already there
+  var existing=document.getElementById('empty-project-state');
+  if(!existing){
+    var div=document.createElement('div');
+    div.id='empty-project-state';
+    div.className='page active';
+    div.innerHTML='<div class="page-title">Welcome to Soterra</div>'
+      +'<div class="page-sub">Your company intelligence is ready. Add your first project to start tracking inspections.</div>'
+      +'<div class="card" style="text-align:center;padding:48px 24px;max-width:560px;margin:40px auto;background:linear-gradient(135deg,#F0F7FF 0%,#fff 100%);border:1px solid rgba(14,116,189,.15)">'
+      +'<div style="font-size:48px;margin-bottom:12px">&#128205;</div>'
+      +'<div style="font-size:20px;font-weight:600;color:#0A2540;margin-bottom:8px">Add your first project</div>'
+      +'<div style="font-size:13px;color:#4A6080;margin-bottom:24px;line-height:1.6">Create a project, upload its construction program, and Soterra will auto-populate your inspection tracker with dates and risk predictions based on your company\'s historical patterns.</div>'
+      +'<button class="btn btn-primary" onclick="window.location=\'setup.html\'" style="height:44px;padding:0 24px;background:#0E74BD;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">+ Create first project</button>'
+      +'<div style="margin-top:24px;padding-top:20px;border-top:.5px solid rgba(0,0,0,.08);font-size:12px;color:#4A6080;line-height:1.6">'
+      +'<strong style="color:#0A2540">Good news:</strong> Your Risk and Insights pages already show your company\'s inspection patterns from onboarded reports. Explore those to see what\'s likely to fail — before your first inspection even happens.'
+      +'</div>'
+      +'</div>';
+    content.appendChild(div);
+  }else{
+    existing.classList.add('active');
+  }
+}
+
 function initSiteTeam(){
+  // Empty state: authenticated user with no projects yet
+  if(isLiveData&&(!currentSite||!siteData[currentSite])){
+    showEmptyProjectState();
+    return;
+  }
   var d=siteData[currentSite];
   renderTrackerStats(d);
   buildCalGrid(currentSite);
