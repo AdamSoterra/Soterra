@@ -90,6 +90,33 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
 
 .msg{padding:10px 14px;border-radius:8px;font-size:12px;margin-top:12px;display:none}
 .msg-error{background:#FEE2E2;color:#991B1B;display:block}
+
+/* Mode tabs (added for data intake flow) */
+.mode-tabs{display:flex;gap:4px;background:#fff;border-radius:10px;padding:4px;margin-bottom:20px;border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.mode-tab{flex:1;padding:10px 12px;text-align:center;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:var(--slate);transition:all .15s;border:none;background:transparent;font-family:var(--font)}
+.mode-tab.active{background:var(--blue);color:#fff}
+.mode-tab:hover:not(.active){background:rgba(14,116,189,.06);color:var(--navy)}
+.mode-section{display:none}
+.mode-section.active{display:block}
+
+/* Link display box */
+.link-box{padding:18px;background:rgba(14,116,189,.04);border:1.5px dashed rgba(14,116,189,.3);border-radius:10px;margin:16px 0;word-break:break-all;font-size:12px;color:var(--navy);font-family:ui-monospace,monospace}
+.link-copy-btn{margin-top:10px;height:36px;padding:0 16px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font)}
+.link-copy-btn:hover{background:#0A5C97}
+
+/* Pending submissions list */
+.pending-item{display:flex;align-items:center;gap:12px;padding:14px 16px;background:rgba(14,116,189,.03);border:1.5px solid rgba(14,116,189,.12);border-radius:10px;margin-bottom:8px;cursor:pointer;transition:all .15s}
+.pending-item:hover{border-color:var(--blue);background:rgba(14,116,189,.06)}
+.pending-item.processing{border-color:var(--amber);background:rgba(245,158,11,.04)}
+.pending-item.processed{border-color:var(--green);background:rgba(16,185,129,.04);cursor:default}
+.pending-info{flex:1;min-width:0}
+.pending-name{font-size:14px;font-weight:600;color:var(--navy)}
+.pending-meta{font-size:11px;color:var(--slate);margin-top:3px}
+.pending-badge{font-size:10px;font-weight:600;padding:3px 10px;border-radius:4px;text-transform:uppercase;letter-spacing:.05em}
+.pending-badge.submitted{background:#DBEAFE;color:#1E40AF}
+.pending-badge.processing{background:#FEF3C7;color:#92400E}
+.pending-badge.processed{background:#D1FAE5;color:#065F46}
+.pending-badge.pending{background:rgba(0,0,0,.05);color:var(--slate)}
 </style>
 </head>
 <body>
@@ -100,6 +127,15 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
     <div class="header-sub">Company Onboarding — Admin</div>
   </div>
 
+  <!-- Mode tabs (shown only when signed in) -->
+  <div id="mode-tabs-wrap" class="mode-tabs" style="display:none">
+    <button class="mode-tab active" id="tab-onboard" onclick="switchMode('onboard')">Onboard now</button>
+    <button class="mode-tab" id="tab-link" onclick="switchMode('link')">Generate upload link</button>
+    <button class="mode-tab" id="tab-pending" onclick="switchMode('pending')">Pending submissions <span id="pending-count-badge" style="display:none;background:#EF4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px"></span></button>
+  </div>
+
+  <!-- Mode: onboard (original flow) -->
+  <div class="mode-section active" id="mode-onboard">
   <div class="progress-wrap">
     <div class="progress-step active" id="prog-1"></div>
     <div class="progress-step" id="prog-2"></div>
@@ -198,6 +234,60 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
       </div>
     </div>
   </div>
+  </div><!-- /mode-onboard -->
+
+  <!-- Mode: generate upload link -->
+  <div class="mode-section" id="mode-link">
+    <div class="card">
+      <div class="step-tag">Generate link</div>
+      <div class="step-title">Create upload link for a prospect</div>
+      <div class="step-sub">Generate a unique secure link to send to a prospect. They can upload their inspection reports without needing an account. When they submit, you'll see it in "Pending submissions".</div>
+
+      <div class="field">
+        <div class="field-label">Company name</div>
+        <input class="field-input" id="link-company-name" placeholder="e.g. Apex Construction Ltd">
+      </div>
+      <div class="field">
+        <div class="field-label">Contact name</div>
+        <input class="field-input" id="link-contact-name" placeholder="e.g. Sam Carter">
+      </div>
+      <div class="field">
+        <div class="field-label">Contact email</div>
+        <input class="field-input" id="link-contact-email" type="email" placeholder="e.g. sam@apex.co.nz">
+      </div>
+
+      <div id="link-msg" class="msg"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="generate-link-btn" onclick="generateUploadLink()">Generate upload link &rarr;</button>
+      </div>
+
+      <div id="link-result" style="display:none;margin-top:20px">
+        <div style="font-size:12px;color:var(--slate);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Send this link to the contact</div>
+        <div class="link-box" id="link-url"></div>
+        <button class="link-copy-btn" onclick="copyLinkUrl()">Copy link</button>
+        <div style="font-size:11px;color:var(--slate);margin-top:14px;line-height:1.5">
+          Link expires in 30 days. Once they upload, you'll see the submission in the "Pending submissions" tab.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mode: pending submissions -->
+  <div class="mode-section" id="mode-pending">
+    <div class="card">
+      <div class="step-tag">Inbox</div>
+      <div class="step-title">Pending submissions</div>
+      <div class="step-sub">Upload links you've created. Submitted ones are ready to process. Click one to analyse the files and create the company.</div>
+
+      <div id="pending-list" style="margin-top:16px">
+        <div style="text-align:center;padding:30px;color:var(--slate);font-size:13px">Loading...</div>
+      </div>
+
+      <div id="pending-detail" style="display:none;margin-top:20px"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -214,6 +304,10 @@ async function init(){
   if(!session){
     // Show inline login for admin
     document.getElementById('step-1').innerHTML='<div class="card"><div class="step-tag">Admin Login</div><div class="step-title">Sign in</div><div class="step-sub">Sign in with your Soterra admin account.</div><div class="field"><div class="field-label">Email</div><input class="field-input" id="admin-email" type="email" placeholder="Email"></div><div class="field"><div class="field-label">Password</div><input class="field-input" id="admin-pass" type="password" placeholder="Password"></div><div id="login-err" class="msg"></div><div class="btn-row"><button class="btn btn-primary" onclick="adminLogin()">Sign in</button></div></div>';
+  }else{
+    // Signed in — show mode tabs and load pending count
+    document.getElementById('mode-tabs-wrap').style.display='flex';
+    loadPendingCount();
   }
 }
 init();
@@ -419,6 +513,196 @@ function copyJoinCode(){
     setTimeout(function(){btn.textContent='Copy code';},2000);
   });
 }
+
+/* ══════════════════════════════════════════════════════════
+   DATA INTAKE FLOW — Mode switching, link generation, pending submissions
+   ══════════════════════════════════════════════════════════ */
+
+function switchMode(mode){
+  document.querySelectorAll('.mode-section').forEach(function(s){s.classList.remove('active');});
+  document.querySelectorAll('.mode-tab').forEach(function(t){t.classList.remove('active');});
+  document.getElementById('mode-'+mode).classList.add('active');
+  document.getElementById('tab-'+mode).classList.add('active');
+  if(mode==='pending')loadPendingSubmissions();
+}
+
+function randomToken(){
+  var chars='abcdefghijklmnopqrstuvwxyz0123456789';
+  var token='';
+  for(var i=0;i<24;i++)token+=chars.charAt(Math.floor(Math.random()*chars.length));
+  return token;
+}
+
+async function generateUploadLink(){
+  var name=document.getElementById('link-company-name').value.trim();
+  var contactName=document.getElementById('link-contact-name').value.trim();
+  var contactEmail=document.getElementById('link-contact-email').value.trim();
+  var errEl=document.getElementById('link-msg');
+  if(!name){errEl.textContent='Please enter a company name.';errEl.className='msg msg-error';return;}
+  if(!contactEmail){errEl.textContent='Please enter a contact email.';errEl.className='msg msg-error';return;}
+
+  var btn=document.getElementById('generate-link-btn');
+  btn.disabled=true;btn.textContent='Generating...';
+
+  var{data:{session}}=await soterraDb.auth.getSession();
+  var userId=session?session.user.id:null;
+  var token=randomToken();
+  var{error}=await soterraDb.from('upload_requests').insert({
+    token:token,
+    company_name:name,
+    contact_name:contactName||null,
+    contact_email:contactEmail,
+    status:'pending',
+    created_by:userId
+  });
+  btn.disabled=false;btn.textContent='Generate upload link →';
+  if(error){
+    errEl.textContent='Error: '+error.message;errEl.className='msg msg-error';
+    return;
+  }
+  errEl.style.display='none';
+  var url=window.location.origin+'/send-data.html?token='+token;
+  document.getElementById('link-url').textContent=url;
+  document.getElementById('link-result').style.display='block';
+  loadPendingCount();
+}
+
+function copyLinkUrl(){
+  var url=document.getElementById('link-url').textContent;
+  navigator.clipboard.writeText(url).then(function(){
+    var btn=event.target;
+    btn.textContent='Copied!';
+    setTimeout(function(){btn.textContent='Copy link';},2000);
+  });
+}
+
+async function loadPendingCount(){
+  var{data,error}=await soterraDb.from('upload_requests').select('id').eq('status','submitted');
+  var badge=document.getElementById('pending-count-badge');
+  if(!badge)return;
+  if(!error&&data&&data.length){
+    badge.style.display='inline-block';
+    badge.textContent=data.length;
+  }else{
+    badge.style.display='none';
+  }
+}
+
+async function loadPendingSubmissions(){
+  var list=document.getElementById('pending-list');
+  var detail=document.getElementById('pending-detail');
+  if(detail)detail.style.display='none';
+  list.innerHTML='<div style="text-align:center;padding:30px;color:#4A6080;font-size:13px">Loading...</div>';
+  var{data,error}=await soterraDb.from('upload_requests').select('*').order('created_at',{ascending:false}).limit(50);
+  if(error){
+    list.innerHTML='<div style="text-align:center;padding:30px;color:#991B1B;font-size:13px">Error loading: '+error.message+'</div>';
+    return;
+  }
+  if(!data||!data.length){
+    list.innerHTML='<div style="text-align:center;padding:30px;color:#4A6080;font-size:13px">No upload links yet. Create one via the "Generate upload link" tab.</div>';
+    return;
+  }
+  var html='';
+  data.forEach(function(r){
+    var meta='';
+    if(r.status==='submitted'){
+      meta=r.file_count+' files • submitted '+timeAgo(r.submitted_at);
+    }else if(r.status==='processed'){
+      meta=r.file_count+' files • processed • code '+(r.processed_join_code||'—');
+    }else{
+      meta='created '+timeAgo(r.created_at)+' • link sent to '+r.contact_email;
+    }
+    html+='<div class="pending-item '+(r.status==='processed'?'processed':'')+'" onclick="openPendingDetail(\''+r.id+'\')">';
+    html+='<div class="pending-info"><div class="pending-name">'+escapeHtml(r.company_name)+'</div><div class="pending-meta">'+meta+'</div></div>';
+    html+='<div class="pending-badge '+r.status+'">'+r.status+'</div>';
+    html+='</div>';
+  });
+  list.innerHTML=html;
+}
+
+function escapeHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function timeAgo(iso){
+  if(!iso)return'';
+  var d=new Date(iso);
+  var now=new Date();
+  var diff=Math.floor((now-d)/1000);
+  if(diff<60)return'just now';
+  if(diff<3600)return Math.floor(diff/60)+'m ago';
+  if(diff<86400)return Math.floor(diff/3600)+'h ago';
+  if(diff<604800)return Math.floor(diff/86400)+'d ago';
+  return d.toLocaleDateString();
+}
+
+async function openPendingDetail(id){
+  var{data,error}=await soterraDb.from('upload_requests').select('*').eq('id',id).single();
+  if(error||!data)return;
+  var detail=document.getElementById('pending-detail');
+  var files=data.file_manifest||[];
+  var uploadUrl=window.location.origin+'/send-data.html?token='+data.token;
+  var html='<div class="card" style="background:rgba(14,116,189,.03);border:1.5px solid rgba(14,116,189,.15)">';
+  html+='<div class="step-title" style="font-size:18px">'+escapeHtml(data.company_name)+'</div>';
+  html+='<div style="font-size:12px;color:#4A6080;margin-top:6px">Contact: '+escapeHtml(data.contact_name||'—')+' • '+escapeHtml(data.contact_email)+'</div>';
+  html+='<div style="font-size:11px;color:#4A6080;margin-top:4px">Status: <strong>'+data.status+'</strong>'+(data.submitted_at?' • submitted '+timeAgo(data.submitted_at):'')+'</div>';
+
+  if(data.status==='pending'){
+    html+='<div style="margin-top:14px;padding:12px;background:rgba(14,116,189,.04);border-radius:8px">';
+    html+='<div style="font-size:12px;color:#4A6080;margin-bottom:6px">Upload link:</div>';
+    html+='<div style="font-size:11px;color:#0A2540;word-break:break-all;font-family:monospace">'+uploadUrl+'</div>';
+    html+='</div>';
+    html+='<div style="margin-top:14px;font-size:12px;color:#4A6080">Waiting for the contact to upload files. They\'ll appear here once submitted.</div>';
+  }else if(data.status==='submitted'){
+    html+='<div style="margin-top:14px"><strong style="font-size:13px">Files submitted ('+files.length+'):</strong></div>';
+    html+='<div style="margin-top:8px;max-height:200px;overflow-y:auto">';
+    files.forEach(function(f){
+      html+='<div style="padding:6px 10px;background:#fff;border:.5px solid rgba(0,0,0,.1);border-radius:6px;margin-bottom:4px;font-size:12px">&#128196; '+escapeHtml(f.name)+' <span style="color:#999;font-size:10px">('+Math.round(f.size/1024)+' KB)</span></div>';
+    });
+    html+='</div>';
+    html+='<div id="process-status" style="display:none;margin-top:14px;padding:12px;background:rgba(14,116,189,.04);border-radius:8px;font-size:12px;color:#0A2540"></div>';
+    html+='<div class="btn-row"><button class="btn btn-primary" onclick="processSubmission(\''+data.id+'\')">Process &amp; create company &rarr;</button></div>';
+  }else if(data.status==='processed'){
+    html+='<div style="margin-top:14px;padding:12px;background:rgba(16,185,129,.08);border-radius:8px">';
+    html+='<div style="font-size:13px;color:#065F46;font-weight:600">&#10003; Processed</div>';
+    html+='<div style="font-size:12px;color:#065F46;margin-top:4px">Join code: <strong style="font-family:monospace">'+(data.processed_join_code||'—')+'</strong></div>';
+    if(data.processed_at)html+='<div style="font-size:11px;color:#065F46;margin-top:4px">'+timeAgo(data.processed_at)+'</div>';
+    html+='</div>';
+  }
+
+  html+='<div style="margin-top:14px"><button class="btn btn-secondary" onclick="loadPendingSubmissions()">&larr; Back to list</button></div>';
+  html+='</div>';
+  detail.innerHTML=html;
+  detail.style.display='block';
+  document.getElementById('pending-list').style.display='none';
+}
+
+async function processSubmission(id){
+  var status=document.getElementById('process-status');
+  status.style.display='block';
+  status.textContent='Processing... fetching files and running The Brain. This may take 1-2 minutes.';
+  try{
+    var resp=await fetch('/api/process-submission',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({request_id:id})
+    });
+    var data=await resp.json();
+    if(data.success){
+      status.innerHTML='<strong>&#10003; Processed successfully!</strong><br>Company <strong>'+escapeHtml(data.company_name)+'</strong> created with <strong>'+data.total_items+'</strong> inspection items. Join code: <strong style="font-family:monospace">'+data.join_code+'</strong>';
+      loadPendingCount();
+    }else{
+      status.innerHTML='<strong style="color:#991B1B">Error:</strong> '+escapeHtml(data.error||'Unknown');
+    }
+  }catch(err){
+    status.innerHTML='<strong style="color:#991B1B">Error:</strong> '+escapeHtml(err.message||'Network error');
+  }
+}
+
+// Show pending-list when detail hides
+var origLoadPending=loadPendingSubmissions;
+loadPendingSubmissions=function(){
+  document.getElementById('pending-list').style.display='';
+  return origLoadPending();
+};
 </script>
 </body>
 </html>
