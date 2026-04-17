@@ -4874,7 +4874,6 @@ function initSiteTeam(){
   renderOverview(d);
   renderInsights(d);
   renderRiskItems('hydraulic','site-risk-card-title','site-risk-card-sub','site-risk-items-body','site-risk-items-more','site-risk-view-all');
-  renderRiskItems('hydraulic','ov-risk-title','ov-risk-sub','ov-risk-body','ov-risk-more','ov-risk-view-all');
   // Seed demo events for Harbor View Tower
   if(!calEvents['harbor|2026-04-07']){
     calEvents['harbor|2026-04-07']=[{id:'demo1',title:'Window measure — Levels 3–6',type:'Measures',note:'Supplier on site 8am'}];
@@ -5062,9 +5061,6 @@ function toggleRiskItems(bodyId,toggleEl){
 
 function switchRiskType(val){
   renderRiskItems(val,'site-risk-card-title','site-risk-card-sub','site-risk-items-body','site-risk-items-more','site-risk-view-all');
-}
-function switchOverviewRiskType(val){
-  renderRiskItems(val,'ov-risk-title','ov-risk-sub','ov-risk-body','ov-risk-more','ov-risk-view-all');
 }
 
 /* ── DOCUMENT ATTACHMENT MODAL ────────────────────────── */
