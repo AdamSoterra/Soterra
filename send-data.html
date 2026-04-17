@@ -167,7 +167,7 @@ async function init(){
     }
   }
   request=data;
-  document.getElementById('welcome-title').textContent='Hi '+(data.contact_name||data.company_name)+' &#128075;';
+  document.getElementById('welcome-title').innerHTML='Hi '+escapeHtml(data.contact_name||data.company_name)+' \u{1F44B}';
   document.querySelector('#upload-card .welcome-sub').innerHTML='Welcome! Please upload your historical inspection reports for <strong>'+escapeHtml(data.company_name)+'</strong> below. Soterra will analyse each report and build your company\'s intelligence baseline.';
   document.getElementById('upload-card').classList.remove('hidden');
 }
