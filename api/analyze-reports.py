@@ -104,20 +104,10 @@ def save_to_supabase(items, company_id, project_id, inspection_type, inspection_
             "source_filename": filename
         })
 
-    # If no items but we have an outcome (e.g. pass), still save one row as a record
+    # If no items to save, skip insert entirely.
+    # (We don't store synthetic "pass" rows — historical uploads are for failure patterns only)
     if not rows:
-        rows.append({
-            "company_id": company_id,
-            "project_id": project_id if project_id else None,
-            "inspection_type": inspection_type,
-            "inspection_date": inspection_date,
-            "outcome": outcome,
-            "report_type": report_type,
-            "item_title": "No issues — " + outcome,
-            "item_description": "Report passed with no items requiring action",
-            "location": None,
-            "source_filename": filename
-        })
+        return True
 
     data = json.dumps(rows).encode()
     url = f"{SUPABASE_URL}/rest/v1/inspection_items"

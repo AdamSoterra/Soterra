@@ -1629,17 +1629,12 @@ function tryLogin(){
         <div class="card-title">Upcoming inspections</div>
         <div class="card-sub">Scheduled with predicted risk level — based on historical patterns</div>
         <table style="table-layout:fixed">
-          <colgroup><col style="width:18%"><col style="width:20%"><col style="width:16%"><col style="width:16%"><col style="width:30%"></colgroup>
+          <colgroup><col style="width:22%"><col style="width:20%"><col style="width:16%"><col style="width:16%"><col style="width:26%"></colgroup>
           <tr><th>Type</th><th>Expected date</th><th>Days away</th><th>Risk level</th><th></th></tr>
-          <tr><td style="font-weight:500">Hydraulic</td><td>12 Apr 2026</td><td style="color:#EF4444;font-weight:500">5</td><td><span class="badge badge-high">High</span></td><td><button class="btn" style="font-size:11px;height:28px" onclick="exportPDF()">Export risks ↓</button></td></tr>
-          <tr><td style="font-weight:500">Fire</td><td>18 Apr 2026</td><td>11</td><td><span class="badge badge-medium">Medium</span></td><td><button class="btn" style="font-size:11px;height:28px" onclick="exportPDF()">Export risks ↓</button></td></tr>
-          <tr><td style="font-weight:500">Preline</td><td>24 Apr 2026</td><td>17</td><td><span class="badge badge-medium">Medium</span></td><td><button class="btn" style="font-size:11px;height:28px" onclick="exportPDF()">Export risks ↓</button></td></tr>
-          <tbody id="site-upcoming-more" style="display:none">
-            <tr><td style="font-weight:500">Structural</td><td>2 May 2026</td><td>25</td><td><span class="badge badge-low">Low</span></td><td><button class="btn" style="font-size:11px;height:28px" onclick="exportPDF()">Export risks ↓</button></td></tr>
-            <tr><td style="font-weight:500">Waterproofing</td><td>14 May 2026</td><td>37</td><td><span class="badge badge-low">Low</span></td><td><button class="btn" style="font-size:11px;height:28px" onclick="exportPDF()">Export risks ↓</button></td></tr>
-          </tbody>
+          <tbody id="site-upcoming-body"></tbody>
+          <tbody id="site-upcoming-more" style="display:none"></tbody>
         </table>
-        <div class="view-all-link" onclick="toggleMore('site-upcoming-more',this)">View more ↓</div>
+        <div class="view-all-link" id="site-upcoming-toggle" onclick="toggleMore('site-upcoming-more',this)" style="display:none">View more ↓</div>
       </div>
 
       <div class="card">
@@ -2169,7 +2164,7 @@ function nav(page,el){
   var bc=app.querySelector('[id^="bc-"]');if(bc)bc.textContent=labels[page]||page;
   if(page==='exec-company'){buildChart('chart-exec-issues',issuesData,'#7C3AED',true);}
   if(page==='exec-insights')buildChart('chart-exec-insights',failureData,'#4F46E5',false);
-  if(page==='site-overview')buildChart('chart-site-overview',siteData[currentSite].trendData,'#4F46E5',false);
+  if(page==='site-overview'&&siteData[currentSite]&&siteData[currentSite].hasLiveTrend)buildChart('chart-site-overview',siteData[currentSite].trendData,'#4F46E5',false);
   if(page==='site-calendar')buildCalendar();
 }
 
@@ -2880,7 +2875,7 @@ function computeCompanyIntelligence(items){
     return{
       hasData:false,totalItems:0,totalInspections:0,
       companyFailRate:0,companyIPI:'0',
-      typeCounts:{},riskItemsByType:null,
+      typeCounts:{},typeFailRates:{},availableTypes:[],riskItemsByType:null,
       rootCauses:[],riskAreas:[],patterns:[],
       monthlyTrend:[0,0,0,0,0,0,0,0,0,0,0,0]
     };
@@ -2906,11 +2901,23 @@ function computeCompanyIntelligence(items){
   var companyFailRate=totalInspections?Math.round(failedInspections/totalInspections*100):0;
   var companyIPI=totalInspections?(failItems.length/totalInspections).toFixed(1):'0';
 
-  // Type counts
+  // Type counts & per-type fail rates
   var typeCounts={};
+  var typeInspMap={};  // type → {inspKeys: {}, failKeys: {}}
   items.forEach(function(it){
     var t=(it.inspection_type||'other').toLowerCase();
     typeCounts[t]=(typeCounts[t]||0)+1;
+    if(!typeInspMap[t])typeInspMap[t]={inspKeys:{},failKeys:{}};
+    var k=inspectionKey(it);
+    typeInspMap[t].inspKeys[k]=true;
+    if(isFail(it))typeInspMap[t].failKeys[k]=true;
+  });
+  var typeFailRates={};
+  Object.keys(typeInspMap).forEach(function(t){
+    var info=typeInspMap[t];
+    var total=Object.keys(info.inspKeys).length;
+    var failed=Object.keys(info.failKeys).length;
+    typeFailRates[t]=total?Math.round(failed/total*100):0;
   });
 
   // Build risk items per type
@@ -2949,12 +2956,11 @@ function computeCompanyIntelligence(items){
     };
   }
 
-  var riskItemsByType={
-    hydraulic:buildRiskForType('hydraulic'),
-    fire:buildRiskForType('fire'),
-    structural:buildRiskForType('structural'),
-    electrical:buildRiskForType('electrical')
-  };
+  // Build risk items for every type that has data
+  var riskItemsByType={};
+  Object.keys(typeCounts).forEach(function(t){
+    riskItemsByType[t]=buildRiskForType(t);
+  });
 
   // Root causes: top item_titles among fails
   var titleCounts={};
@@ -2988,11 +2994,12 @@ function computeCompanyIntelligence(items){
     if(recent<prior*0.75&&prior>0)return{trend:'↓ Improving',trendColor:'#10B981'};
     return{trend:'→ Stable',trendColor:'#F59E0B'};
   }
+  // Patterns: trend is meaningless for bulk historical uploads.
+  // Trend will become meaningful once live tracker data accumulates over time.
   var patterns=Object.keys(titleCounts).sort(function(a,b){return titleCounts[b]-titleCounts[a];}).slice(0,8).map(function(title){
     var c=titleCounts[title];
     var pct=totalInspections?Math.round(c/totalInspections*100):0;
-    var tr=computeTrend(title);
-    return{issue:title,pct:pct+'%',trend:tr.trend,trendColor:tr.trendColor};
+    return{issue:title,pct:pct+'%',trend:'Historical',trendColor:'#6B7280'};
   });
 
   // Monthly trend (12 months, oldest → newest)
@@ -3016,6 +3023,9 @@ function computeCompanyIntelligence(items){
   });
   var monthlyTrend=months.map(function(mo){return mo.total?Math.round(mo.failed/mo.total*100):0;});
 
+  // Available types (sorted by count desc) — for dropdowns
+  var availableTypes=Object.keys(typeCounts).sort(function(a,b){return typeCounts[b]-typeCounts[a];});
+
   return{
     hasData:true,
     totalItems:items.length,
@@ -3023,6 +3033,8 @@ function computeCompanyIntelligence(items){
     companyFailRate:companyFailRate,
     companyIPI:companyIPI,
     typeCounts:typeCounts,
+    typeFailRates:typeFailRates,
+    availableTypes:availableTypes,
     riskItemsByType:riskItemsByType,
     rootCauses:rootCauses,
     riskAreas:riskAreas,
@@ -3100,6 +3112,35 @@ function transformProjectToSiteData(project,inspections,issueCountMap,companyInt
   var readyCount=inspections.filter(function(i){return i.status==='ready';}).length;
   var passedCount=inspections.filter(function(i){return i.status==='passed';}).length;
 
+  // Build upcoming inspections list: not started, in the future
+  var today=new Date();today.setHours(0,0,0,0);
+  var upcomingInspections=inspections.filter(function(i){
+    if(i.status!=='notstarted'&&i.status!=='ready')return false;
+    if(!i.start_date)return false;
+    var d=new Date(i.start_date);
+    return d>=today;
+  }).map(function(i){
+    var d=new Date(i.start_date);
+    var days=Math.round((d-today)/86400000);
+    var typeNorm=normalizeInspectionType(i.task);
+    var typeKey=typeNorm.toLowerCase();
+    // Risk level from company historical fail rate for this type
+    var failRate=companyIntel&&companyIntel.hasData&&companyIntel.typeFailRates?companyIntel.typeFailRates[typeKey]:null;
+    var riskLabel,riskClass;
+    if(failRate==null){riskLabel='—';riskClass='badge-neutral';}
+    else if(failRate>=50){riskLabel='High';riskClass='badge-high';}
+    else if(failRate>=25){riskLabel='Medium';riskClass='badge-medium';}
+    else{riskLabel='Low';riskClass='badge-low';}
+    return{
+      type:typeNorm,
+      date:d.toLocaleDateString('en-NZ',{day:'2-digit',month:'short',year:'numeric'}),
+      days:days,
+      riskLabel:riskLabel,
+      riskClass:riskClass,
+      failRate:failRate
+    };
+  }).sort(function(a,b){return a.days-b.days;}).slice(0,10);
+
   // Build issues list from failed/partialpass inspections
   var issues=inspections.filter(function(i){return i.status==='failed'||i.status==='partialpass';}).map(function(i){
     var d=i.start_date?new Date(i.start_date):new Date();
@@ -3145,32 +3186,35 @@ function transformProjectToSiteData(project,inspections,issueCountMap,companyInt
     return d&&(new Date()-d)/86400000>14;
   }).length;
 
-  // Build "vs company" comparison from companyIntel
-  function vsBadge(projVal,compVal,higherIsWorse,suffix){
-    suffix=suffix||'';
-    if(compVal==null||isNaN(compVal))return{badge:'—',badgeClass:'badge-neutral',avg:'—'};
-    var diff=projVal-compVal;
-    var threshold=Math.max(Math.abs(compVal)*0.1,1);
-    if(Math.abs(diff)<threshold)return{badge:'On par',badgeClass:'badge-neutral',avg:compVal+suffix};
-    var worse=higherIsWorse?diff>0:diff<0;
-    return{
-      badge:worse?'Higher':'Lower',
-      badgeClass:worse?'badge-high':'badge-low',
-      avg:compVal+suffix
-    };
+  // vs company average — hidden for MVP.
+  // Historical data is failure patterns only (no pass data), so average rate isn't meaningful.
+  // Real comparison becomes available once multiple projects have live tracker data.
+  var vsFail={badge:'—',badgeClass:'badge-neutral',avg:'—'};
+  var vsIPI={badge:'—',badgeClass:'badge-neutral',avg:'—'};
+
+  // Build monthly trend from LIVE inspections only (last 12 months)
+  var trendMonths=[];
+  var nowTrend=new Date();
+  for(var tm=11;tm>=0;tm--){
+    var mm=new Date(nowTrend.getFullYear(),nowTrend.getMonth()-tm,1);
+    trendMonths.push({y:mm.getFullYear(),m:mm.getMonth(),total:0,failed:0});
   }
+  inspections.forEach(function(i){
+    if(i.status!=='passed'&&i.status!=='failed'&&i.status!=='partialpass')return;
+    if(!i.start_date)return;
+    var d=new Date(i.start_date);if(isNaN(d))return;
+    for(var k=0;k<trendMonths.length;k++){
+      if(trendMonths[k].y===d.getFullYear()&&trendMonths[k].m===d.getMonth()){
+        trendMonths[k].total++;
+        if(i.status==='failed'||i.status==='partialpass')trendMonths[k].failed++;
+        break;
+      }
+    }
+  });
+  var liveTrendData=trendMonths.map(function(t){return t.total?Math.round(t.failed/t.total*100):0;});
+  var hasLiveTrend=liveTrendData.some(function(n){return n>0;});
 
   var hasCompanyData=companyIntel&&companyIntel.hasData;
-  var vsFail=hasCompanyData
-    ?vsBadge(failRate,companyIntel.companyFailRate,true,'%')
-    :{badge:'—',badgeClass:'badge-neutral',avg:'—'};
-  var vsIPI=hasCompanyData
-    ?vsBadge(projectIPI,parseFloat(companyIntel.companyIPI),true,'')
-    :{badge:'—',badgeClass:'badge-neutral',avg:'—'};
-
-  // Default trend data (placeholder when no company data)
-  var defaultTrend=[50,48,46,44,42,40,38,failRate,failRate,failRate,failRate,failRate];
-  var useCompanyTrend=hasCompanyData&&companyIntel.monthlyTrend.some(function(n){return n>0;});
 
   // Default insights (empty state)
   var defaultInsights={
@@ -3189,7 +3233,8 @@ function transformProjectToSiteData(project,inspections,issueCountMap,companyInt
       open:openIssues,
       overdue:overdueCount
     },
-    trendData:useCompanyTrend?companyIntel.monthlyTrend:defaultTrend,
+    trendData:liveTrendData,
+    hasLiveTrend:hasLiveTrend,
     vs:{
       fail:{val:failRate+'%',color:failRate>45?'#EF4444':'#F59E0B',avg:vsFail.avg,badge:vsFail.badge,badgeClass:vsFail.badgeClass},
       ipi:{val:projectIPI.toFixed(1),color:'#4A6080',avg:vsIPI.avg,badge:vsIPI.badge,badgeClass:vsIPI.badgeClass},
@@ -3197,6 +3242,7 @@ function transformProjectToSiteData(project,inspections,issueCountMap,companyInt
     },
     stats:{open:openIssues,ready:readyCount,closed:passedCount},
     issues:issues,
+    upcomingInspections:upcomingInspections,
     reports:reports,
     calGrid:calGrid,
     insights:hasCompanyData?{
@@ -3494,9 +3540,8 @@ function switchSite(siteKey){
   document.getElementById('st-overview-title').textContent='Overview — '+d.name;
   document.getElementById('st-insights-title').textContent='Insights — '+d.name;
   document.getElementById('cal-page-title').textContent='Project calendar — '+d.name;
-  // Reset type dropdowns to hydraulic
-  document.getElementById('site-risk-type-select').value='hydraulic';
-  document.getElementById('ov-risk-type-select').value='hydraulic';
+  // Populate type dropdowns dynamically from available types (only ones with real data)
+  var defaultType=populateRiskTypeDropdowns();
   // Refresh all site pages
   renderTrackerStats(d);
   buildCalGrid(siteKey);
@@ -3504,8 +3549,9 @@ function switchSite(siteKey){
   renderReports(d);
   renderOverview(d);
   renderInsights(d);
-  renderRiskItems('hydraulic','site-risk-card-title','site-risk-card-sub','site-risk-items-body','site-risk-items-more','site-risk-view-all');
-  renderRiskItems('hydraulic','ov-risk-title','ov-risk-sub','ov-risk-body','ov-risk-more','ov-risk-view-all');
+  renderRiskItems(defaultType,'site-risk-card-title','site-risk-card-sub','site-risk-items-body','site-risk-items-more','site-risk-view-all');
+  renderRiskItems(defaultType,'ov-risk-title','ov-risk-sub','ov-risk-body','ov-risk-more','ov-risk-view-all');
+  renderUpcomingInspections(d);
   updateAttachBtn();
   // Navigate to Live Tracker
   var navItems=document.querySelectorAll('#app-site .nav-item');
@@ -3816,10 +3862,30 @@ function renderOverview(d){
   document.getElementById('st-kpi-overdue').textContent=d.kpi.overdue;
   // vs company
   var vs=d.vs;
-  document.getElementById('st-vs-fail').innerHTML='<span style="color:'+vs.fail.color+';font-weight:500">'+vs.fail.val+'</span> vs '+vs.fail.avg+' avg <span class="badge '+vs.fail.badgeClass+'" style="margin-left:6px">'+vs.fail.badge+'</span>';
-  document.getElementById('st-vs-ipi').innerHTML='<span style="color:'+vs.ipi.color+';font-weight:500">'+vs.ipi.val+'</span> vs '+vs.ipi.avg+' avg <span class="badge '+vs.ipi.badgeClass+'" style="margin-left:6px">'+vs.ipi.badge+'</span>';
-  document.getElementById('st-vs-overdue').innerHTML='<span style="color:'+vs.overdue.color+';font-weight:500">'+vs.overdue.val+'</span> vs '+vs.overdue.avg+' avg <span class="badge '+vs.overdue.badgeClass+'" style="margin-left:6px">'+vs.overdue.badge+'</span>';
-  buildChart('chart-site-overview',d.trendData,'#4F46E5',false);
+  if(vs.fail.badge==='—'){
+    document.getElementById('st-vs-fail').innerHTML='<span style="color:'+vs.fail.color+';font-weight:500">'+vs.fail.val+'</span> <span style="color:#999;font-size:11px">— comparison available once multiple projects are live</span>';
+    document.getElementById('st-vs-ipi').innerHTML='<span style="color:'+vs.ipi.color+';font-weight:500">'+vs.ipi.val+'</span>';
+    document.getElementById('st-vs-overdue').innerHTML='<span style="color:'+vs.overdue.color+';font-weight:500">'+vs.overdue.val+'</span>';
+  }else{
+    document.getElementById('st-vs-fail').innerHTML='<span style="color:'+vs.fail.color+';font-weight:500">'+vs.fail.val+'</span> vs '+vs.fail.avg+' avg <span class="badge '+vs.fail.badgeClass+'" style="margin-left:6px">'+vs.fail.badge+'</span>';
+    document.getElementById('st-vs-ipi').innerHTML='<span style="color:'+vs.ipi.color+';font-weight:500">'+vs.ipi.val+'</span> vs '+vs.ipi.avg+' avg <span class="badge '+vs.ipi.badgeClass+'" style="margin-left:6px">'+vs.ipi.badge+'</span>';
+    document.getElementById('st-vs-overdue').innerHTML='<span style="color:'+vs.overdue.color+';font-weight:500">'+vs.overdue.val+'</span> vs '+vs.overdue.avg+' avg <span class="badge '+vs.overdue.badgeClass+'" style="margin-left:6px">'+vs.overdue.badge+'</span>';
+  }
+  // Trend chart: only render if we have live data; else show empty-state message
+  var chartEl=document.getElementById('chart-site-overview');
+  if(d.hasLiveTrend){
+    chartEl.style.display='';
+    buildChart('chart-site-overview',d.trendData,'#4F46E5',false);
+  }else{
+    chartEl.style.display='flex';
+    chartEl.style.alignItems='center';
+    chartEl.style.justifyContent='center';
+    chartEl.style.color='#999';
+    chartEl.style.fontSize='12px';
+    chartEl.style.padding='20px';
+    chartEl.style.textAlign='center';
+    chartEl.innerHTML='Trend will appear as inspections are logged in this project';
+  }
 }
 
 /* ── INSIGHTS ─────────────────────────────────────────── */
@@ -4626,8 +4692,65 @@ var riskItemsDataDemo={
 // Live riskItemsData — defaults to demo, swapped in switchSite() when real data exists
 var riskItemsData=riskItemsDataDemo;
 
+function renderUpcomingInspections(d){
+  var body=document.getElementById('site-upcoming-body');
+  var more=document.getElementById('site-upcoming-more');
+  var toggle=document.getElementById('site-upcoming-toggle');
+  if(!body)return;
+  var list=(d&&d.upcomingInspections)||[];
+  if(list.length===0){
+    body.innerHTML='<tr><td colspan="5" style="text-align:center;color:#999;padding:14px">No upcoming inspections — upload a construction program to populate dates</td></tr>';
+    if(more)more.innerHTML='';
+    if(toggle)toggle.style.display='none';
+    return;
+  }
+  function row(it){
+    var dayColor=it.days<=7?'color:#EF4444;font-weight:500':(it.days<=14?'color:#F59E0B;font-weight:500':'');
+    return'<tr>'
+      +'<td style="font-weight:500">'+it.type+'</td>'
+      +'<td>'+it.date+'</td>'
+      +'<td style="'+dayColor+'">'+it.days+'</td>'
+      +'<td><span class="badge '+it.riskClass+'">'+it.riskLabel+'</span></td>'
+      +'<td><button class="btn" style="font-size:11px;height:28px" onclick="exportPDF()">Export risks ↓</button></td>'
+      +'</tr>';
+  }
+  var first=list.slice(0,3).map(row).join('');
+  var rest=list.slice(3).map(row).join('');
+  body.innerHTML=first;
+  if(more)more.innerHTML=rest;
+  if(toggle){
+    toggle.style.display=rest?'':'none';
+    toggle.textContent='View more ↓';
+  }
+}
+
+function populateRiskTypeDropdowns(){
+  // Use real types from company intelligence, fallback to hardcoded demo types
+  var types=(companyIntelligence&&companyIntelligence.hasData&&companyIntelligence.availableTypes.length)
+    ?companyIntelligence.availableTypes
+    :['hydraulic','fire','structural','electrical'];
+  var defaultType=types[0];
+  function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+  ['site-risk-type-select','ov-risk-type-select'].forEach(function(id){
+    var sel=document.getElementById(id);
+    if(!sel)return;
+    sel.innerHTML=types.map(function(t){return'<option value="'+t+'">'+cap(t)+'</option>';}).join('');
+    sel.value=defaultType;
+  });
+  return defaultType;
+}
+
 function renderRiskItems(typeKey,titleId,subId,bodyId,moreId,toggleId){
   var data=riskItemsData[typeKey];
+  // Guard: if type not in dataset, show empty state
+  if(!data){
+    document.getElementById(titleId).innerHTML=(typeKey.charAt(0).toUpperCase()+typeKey.slice(1))+' — no data yet';
+    document.getElementById(subId).textContent='Upload reports of this type to see patterns';
+    document.getElementById(bodyId).innerHTML='<tr><td colspan="4" style="text-align:center;color:#999;padding:14px">No data yet — upload reports for this inspection type</td></tr>';
+    if(document.getElementById(moreId))document.getElementById(moreId).innerHTML='';
+    if(document.getElementById(toggleId))document.getElementById(toggleId).textContent='';
+    return;
+  }
   document.getElementById(titleId).innerHTML=data.title;
   document.getElementById(subId).textContent=data.sub;
   function row(it,hidden){
