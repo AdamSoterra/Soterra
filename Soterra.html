@@ -983,20 +983,23 @@ function tryLogin(){
 /* ── SOTERRA ASSISTANT CHAT WIDGET ── */
 #soterra-chat-bubble{position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#0E74BD 0%,#0A2540 100%);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 8px 28px rgba(14,116,189,.4);z-index:1100;transition:transform .15s,box-shadow .15s}
 #soterra-chat-bubble:hover{transform:scale(1.06);box-shadow:0 10px 32px rgba(14,116,189,.55)}
-#soterra-chat-panel{position:fixed;bottom:92px;right:24px;width:380px;max-width:calc(100vw - 48px);height:560px;max-height:calc(100vh - 120px);background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.25);z-index:1100;display:flex;flex-direction:column;overflow:hidden;font-family:'DM Sans',system-ui,sans-serif}
-.chat-header{background:linear-gradient(135deg,#0A2540 0%,#0E74BD 100%);padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
-.chat-logo{width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.15);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
-.chat-close{background:none;border:none;color:rgba(255,255,255,.7);font-size:16px;cursor:pointer;width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center}
+#soterra-chat-backdrop{position:fixed;inset:0;background:rgba(10,37,64,.35);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:1099;display:none;animation:chatBackdropFade .2s ease-out}
+@keyframes chatBackdropFade{from{opacity:0}to{opacity:1}}
+#soterra-chat-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:720px;max-width:calc(100vw - 48px);height:78vh;max-height:820px;min-height:500px;background:#fff;border-radius:18px;box-shadow:0 30px 80px rgba(10,37,64,.35);z-index:1100;display:flex;flex-direction:column;overflow:hidden;font-family:'DM Sans',system-ui,sans-serif;animation:chatPanelFade .22s ease-out}
+@keyframes chatPanelFade{from{opacity:0;transform:translate(-50%,-48%) scale(.98)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.chat-header{background:linear-gradient(135deg,#0A2540 0%,#0E74BD 100%);padding:18px 22px;display:flex;align-items:center;justify-content:space-between}
+.chat-logo{width:38px;height:38px;border-radius:10px;background:rgba(255,255,255,.15);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700}
+.chat-close{background:none;border:none;color:rgba(255,255,255,.7);font-size:20px;cursor:pointer;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center}
 .chat-close:hover{background:rgba(255,255,255,.1);color:#fff}
-.chat-disclaimer{padding:8px 14px;font-size:10px;color:#4A6080;background:#F0F7FF;line-height:1.4;border-bottom:.5px solid rgba(14,116,189,.12)}
-.chat-messages{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:#FAFBFC}
-.chat-msg{display:flex;gap:8px;max-width:88%;animation:chatFade .2s ease-out}
+.chat-disclaimer{padding:10px 22px;font-size:11px;color:#4A6080;background:#F0F7FF;line-height:1.5;border-bottom:.5px solid rgba(14,116,189,.12)}
+.chat-messages{flex:1;overflow-y:auto;padding:20px 22px;display:flex;flex-direction:column;gap:14px;background:#FAFBFC}
+.chat-msg{display:flex;gap:10px;max-width:78%;animation:chatFade .2s ease-out}
 @keyframes chatFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 .chat-msg-bot{align-self:flex-start}
 .chat-msg-user{align-self:flex-end;flex-direction:row-reverse}
-.chat-bubble-icon{width:26px;height:26px;border-radius:8px;background:#0E74BD;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.chat-bubble-icon{width:32px;height:32px;border-radius:10px;background:#0E74BD;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
 .chat-msg-user .chat-bubble-icon{background:#0A2540}
-.chat-bubble-text{padding:8px 12px;border-radius:12px;font-size:12.5px;line-height:1.55;color:#0A2540;white-space:pre-wrap;word-wrap:break-word}
+.chat-bubble-text{padding:12px 16px;border-radius:14px;font-size:13.5px;line-height:1.6;color:#0A2540;white-space:pre-wrap;word-wrap:break-word}
 .chat-msg-bot .chat-bubble-text{background:#fff;border:.5px solid rgba(0,0,0,.08)}
 .chat-msg-user .chat-bubble-text{background:#0E74BD;color:#fff;border:none}
 .chat-typing{display:flex;gap:3px;padding:10px 12px;background:#fff;border:.5px solid rgba(0,0,0,.08);border-radius:12px;width:fit-content}
@@ -1004,10 +1007,10 @@ function tryLogin(){
 .chat-typing span:nth-child(2){animation-delay:.2s}
 .chat-typing span:nth-child(3){animation-delay:.4s}
 @keyframes chatTyping{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
-.chat-input-row{display:flex;gap:8px;padding:10px 12px;border-top:.5px solid rgba(0,0,0,.08);background:#fff}
-#chat-input{flex:1;height:38px;border:1px solid rgba(0,0,0,.12);border-radius:8px;padding:0 12px;font-size:13px;font-family:'DM Sans',system-ui,sans-serif;color:#0A2540;outline:none}
+.chat-input-row{display:flex;gap:10px;padding:14px 18px;border-top:.5px solid rgba(0,0,0,.08);background:#fff}
+#chat-input{flex:1;height:44px;border:1.5px solid rgba(0,0,0,.12);border-radius:10px;padding:0 14px;font-size:14px;font-family:'DM Sans',system-ui,sans-serif;color:#0A2540;outline:none}
 #chat-input:focus{border-color:#0E74BD}
-#chat-send-btn{height:38px;padding:0 16px;background:#0E74BD;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',system-ui,sans-serif}
+#chat-send-btn{height:44px;padding:0 20px;background:#0E74BD;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',system-ui,sans-serif}
 #chat-send-btn:hover{background:#0A5C97}
 #chat-send-btn:disabled{background:#ccc;cursor:not-allowed}
 </style>
@@ -1786,6 +1789,7 @@ function tryLogin(){
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
   </svg>
 </div>
+<div id="soterra-chat-backdrop" onclick="toggleChat()"></div>
 <div id="soterra-chat-panel" style="display:none">
   <div class="chat-header">
     <div style="display:flex;align-items:center;gap:8px">
@@ -5232,10 +5236,13 @@ var chatHistory=[];
 
 function toggleChat(){
   var panel=document.getElementById('soterra-chat-panel');
+  var backdrop=document.getElementById('soterra-chat-backdrop');
   var isOpen=panel.style.display==='flex';
   if(isOpen){
     panel.style.display='none';
+    if(backdrop)backdrop.style.display='none';
   }else{
+    if(backdrop)backdrop.style.display='block';
     panel.style.display='flex';
     setTimeout(function(){
       var input=document.getElementById('chat-input');
