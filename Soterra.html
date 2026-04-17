@@ -3792,8 +3792,16 @@ function switchSite(siteKey){
   currentSite=siteKey;
   var d=siteData[siteKey];
   // Swap global riskItemsData to this project's company-level intelligence
-  // If no real data exists, fall back to demo data (dashboard still looks populated)
-  riskItemsData=(d&&d.riskItemsData)?d.riskItemsData:riskItemsDataDemo;
+  // - Logged-in user with company data → real data
+  // - Logged-in user with empty company → empty object (renderRiskItems shows empty state)
+  // - Not logged in (demo/marketing view) → hardcoded demo data so it looks populated
+  if(d&&d.riskItemsData){
+    riskItemsData=d.riskItemsData;
+  }else if(isLiveData){
+    riskItemsData={};  // authenticated but no data yet — show empty states
+  }else{
+    riskItemsData=riskItemsDataDemo;
+  }
   // Update all page titles
   document.getElementById('st-tracker-title').textContent='Live tracker — '+d.name;
   document.getElementById('st-risk-title').textContent='Upcoming inspection risk — '+d.name;
@@ -4987,10 +4995,17 @@ function renderUpcomingInspections(d){
 }
 
 function populateRiskTypeDropdowns(){
-  // Use real types from company intelligence, fallback to hardcoded demo types
-  var types=(companyIntelligence&&companyIntelligence.hasData&&companyIntelligence.availableTypes.length)
-    ?companyIntelligence.availableTypes
-    :['hydraulic','fire','structural','electrical'];
+  // Use real types from company intelligence.
+  // For authenticated users with no data yet, leave dropdown with a single placeholder.
+  // For unauthenticated/demo view, show the hardcoded demo types.
+  var types;
+  if(companyIntelligence&&companyIntelligence.hasData&&companyIntelligence.availableTypes.length){
+    types=companyIntelligence.availableTypes;
+  }else if(isLiveData){
+    types=['hydraulic','fire','structural','electrical'];  // show all 4, each will show empty state
+  }else{
+    types=['hydraulic','fire','structural','electrical'];
+  }
   var defaultType=types[0];
   function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
   ['site-risk-type-select'].forEach(function(id){
