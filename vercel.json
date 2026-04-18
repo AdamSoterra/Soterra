@@ -14,7 +14,7 @@
     },
     "api/chat.py": {
       "runtime": "@vercel/python@4.7.0",
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "api/process-submission.py": {
       "runtime": "@vercel/python@4.7.0",

@@ -3881,6 +3881,8 @@ function switchSite(siteKey){
   renderInsights(d);
   renderRiskItems(defaultType,'site-risk-card-title','site-risk-card-sub','site-risk-items-body','site-risk-items-more','site-risk-view-all');
   renderUpcomingInspections(d);
+  // Load documents for this project (persisted plans)
+  if(siteKey&&siteKey!=='_company_baseline')loadProjectDocuments(siteKey);
   updateAttachBtn();
   // Navigate to Live Tracker
   var navItems=document.querySelectorAll('#app-site .nav-item');
@@ -5191,21 +5193,123 @@ function docsDrop(e){
   docsDragLeave(e);
   docsHandleFiles(e.dataTransfer.files);
 }
-function docsHandleFiles(files){
-  Array.from(files).forEach(function(f){
+async function docsHandleFiles(files){
+  if(!isLiveData||!soterraDb||!currentSite||currentSite==='_company_baseline'){
+    alert('Please create a project before attaching documents.');
+    return;
+  }
+  var fileArr=Array.from(files);
+  var companyId=soterraProfile?soterraProfile.company_id:null;
+  var userId=soterraUser?soterraUser.id:null;
+
+  for(var i=0;i<fileArr.length;i++){
+    var f=fileArr[i];
     var ext=f.name.split('.').pop().toLowerCase();
     var iconMap={pdf:'📄',doc:'📝',docx:'📝',xls:'📊',xlsx:'📊',jpg:'🖼',jpeg:'🖼',png:'🖼'};
     var icon=iconMap[ext]||'📎';
     var sizeMB=(f.size/1048576).toFixed(1);
-    attachedDocs.push({name:f.name,size:sizeMB+'MB',icon:icon,date:new Date().toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'}),site:currentSite});
-  });
-  renderDocsList();
+
+    // Add placeholder to show upload progress
+    var tempId='_temp_'+Date.now()+'_'+i;
+    attachedDocs.push({
+      id:tempId,
+      name:f.name,size:sizeMB+'MB',icon:icon,
+      date:new Date().toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'}),
+      site:currentSite,
+      uploading:true
+    });
+    renderDocsList();
+
+    try{
+      // Upload to Supabase Storage
+      var safeName=f.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      var path=currentSite+'/'+Date.now()+'_'+safeName;
+      var{error:uploadErr}=await soterraDb.storage.from('project-plans').upload(path,f,{contentType:f.type||'application/octet-stream',upsert:false});
+      if(uploadErr)throw new Error(uploadErr.message);
+
+      // Insert into documents table
+      var{data:docRow,error:insertErr}=await soterraDb.from('documents').insert({
+        project_id:currentSite,
+        company_id:companyId,
+        name:f.name,
+        storage_path:path,
+        file_size:f.size,
+        content_type:f.type||null,
+        uploaded_by:userId
+      }).select().single();
+      if(insertErr)throw new Error(insertErr.message);
+
+      // Replace placeholder with real record
+      var idx=attachedDocs.findIndex(function(d){return d.id===tempId;});
+      if(idx>-1){
+        attachedDocs[idx]={
+          id:docRow.id,
+          name:docRow.name,
+          size:sizeMB+'MB',
+          icon:icon,
+          date:new Date(docRow.created_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'}),
+          site:currentSite,
+          storage_path:docRow.storage_path
+        };
+      }
+    }catch(e){
+      // Mark as failed
+      var idx2=attachedDocs.findIndex(function(d){return d.id===tempId;});
+      if(idx2>-1){
+        attachedDocs[idx2].uploading=false;
+        attachedDocs[idx2].error=e.message||'Upload failed';
+      }
+      console.error('Doc upload failed:',e);
+    }
+    renderDocsList();
+  }
   updateAttachBtn();
 }
-function removeDoc(idx){
+
+async function removeDoc(idx){
+  var doc=attachedDocs[idx];
+  if(!doc)return;
+  // Remove locally first for snappy UX
   attachedDocs.splice(idx,1);
   renderDocsList();
   updateAttachBtn();
+  // Delete from backend if it was persisted
+  if(doc.id&&!String(doc.id).startsWith('_temp_')&&soterraDb){
+    try{
+      if(doc.storage_path)await soterraDb.storage.from('project-plans').remove([doc.storage_path]);
+      await soterraDb.from('documents').delete().eq('id',doc.id);
+    }catch(e){
+      console.error('Doc delete failed:',e);
+    }
+  }
+}
+
+async function loadProjectDocuments(projectId){
+  if(!soterraDb||!projectId||projectId==='_company_baseline')return;
+  try{
+    var{data,error}=await soterraDb.from('documents').select('*').eq('project_id',projectId);
+    if(error||!data)return;
+    // Remove existing entries for this site, then add fresh
+    attachedDocs=attachedDocs.filter(function(d){return d.site!==projectId;});
+    data.forEach(function(doc){
+      var ext=(doc.name||'').split('.').pop().toLowerCase();
+      var iconMap={pdf:'📄',doc:'📝',docx:'📝',xls:'📊',xlsx:'📊',jpg:'🖼',jpeg:'🖼',png:'🖼'};
+      var icon=iconMap[ext]||'📎';
+      var sizeMB=doc.file_size?(doc.file_size/1048576).toFixed(1)+'MB':'—';
+      attachedDocs.push({
+        id:doc.id,
+        name:doc.name,
+        size:sizeMB,
+        icon:icon,
+        date:new Date(doc.created_at).toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'}),
+        site:projectId,
+        storage_path:doc.storage_path
+      });
+    });
+    updateAttachBtn();
+  }catch(e){
+    console.error('Load documents error:',e);
+  }
 }
 function renderDocsList(){
   var list=document.getElementById('docs-file-list');
@@ -5215,11 +5319,19 @@ function renderDocsList(){
   empty.style.display='none';
   list.innerHTML=siteDocs.map(function(doc,i){
     var realIdx=attachedDocs.indexOf(doc);
+    var statusLine;
+    if(doc.uploading){
+      statusLine='<div style="font-size:11px;color:#F59E0B;margin-top:2px">Uploading...</div>';
+    }else if(doc.error){
+      statusLine='<div style="font-size:11px;color:#EF4444;margin-top:2px">Failed: '+doc.error+'</div>';
+    }else{
+      statusLine='<div style="font-size:11px;color:#999;margin-top:2px">'+doc.size+' &nbsp;·&nbsp; Added '+doc.date+'</div>';
+    }
     return'<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:.5px solid rgba(0,0,0,.1);border-radius:8px;background:var(--color-background-secondary)">'
       +'<span style="font-size:20px">'+doc.icon+'</span>'
       +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+doc.name+'</div>'
-      +'<div style="font-size:11px;color:#999;margin-top:2px">'+doc.size+' &nbsp;·&nbsp; Added '+doc.date+'</div></div>'
-      +'<button onclick="removeDoc('+realIdx+')" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:16px;padding:0 4px;line-height:1" title="Remove">✕</button>'
+      +statusLine+'</div>'
+      +(doc.uploading?'':'<button onclick="removeDoc('+realIdx+')" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:16px;padding:0 4px;line-height:1" title="Remove">✕</button>')
       +'</div>';
   }).join('');
 }
@@ -5431,14 +5543,20 @@ async function sendChat(){
   renderChatMessage('user',msg);
   renderChatTyping();
 
+  // Gather attached plans for current project (persisted docs only)
+  var projectPlans=attachedDocs.filter(function(d){
+    return d.site===currentSite && d.storage_path && !d.uploading && !d.error;
+  });
   var payload={
     message:msg,
     history:chatHistory.slice(-10),
     context:{
       company_summary:buildChatCompanySummary(),
       project_summary:buildChatProjectSummary(),
-      project_name:(siteData&&siteData[currentSite])?siteData[currentSite].name:''
-    }
+      project_name:(siteData&&siteData[currentSite])?siteData[currentSite].name:'',
+      attached_plans:projectPlans.map(function(p){return{id:p.id,name:p.name};})
+    },
+    plan_ids:projectPlans.slice(0,5).map(function(p){return p.id;})
   };
 
   try{
