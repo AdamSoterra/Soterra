@@ -132,6 +132,7 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
     <button class="mode-tab active" id="tab-onboard" onclick="switchMode('onboard')">Onboard now</button>
     <button class="mode-tab" id="tab-link" onclick="switchMode('link')">Generate upload link</button>
     <button class="mode-tab" id="tab-pending" onclick="switchMode('pending')">Pending submissions <span id="pending-count-badge" style="display:none;background:#EF4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px"></span></button>
+    <button class="mode-tab" id="tab-projects" onclick="switchMode('projects')">Projects</button>
   </div>
 
   <!-- Mode: onboard (original flow) -->
@@ -285,6 +286,103 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
       </div>
 
       <div id="pending-detail" style="display:none;margin-top:20px"></div>
+    </div>
+  </div>
+
+  <!-- Mode: projects (admin creates projects on behalf of companies) -->
+  <div class="mode-section" id="mode-projects">
+    <!-- Project creation wizard -->
+    <div class="card" id="proj-create-card">
+      <div class="step-tag">Create project</div>
+      <div class="step-title" id="proj-step-title">Step 1 — Pick a company</div>
+      <div class="step-sub" id="proj-step-sub">Choose which company this project belongs to. The company must already exist (from an Onboard flow).</div>
+
+      <!-- Step 1: company select -->
+      <div id="proj-step-1">
+        <div class="field">
+          <div class="field-label">Company</div>
+          <select class="field-input" id="proj-company-select">
+            <option value="">Loading companies...</option>
+          </select>
+        </div>
+        <div id="proj-step1-msg" class="msg"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="projNextFromStep1()">Continue →</button>
+        </div>
+      </div>
+
+      <!-- Step 2: project details -->
+      <div id="proj-step-2" style="display:none">
+        <div class="field">
+          <div class="field-label">Project name</div>
+          <input class="field-input" id="proj-name" placeholder="e.g. Budapest Tower 1">
+        </div>
+        <div class="field">
+          <div class="field-label">Site address</div>
+          <input class="field-input" id="proj-address" placeholder="e.g. 45 Hamer Street, Auckland">
+        </div>
+        <div class="field">
+          <div class="field-label">Site manager name</div>
+          <input class="field-input" id="proj-sm-name" placeholder="e.g. Sam Carter">
+        </div>
+        <div class="field">
+          <div class="field-label">Site manager email</div>
+          <input class="field-input" id="proj-sm-email" type="email" placeholder="sam@company.co.nz">
+        </div>
+        <div id="proj-step2-msg" class="msg"></div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="projGoto(1)">← Back</button>
+          <button class="btn btn-primary" onclick="projNextFromStep2()">Continue →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: program upload -->
+      <div id="proj-step-3" style="display:none">
+        <div class="step-sub" style="margin-bottom:14px">Upload the construction program PDF. Soterra will extract inspection milestones and dates.</div>
+        <div class="upload-zone" id="proj-program-dropzone" onclick="document.getElementById('proj-program-input').click()">
+          <div class="upload-icon">&#128196;</div>
+          <div class="upload-title">Drop program PDF here or click to browse</div>
+          <div class="upload-sub">MS Project, Asta, P6 exports — any PDF</div>
+        </div>
+        <input type="file" id="proj-program-input" accept=".pdf" style="display:none">
+        <div id="proj-program-file" style="display:none;margin-top:10px;padding:10px 14px;background:rgba(14,116,189,.05);border:1.5px solid rgba(14,116,189,.15);border-radius:10px;font-size:13px"></div>
+        <div id="proj-step3-msg" class="msg"></div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="projGoto(2)">← Back</button>
+          <button class="btn btn-primary" id="proj-analyse-btn" onclick="projAnalyseProgram()" disabled>Analyse program →</button>
+        </div>
+      </div>
+
+      <!-- Step 4: review & confirm -->
+      <div id="proj-step-4" style="display:none">
+        <div id="proj-review-body"></div>
+        <div id="proj-step4-msg" class="msg"></div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="projGoto(3)">← Re-upload</button>
+          <button class="btn btn-primary" id="proj-confirm-btn" onclick="projConfirm()">Confirm &amp; create project →</button>
+        </div>
+      </div>
+
+      <!-- Step 5: done -->
+      <div id="proj-step-5" style="display:none">
+        <div class="success-icon">&#10003;</div>
+        <div class="step-title" style="text-align:center">Project created!</div>
+        <div class="step-sub" style="text-align:center" id="proj-done-sub">The project is ready. PMs for this company can now see it on their dashboard.</div>
+        <div class="btn-row" style="justify-content:center">
+          <button class="btn btn-secondary" onclick="projReset()">Create another project</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- All projects list -->
+    <div class="card" style="margin-top:16px">
+      <div class="step-tag">All projects</div>
+      <div class="step-title">Review existing projects</div>
+      <div class="step-sub">Click a project to view its program PDF and spot-check the extracted inspections.</div>
+      <div id="proj-list" style="margin-top:14px">
+        <div style="text-align:center;padding:30px;color:var(--slate);font-size:13px">Loading...</div>
+      </div>
+      <div id="proj-list-detail" style="display:none;margin-top:20px"></div>
     </div>
   </div>
 
@@ -524,6 +622,7 @@ function switchMode(mode){
   document.getElementById('mode-'+mode).classList.add('active');
   document.getElementById('tab-'+mode).classList.add('active');
   if(mode==='pending')loadPendingSubmissions();
+  if(mode==='projects'){projLoadCompanies();projLoadProjects();}
 }
 
 function randomToken(){
@@ -702,6 +801,284 @@ var origLoadPending=loadPendingSubmissions;
 loadPendingSubmissions=function(){
   document.getElementById('pending-list').style.display='';
   return origLoadPending();
+};
+
+/* ══════════════════════════════════════════════════════════
+   PROJECTS TAB — admin creates projects on behalf of companies
+   ══════════════════════════════════════════════════════════ */
+
+var projState={companies:[],selectedCompanyId:'',programFile:null,parsedData:null};
+
+async function projLoadCompanies(){
+  var sel=document.getElementById('proj-company-select');
+  if(!sel)return;
+  sel.innerHTML='<option value="">Loading...</option>';
+  var{data,error}=await soterraDb.from('companies').select('id,name,join_code').order('created_at',{ascending:false});
+  if(error||!data||!data.length){
+    sel.innerHTML='<option value="">No companies found</option>';
+    return;
+  }
+  projState.companies=data;
+  sel.innerHTML='<option value="">— Pick a company —</option>'+data.map(function(c){
+    return'<option value="'+c.id+'">'+escapeHtml(c.name)+' ('+c.join_code+')</option>';
+  }).join('');
+}
+
+function projGoto(step){
+  for(var i=1;i<=5;i++){
+    var el=document.getElementById('proj-step-'+i);
+    if(el)el.style.display=i===step?'block':'none';
+  }
+  var titles={1:'Step 1 — Pick a company',2:'Step 2 — Project details',3:'Step 3 — Upload construction program',4:'Step 4 — Review & confirm',5:'Complete'};
+  var subs={1:'Choose which company this project belongs to.',2:'Enter the project details — name, address, site manager.',3:'Upload the program PDF. Soterra will extract milestones.',4:'Review the extracted inspections before creating the project.',5:''};
+  document.getElementById('proj-step-title').textContent=titles[step]||'';
+  document.getElementById('proj-step-sub').textContent=subs[step]||'';
+}
+
+function projNextFromStep1(){
+  var sel=document.getElementById('proj-company-select');
+  var msg=document.getElementById('proj-step1-msg');
+  if(!sel.value){msg.textContent='Pick a company first.';msg.className='msg msg-error';return;}
+  msg.style.display='none';
+  projState.selectedCompanyId=sel.value;
+  projGoto(2);
+}
+
+function projNextFromStep2(){
+  var msg=document.getElementById('proj-step2-msg');
+  var name=document.getElementById('proj-name').value.trim();
+  if(!name){msg.textContent='Project name is required.';msg.className='msg msg-error';return;}
+  msg.style.display='none';
+  projGoto(3);
+}
+
+function projResetFileInput(){
+  document.getElementById('proj-program-file').style.display='none';
+  document.getElementById('proj-analyse-btn').disabled=true;
+  projState.programFile=null;
+}
+
+// Wire up program upload zone
+document.addEventListener('DOMContentLoaded',function(){
+  var dz=document.getElementById('proj-program-dropzone');
+  var fi=document.getElementById('proj-program-input');
+  if(dz&&fi){
+    dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('drag-over');});
+    dz.addEventListener('dragleave',function(){dz.classList.remove('drag-over');});
+    dz.addEventListener('drop',function(e){e.preventDefault();dz.classList.remove('drag-over');if(e.dataTransfer.files.length)projHandleProgramFile(e.dataTransfer.files[0]);});
+    fi.addEventListener('change',function(){if(fi.files.length)projHandleProgramFile(fi.files[0]);});
+  }
+});
+
+function projHandleProgramFile(file){
+  if(!file.name.toLowerCase().endsWith('.pdf')){
+    var msg=document.getElementById('proj-step3-msg');
+    msg.textContent='Please upload a PDF file.';msg.className='msg msg-error';
+    return;
+  }
+  projState.programFile=file;
+  var info=document.getElementById('proj-program-file');
+  info.style.display='block';
+  info.innerHTML='<strong>'+escapeHtml(file.name)+'</strong> — '+Math.round(file.size/1024)+' KB — ready to analyse';
+  document.getElementById('proj-analyse-btn').disabled=false;
+}
+
+async function projAnalyseProgram(){
+  if(!projState.programFile)return;
+  var btn=document.getElementById('proj-analyse-btn');
+  var msg=document.getElementById('proj-step3-msg');
+  btn.disabled=true;btn.textContent='Analysing...';
+  msg.textContent='Extracting inspections...';msg.className='msg';msg.style.display='block';msg.style.background='#DBEAFE';msg.style.color='#1E40AF';
+
+  var fd=new FormData();
+  fd.append('file',projState.programFile);
+
+  try{
+    var resp=await fetch('/api/parse-program',{method:'POST',body:fd});
+    var data=await resp.json();
+    if(data.error){throw new Error(data.error);}
+    projState.parsedData=data;
+    projShowReview(data);
+    projGoto(4);
+  }catch(e){
+    msg.textContent='Error: '+(e.message||'Unknown');msg.className='msg msg-error';
+  }finally{
+    btn.disabled=false;btn.textContent='Analyse program →';
+  }
+}
+
+function projShowReview(data){
+  var body=document.getElementById('proj-review-body');
+  var html='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px">';
+  html+='<div class="summary-stat"><div class="summary-val">'+data.total+'</div><div class="summary-label">Inspections</div></div>';
+  html+='<div class="summary-stat"><div class="summary-val">'+(data.lots||[]).length+'</div><div class="summary-label">Lots</div></div>';
+  var typeCount=new Set((data.inspections||[]).map(function(i){return(i.task||'').toLowerCase().replace(/\s+/g,' ').slice(0,20);})).size;
+  html+='<div class="summary-stat"><div class="summary-val">'+typeCount+'</div><div class="summary-label">Types</div></div>';
+  html+='</div>';
+  html+='<div style="max-height:320px;overflow-y:auto;border:.5px solid rgba(0,0,0,.08);border-radius:8px;padding:10px">';
+  (data.lots||[]).forEach(function(lot){
+    var items=(data.by_lot&&data.by_lot[lot])||[];
+    html+='<div style="font-weight:600;font-size:12px;margin:8px 0 4px;color:var(--navy)">'+escapeHtml(lot)+' ('+items.length+')</div>';
+    items.slice(0,8).forEach(function(it){
+      html+='<div style="font-size:11px;color:var(--slate);padding:3px 0;display:flex;justify-content:space-between"><span>'+escapeHtml(it.task||'(unnamed)')+'</span><span>'+escapeHtml(it.start||'')+'</span></div>';
+    });
+    if(items.length>8)html+='<div style="font-size:10px;color:var(--slate);font-style:italic">+ '+(items.length-8)+' more</div>';
+  });
+  html+='</div>';
+  body.innerHTML=html;
+}
+
+async function projConfirm(){
+  if(!projState.parsedData||!projState.selectedCompanyId){return;}
+  var btn=document.getElementById('proj-confirm-btn');
+  var msg=document.getElementById('proj-step4-msg');
+  btn.disabled=true;btn.textContent='Creating project...';
+  msg.style.display='none';
+
+  var pdata=projState.parsedData;
+  var projPayload={
+    company_id:projState.selectedCompanyId,
+    name:document.getElementById('proj-name').value.trim(),
+    address:document.getElementById('proj-address').value.trim()||null,
+    sm_name:document.getElementById('proj-sm-name').value.trim()||null,
+    sm_email:document.getElementById('proj-sm-email').value.trim()||null,
+    program_filename:projState.programFile?projState.programFile.name:null
+  };
+
+  try{
+    // 1. Insert project
+    var{data:project,error:projErr}=await soterraDb.from('projects').insert(projPayload).select().single();
+    if(projErr)throw new Error('Project insert: '+projErr.message);
+
+    // 2. Upload program PDF to storage
+    var safeName=projState.programFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    var storagePath=project.id+'/'+Date.now()+'_'+safeName;
+    var{error:upErr}=await soterraDb.storage.from('project-programs').upload(storagePath,projState.programFile,{contentType:'application/pdf',upsert:false});
+    if(upErr)console.error('Program upload failed (non-fatal):',upErr.message);
+    else{
+      // Update project with storage path
+      await soterraDb.from('projects').update({program_storage_path:storagePath}).eq('id',project.id);
+    }
+
+    // 3. Insert inspection rows
+    var insps=(pdata.inspections||[]).filter(function(i){return(i.task||'').trim();}).map(function(i){
+      return{
+        project_id:project.id,
+        task_id:String(i.id||'').slice(0,40),
+        task:i.task,
+        lot:i.lot||null,
+        section:i.section||null,
+        start_date:i.start_date||null,
+        duration:i.duration||null,
+        status:'notstarted'
+      };
+    });
+    if(insps.length>0){
+      // Insert in chunks of 100 to be safe
+      for(var k=0;k<insps.length;k+=100){
+        var chunk=insps.slice(k,k+100);
+        var{error:inspErr}=await soterraDb.from('inspections').insert(chunk);
+        if(inspErr){throw new Error('Inspection insert: '+inspErr.message);}
+      }
+    }
+
+    // Success
+    document.getElementById('proj-done-sub').textContent='"'+project.name+'" is ready with '+insps.length+' inspections. PMs for this company will see it on their dashboard.';
+    projGoto(5);
+    // Refresh list in background
+    projLoadProjects();
+  }catch(e){
+    msg.textContent='Error: '+(e.message||'Unknown');msg.className='msg msg-error';
+  }finally{
+    btn.disabled=false;btn.textContent='Confirm & create project →';
+  }
+}
+
+function projReset(){
+  projState={companies:projState.companies,selectedCompanyId:'',programFile:null,parsedData:null};
+  document.getElementById('proj-name').value='';
+  document.getElementById('proj-address').value='';
+  document.getElementById('proj-sm-name').value='';
+  document.getElementById('proj-sm-email').value='';
+  document.getElementById('proj-company-select').value='';
+  projResetFileInput();
+  projGoto(1);
+}
+
+async function projLoadProjects(){
+  var list=document.getElementById('proj-list');
+  list.innerHTML='<div style="text-align:center;padding:30px;color:var(--slate);font-size:13px">Loading...</div>';
+  var{data:projects,error}=await soterraDb.from('projects').select('id,name,company_id,program_storage_path,program_filename,address,created_at').order('created_at',{ascending:false}).limit(100);
+  if(error){list.innerHTML='<div style="padding:30px;color:#991B1B">'+error.message+'</div>';return;}
+  if(!projects||!projects.length){list.innerHTML='<div style="text-align:center;padding:30px;color:var(--slate);font-size:13px">No projects yet — create one above.</div>';return;}
+  var companyMap={};(projState.companies||[]).forEach(function(c){companyMap[c.id]=c.name;});
+  // Fetch inspection counts per project
+  var projIds=projects.map(function(p){return p.id;});
+  var{data:inspCounts}=await soterraDb.from('inspections').select('project_id').in('project_id',projIds);
+  var countMap={};(inspCounts||[]).forEach(function(r){countMap[r.project_id]=(countMap[r.project_id]||0)+1;});
+  var html='';
+  projects.forEach(function(p){
+    var companyName=companyMap[p.company_id]||'Unknown company';
+    var count=countMap[p.id]||0;
+    html+='<div class="pending-item" onclick="projOpenDetail(\''+p.id+'\')">';
+    html+='<div class="pending-info"><div class="pending-name">'+escapeHtml(p.name)+'</div><div class="pending-meta">'+escapeHtml(companyName)+' • '+count+' inspections • '+(p.program_storage_path?'program stored':'no program')+'</div></div>';
+    html+='<div class="pending-badge '+(p.program_storage_path?'processed':'pending')+'">'+(p.program_storage_path?'READY':'NO PROGRAM')+'</div>';
+    html+='</div>';
+  });
+  list.innerHTML=html;
+}
+
+async function projOpenDetail(projectId){
+  var{data:project}=await soterraDb.from('projects').select('*').eq('id',projectId).single();
+  if(!project)return;
+  var{data:insps}=await soterraDb.from('inspections').select('task,lot,start_date,status').eq('project_id',projectId).limit(200);
+  var companyName='';
+  (projState.companies||[]).forEach(function(c){if(c.id===project.company_id)companyName=c.name;});
+
+  var detail=document.getElementById('proj-list-detail');
+  var list=document.getElementById('proj-list');
+  var html='<div class="card" style="background:rgba(14,116,189,.03);border:1.5px solid rgba(14,116,189,.15)">';
+  html+='<div class="step-title" style="font-size:18px">'+escapeHtml(project.name)+'</div>';
+  html+='<div style="font-size:12px;color:var(--slate);margin-top:4px">'+escapeHtml(companyName)+(project.address?' • '+escapeHtml(project.address):'')+'</div>';
+  html+='<div style="font-size:11px;color:var(--slate);margin-top:4px">'+((insps||[]).length)+' inspections • created '+timeAgo(project.created_at)+'</div>';
+
+  if(project.program_storage_path){
+    html+='<div style="margin-top:14px"><button class="btn btn-secondary" onclick="projOpenProgramPDF(\''+project.program_storage_path+'\')">&#128196; View program PDF</button></div>';
+  }else{
+    html+='<div style="margin-top:14px;padding:10px;background:#FEF3C7;border-radius:8px;font-size:12px;color:#92400E">No program PDF stored for this project.</div>';
+  }
+
+  if(insps&&insps.length){
+    html+='<div style="margin-top:14px;max-height:320px;overflow-y:auto;border:.5px solid rgba(0,0,0,.08);border-radius:8px;padding:10px;background:#fff">';
+    html+='<div style="font-weight:600;font-size:12px;margin-bottom:6px">Extracted inspections:</div>';
+    insps.forEach(function(i){
+      html+='<div style="font-size:11px;padding:3px 0;display:flex;justify-content:space-between;border-bottom:.5px solid rgba(0,0,0,.05)">';
+      html+='<span>'+escapeHtml(i.task||'(unnamed)')+' <span style="color:#999">'+(i.lot?'• '+escapeHtml(i.lot):'')+'</span></span>';
+      html+='<span style="color:var(--slate)">'+(i.start_date||'')+'</span>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+
+  html+='<div style="margin-top:14px"><button class="btn btn-secondary" onclick="projLoadProjects()">← Back to list</button></div>';
+  html+='</div>';
+  detail.innerHTML=html;
+  detail.style.display='block';
+  list.style.display='none';
+}
+
+async function projOpenProgramPDF(storagePath){
+  var{data,error}=await soterraDb.storage.from('project-programs').createSignedUrl(storagePath,3600);
+  if(error||!data){alert('Could not open file: '+(error?error.message:'Unknown'));return;}
+  window.open(data.signedUrl,'_blank');
+}
+
+// Show projects list when detail hides
+var origLoadProjs=projLoadProjects;
+projLoadProjects=function(){
+  var l=document.getElementById('proj-list');if(l)l.style.display='';
+  var d=document.getElementById('proj-list-detail');if(d)d.style.display='none';
+  return origLoadProjs();
 };
 </script>
 </body>

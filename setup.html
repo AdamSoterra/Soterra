@@ -311,6 +311,14 @@ var currentProfile = null;
   }
   currentUser = data.session.user;
 
+  // Admin-only: project creation is now handled by Soterra admin via admin-setup.html
+  var ADMIN_EMAILS = ['domokadam43@gmail.com'];
+  if (ADMIN_EMAILS.indexOf((currentUser.email || '').toLowerCase()) === -1) {
+    // Non-admin user — redirect to dashboard
+    window.location.href = 'Soterra.html';
+    return;
+  }
+
   // Load profile
   var { data: profile } = await sb.from('profiles').select('*, companies(name)').eq('id', currentUser.id).single();
   if (profile) {
