@@ -353,8 +353,10 @@ async function doSignup() {
     showMsg('Account created! Joining ' + existingCompany.name + '...', 'success');
     setTimeout(function() { window.location.href = 'Soterra.html'; }, 1000);
   } else {
-    showMsg('Account created! Redirecting to project setup...', 'success');
-    setTimeout(function() { window.location.href = 'setup.html'; }, 1000);
+    // New company → upload historical reports first (The Brain onboarding)
+    // then they can create their first project.
+    showMsg('Account created! Let\'s set up your company intelligence...', 'success');
+    setTimeout(function() { window.location.href = 'upload-reports.html?first=1'; }, 1000);
   }
 }
 

@@ -114,15 +114,16 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
     <div class="status-msg" id="status-msg"></div>
 
     <div class="btn-row">
-      <button class="btn btn-secondary" onclick="window.location='Soterra.html'">Back to dashboard</button>
+      <button class="btn btn-secondary" id="back-btn" onclick="window.location='Soterra.html'">Back to dashboard</button>
+      <button class="btn btn-secondary" id="skip-btn" onclick="skipToNext()" style="display:none">Skip for now</button>
       <button class="btn btn-primary" id="analyze-btn" onclick="startAnalysis()" disabled>Analyze reports</button>
     </div>
   </div>
 
   <div class="card summary" id="summary-card">
     <div class="step-tag">Complete</div>
-    <div class="step-title">Analysis complete</div>
-    <div class="step-sub">Your inspection intelligence has been built. The dashboard now shows real data from your reports.</div>
+    <div class="step-title" id="summary-title">Analysis complete</div>
+    <div class="step-sub" id="summary-sub">Your inspection intelligence has been built. The dashboard now shows real data from your reports.</div>
 
     <div class="summary-grid">
       <div class="summary-stat">
@@ -142,7 +143,7 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
     <div class="summary-types" id="summary-types"></div>
 
     <div class="btn-row">
-      <button class="btn btn-primary" onclick="window.location='Soterra.html'">Go to dashboard</button>
+      <button class="btn btn-primary" id="summary-next-btn" onclick="window.location='Soterra.html'">Go to dashboard</button>
     </div>
   </div>
 </div>
@@ -155,6 +156,44 @@ var companyId='';
 var projectId='';
 var selectedFiles=[];
 var results=[];
+
+// First-time onboarding flag (set when coming from new-company signup)
+var isFirstTime=new URLSearchParams(window.location.search).get('first')==='1';
+
+function applyFirstTimeFlow(){
+  if(!isFirstTime)return;
+  var header=document.querySelector('.header-sub');
+  if(header)header.textContent='Step 1 of 2 — Upload historical inspection reports to build your company intelligence';
+  var tag=document.querySelector('#upload-card .step-tag');
+  if(tag)tag.textContent='Company setup';
+  var title=document.querySelector('#upload-card .step-title');
+  if(title)title.textContent='Upload historical inspection reports';
+  var sub=document.querySelector('#upload-card .step-sub');
+  if(sub)sub.innerHTML='Drop in your past inspection reports (failed/partial ones are most useful). Soterra will analyze each one and build your company\'s failure patterns — so your dashboard is smart from day one. <br><br><strong>Tip:</strong> Upload 5-10 reports now, or skip and do this later.';
+  // Replace "Back to dashboard" with nothing (they haven't made a dashboard yet)
+  var backBtn=document.getElementById('back-btn');
+  if(backBtn)backBtn.style.display='none';
+  var skipBtn=document.getElementById('skip-btn');
+  if(skipBtn)skipBtn.style.display='inline-flex';
+  // After analysis, direct them to project setup
+  var summaryBtn=document.getElementById('summary-next-btn');
+  if(summaryBtn){
+    summaryBtn.textContent='Continue to project setup →';
+    summaryBtn.onclick=function(){window.location='setup.html';};
+  }
+  var summaryTitle=document.getElementById('summary-title');
+  if(summaryTitle)summaryTitle.textContent='Company intelligence built!';
+  var summarySub=document.getElementById('summary-sub');
+  if(summarySub)summarySub.textContent='Next, let\'s set up your first project.';
+}
+
+function skipToNext(){
+  if(confirm('Skip uploading historical reports? You can always do this later from the dashboard.')){
+    window.location='setup.html';
+  }
+}
+
+applyFirstTimeFlow();
 
 // Auth check — get company_id
 async function init(){
