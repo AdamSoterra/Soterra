@@ -65,26 +65,65 @@ def generate_join_code():
 
 
 def detect_inspection_type(filename):
-    fn = filename.lower()
-    if any(k in fn for k in ['fire', 'canf', 'passive']):
-        return 'fire'
-    if any(k in fn for k in ['electri', 'building services']):
-        return 'electrical'
-    if any(k in fn for k in ['hydraul', 'plumb', 'drain', 'site visit report']):
-        return 'hydraulic'
-    if any(k in fn for k in ['mechani', 'hvac']):
-        return 'mechanical'
-    if any(k in fn for k in ['structur']):
-        return 'structural'
-    if any(k in fn for k in ['architect', 'sor ', 'site observation', 'facade', 'façade']):
-        return 'architectural'
-    if any(k in fn for k in ['acousti', 'cpr']):
-        return 'acoustic'
-    if any(k in fn for k in ['seism']):
-        return 'seismic'
-    if any(k in fn for k in ['bco', 'council', 'consentium', 'ipl', 'ipp', 'ipb', 'ime']):
+    """Auto-detect inspection type from filename — returns '' when unclear
+    so Claude can classify from content."""
+    fn = (filename or "").lower()
+
+    def has(pattern):
+        return re.search(r"\b" + pattern + r"\b", fn) is not None or pattern in fn
+
+    if any(has(k) for k in ['bco', 'council', 'consentium', 'ipl', 'ipp', 'ipb', 'ime', 'bca']):
         return 'council'
+    if any(has(k) for k in ['fire', 'canf', 'passive fire', 'fpanz']):
+        return 'fire'
+    mechani = any(has(k) for k in ['mechani', 'hvac'])
+    electri = any(has(k) for k in ['electri', 'electrical', 'mep'])
+    if mechani:
+        return 'mechanical'
+    if electri:
+        return 'electrical'
+    if any(has(k) for k in ['building services', 'services', 'sir-']):
+        return 'electrical'
+    if any(has(k) for k in ['hydraul', 'plumb', 'drain', 'drainage', 'site visit report', 'hsc']):
+        return 'hydraulic'
+    if any(has(k) for k in ['structur', 'foundation', 'rebar']):
+        return 'structural'
+    if any(has(k) for k in ['seism', 'geotech']):
+        return 'seismic'
+    if any(has(k) for k in ['architect', 'arch ', 'sor', 'site observation', 'observation report',
+                             'facade', 'façade', 'cladding', 'elevation', 'tgo', 'ca-']):
+        return 'architectural'
+    if any(has(k) for k in ['acousti', 'cpr ', 'sound', 'noise']):
+        return 'acoustic'
+    if any(has(k) for k in ['waterproof', 'weather', 'membrane']):
+        return 'architectural'
     return ''
+
+
+def parse_claude_json(text):
+    """Robustly parse JSON out of a Claude response."""
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    if "```" in text:
+        m = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(1).strip())
+            except Exception:
+                pass
+    for open_c, close_c in (("{", "}"), ("[", "]")):
+        start = text.find(open_c)
+        end = text.rfind(close_c)
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(text[start:end+1])
+            except Exception:
+                continue
+    return None
 
 
 def analyze_pdf(file_data, filename, inspection_type):
@@ -150,13 +189,16 @@ Your response must be a JSON object:
   "report_type": "council" or "consultant",
   "outcome": "pass" or "fail" or "partial",
   "inspection_date": "YYYY-MM-DD" or null,
+  "inspection_type": "fire" | "electrical" | "hydraulic" | "mechanical" | "structural" | "architectural" | "acoustic" | "seismic" | "council" | "other",
   "issues": [
     {{"title":"short","description":"full detail","location":"extracted or null"}}
   ]
 }}
 
-The inspection type is: {inspection_type}
-The filename is: {filename}
+INSPECTION TYPE CLASSIFICATION: Classify based on the report content — fire, electrical, hydraulic, mechanical, structural, architectural, acoustic, seismic, council (statutory), or "other" only if you truly cannot classify. If the caller provided a type hint, use it; otherwise classify from content.
+
+The filename hint is: {filename}
+The caller's type hint (may be empty): {inspection_type}
 
 {"VISUAL CHECK: Look for strikethrough text in the images — exclude those items." if use_vision else ""}
 
@@ -172,11 +214,10 @@ Report text:
         )
 
         response_text = msg.content[0].text.strip()
-        if "```" in response_text:
-            m = re.search(r"```(?:json)?\s*(.*?)\s*```", response_text, re.DOTALL)
-            if m:
-                response_text = m.group(1)
-        return json.loads(response_text)
+        result = parse_claude_json(response_text)
+        if result is None:
+            return {"outcome": "error", "report_type": "unknown", "issues": [], "inspection_date": None, "error": "Could not parse Claude response as JSON"}
+        return result
 
     except Exception as e:
         return {"outcome": "error", "report_type": "unknown", "issues": [], "inspection_date": None, "error": str(e)}
@@ -292,11 +333,14 @@ def process(request_id):
             outcome = result.get("outcome", "unknown")
             rtype = result.get("report_type", "unknown")
             idate = result.get("inspection_date")
-            saved = save_items(issues, company_id, itype or "other", idate, outcome, rtype, name)
+            # Use Claude's classification when filename detection didn't match
+            if not itype and result.get("inspection_type"):
+                itype = result["inspection_type"]
+            final_type = itype or "other"
+            saved = save_items(issues, company_id, final_type, idate, outcome, rtype, name)
             total_items += saved
-            if itype:
-                types_found.add(itype)
-            file_results.append({"name": name, "items": saved, "outcome": outcome})
+            types_found.add(final_type)
+            file_results.append({"name": name, "items": saved, "outcome": outcome, "type": final_type})
         except Exception as e:
             file_results.append({"name": name, "items": 0, "error": str(e)})
 

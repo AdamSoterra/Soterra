@@ -83,6 +83,17 @@ class handler(BaseHTTPRequestHandler):
             # Try text extraction first
             issues = extract_issues_from_pdf(file_data, filename, inspection_type, lot)
 
+            # Explicit error from extraction — don't mask as "pass"
+            if isinstance(issues, dict) and issues.get("error"):
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "error": "Could not extract issues: " + issues.get("error", "unknown")
+                }).encode())
+                return
+
             # Handle structured response with report_type and outcome
             if isinstance(issues, dict):
                 extracted_issues = issues.get("issues", [])
@@ -211,14 +222,9 @@ Report text:
         )
 
         response_text = msg.content[0].text.strip()
-
-        # Handle markdown code blocks
-        if "```" in response_text:
-            json_match = re.search(r"```(?:json)?\s*(.*?)\s*```", response_text, re.DOTALL)
-            if json_match:
-                response_text = json_match.group(1)
-
-        result = json.loads(response_text)
+        result = parse_claude_json(response_text)
+        if result is None:
+            return {"error": "Could not parse Claude response as JSON"}
 
         # Handle both old array format and new object format
         if isinstance(result, list):
@@ -226,12 +232,45 @@ Report text:
         elif isinstance(result, dict):
             return result
         else:
-            return []
+            return {"error": "Unexpected response type from Claude"}
 
     except Exception as e:
-        return []
+        return {"error": str(e)}
     finally:
         try:
             os.unlink(tmp_path)
         except:
             pass
+
+
+def parse_claude_json(text):
+    """Robustly parse JSON out of a Claude response.
+    Returns dict/list on success, None on failure.
+    Tries: direct parse, stripped markdown, or largest {...}/[...] substring."""
+    if not text:
+        return None
+    # 1) Direct parse
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    # 2) Strip markdown fences
+    if "```" in text:
+        m = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+        if m:
+            inner = m.group(1).strip()
+            try:
+                return json.loads(inner)
+            except Exception:
+                pass
+    # 3) Find outermost { ... } or [ ... ]
+    for open_c, close_c in (("{", "}"), ("[", "]")):
+        start = text.find(open_c)
+        end = text.rfind(close_c)
+        if start != -1 and end != -1 and end > start:
+            candidate = text[start:end+1]
+            try:
+                return json.loads(candidate)
+            except Exception:
+                continue
+    return None

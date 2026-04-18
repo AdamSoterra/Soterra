@@ -60,26 +60,47 @@ def parse_multipart(body, content_type):
 
 
 def detect_inspection_type(filename):
-    """Auto-detect inspection type from filename."""
-    fn = filename.lower()
-    if any(k in fn for k in ['fire', 'canf', 'passive']):
-        return 'fire'
-    if any(k in fn for k in ['electri', 'building services']):
-        return 'electrical'
-    if any(k in fn for k in ['hydraul', 'plumb', 'drain', 'site visit report']):
-        return 'hydraulic'
-    if any(k in fn for k in ['mechani', 'hvac']):
-        return 'mechanical'
-    if any(k in fn for k in ['structur']):
-        return 'structural'
-    if any(k in fn for k in ['architect', 'sor ', 'site observation', 'facade', 'façade']):
-        return 'architectural'
-    if any(k in fn for k in ['acousti', 'cpr']):
-        return 'acoustic'
-    if any(k in fn for k in ['seism']):
-        return 'seismic'
-    if any(k in fn for k in ['bco', 'council', 'consentium', 'ipl', 'ipp', 'ipb', 'ime']):
+    """Auto-detect inspection type from filename using word-boundary patterns.
+    Checks more specific types first. Returns empty string when unclear —
+    Claude will then classify from content."""
+    fn = (filename or "").lower()
+
+    def has(pattern):
+        # Word-boundary match to avoid partial collisions
+        return re.search(r"\b" + pattern + r"\b", fn) is not None or pattern in fn
+
+    # Council / BCA — check these first since filenames often include inspection codes
+    if any(has(k) for k in ['bco', 'council', 'consentium', 'ipl', 'ipp', 'ipb', 'ime', 'bca']):
         return 'council'
+    # Fire
+    if any(has(k) for k in ['fire', 'canf', 'passive fire', 'fpanz']):
+        return 'fire'
+    # Electrical (note: check mechanical below if both keywords are present)
+    electri = any(has(k) for k in ['electri', 'electrical', 'mep'])
+    mechani = any(has(k) for k in ['mechani', 'hvac'])
+    if mechani:
+        return 'mechanical'
+    if electri:
+        return 'electrical'
+    if any(has(k) for k in ['building services', 'services', 'sir-']):
+        return 'electrical'  # building services often = electrical/mech combo, default electrical
+    # Hydraulic / plumbing
+    if any(has(k) for k in ['hydraul', 'plumb', 'drain', 'drainage', 'site visit report', 'hsc']):
+        return 'hydraulic'
+    # Structural
+    if any(has(k) for k in ['structur', 'seism', 'geotech', 'foundation', 'rebar']):
+        return 'structural' if 'struct' in fn else 'seismic'
+    # Architectural / facade
+    if any(has(k) for k in ['architect', 'arch ', 'sor', 'site observation', 'observation report',
+                             'facade', 'façade', 'cladding', 'elevation', 'tgo', 'ca-']):
+        return 'architectural'
+    # Acoustic
+    if any(has(k) for k in ['acousti', 'cpr ', 'sound', 'noise']):
+        return 'acoustic'
+    # Waterproofing / weathertightness
+    if any(has(k) for k in ['waterproof', 'weather', 'membrane']):
+        return 'architectural'
+    # No confident match — let Claude classify
     return ''
 
 
@@ -197,6 +218,7 @@ Your response must be a JSON object:
   "report_type": "council" or "consultant",
   "outcome": "pass" or "fail" or "partial",
   "inspection_date": "YYYY-MM-DD" or null,
+  "inspection_type": "fire" | "electrical" | "hydraulic" | "mechanical" | "structural" | "architectural" | "acoustic" | "seismic" | "council" | "other",
   "issues": [
     {{
       "title": "short description (under 10 words)",
@@ -206,8 +228,23 @@ Your response must be a JSON object:
   ]
 }}
 
-The inspection type is: {inspection_type}
-The filename is: {filename}
+INSPECTION TYPE CLASSIFICATION:
+Classify "inspection_type" based on what the report is actually about:
+- "fire" — fire engineering, passive fire, fire stopping, smoke detection, sprinklers
+- "electrical" — electrical services, cable trays, power, lighting, comms
+- "hydraulic" — plumbing, drainage, water supply, stormwater, waste
+- "mechanical" — HVAC, ventilation, air conditioning, heating
+- "structural" — structural steel, concrete, bracing, foundations
+- "architectural" — cladding, facade, windows, finishes, linings, architectural details
+- "acoustic" — sound testing, STC, IIC, acoustic separation
+- "seismic" — seismic bracing, seismic restraint, geotech
+- "council" — council/consentium statutory inspections (IPL, IPP, IPB, IME, etc.)
+- "other" — only if you genuinely cannot classify
+
+The filename hint is: {filename}
+The caller's type hint (may be empty): {inspection_type}
+
+If the caller provided a type hint, use it. Otherwise classify from the report content.
 
 {"VISUAL CHECK: Look for strikethrough text in the images — exclude those items." if use_vision else ""}
 
@@ -223,14 +260,9 @@ Report text:
         )
 
         response_text = msg.content[0].text.strip()
-
-        # Handle markdown code blocks
-        if "```" in response_text:
-            json_match = re.search(r"```(?:json)?\s*(.*?)\s*```", response_text, re.DOTALL)
-            if json_match:
-                response_text = json_match.group(1)
-
-        result = json.loads(response_text)
+        result = parse_claude_json(response_text)
+        if result is None:
+            return {"outcome": "error", "report_type": "unknown", "issues": [], "inspection_date": None, "error": "Could not parse Claude response as JSON"}
         return result
 
     except Exception as e:
@@ -241,6 +273,32 @@ Report text:
             os.unlink(tmp_path)
         except:
             pass
+
+
+def parse_claude_json(text):
+    """Robustly parse JSON out of a Claude response."""
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    if "```" in text:
+        m = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(1).strip())
+            except Exception:
+                pass
+    for open_c, close_c in (("{", "}"), ("[", "]")):
+        start = text.find(open_c)
+        end = text.rfind(close_c)
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(text[start:end+1])
+            except Exception:
+                continue
+    return None
 
 
 class handler(BaseHTTPRequestHandler):
