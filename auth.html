@@ -88,10 +88,8 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
 
     <!-- SIGNUP PANEL -->
     <div class="auth-panel" id="panel-signup">
-      <!-- Company toggle -->
-      <div style="display:flex;gap:8px;margin-bottom:16px">
-        <button type="button" id="toggle-new" onclick="toggleCompanyMode('new')" style="flex:1;height:40px;border-radius:8px;font-size:12px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .15s;border:1.5px solid var(--blue);background:var(--blue);color:#fff">New company</button>
-        <button type="button" id="toggle-join" onclick="toggleCompanyMode('join')" style="flex:1;height:40px;border-radius:8px;font-size:12px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .15s;border:1.5px solid rgba(0,0,0,.12);background:transparent;color:var(--slate)">Join existing</button>
+      <div style="padding:10px 12px;background:#EEF2FF;border-radius:8px;font-size:12px;color:#4A6080;margin-bottom:14px;line-height:1.5">
+        Enter the <strong>company code</strong> your Soterra admin sent you. If you don't have a code yet, contact your PM or <a href="mailto:adam@soterra.co.nz" style="color:#0E74BD">adam@soterra.co.nz</a>.
       </div>
 
       <div class="field-row">
@@ -114,20 +112,20 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;background:rad
         </div>
       </div>
 
-      <!-- New company fields -->
-      <div id="new-company-fields">
+      <!-- New company fields — hidden; companies are created by Soterra admin only -->
+      <div id="new-company-fields" style="display:none">
         <div class="field">
           <div class="field-label">Company name</div>
           <input class="field-input" id="signup-company" placeholder="Your construction company">
         </div>
       </div>
 
-      <!-- Join company fields -->
-      <div id="join-company-fields" style="display:none">
+      <!-- Join company fields — the only signup path -->
+      <div id="join-company-fields">
         <div class="field">
           <div class="field-label">Company code</div>
           <input class="field-input" id="signup-join-code" placeholder="e.g. APEX-7X4K" style="text-transform:uppercase;letter-spacing:.1em;font-weight:600">
-          <div style="font-size:10px;color:var(--slate);margin-top:4px">Ask your PM or admin for the company code</div>
+          <div style="font-size:10px;color:var(--slate);margin-top:4px">6-character code from your Soterra admin</div>
         </div>
       </div>
 
@@ -199,21 +197,11 @@ function showMsg(text, type) {
   el.className = 'auth-msg ' + type;
 }
 
-var companyMode = 'new';
+// Company creation is admin-only. PMs always join an existing company with a code.
+var companyMode = 'join';
 function toggleCompanyMode(mode) {
-  companyMode = mode;
-  document.getElementById('new-company-fields').style.display = mode === 'new' ? 'block' : 'none';
-  document.getElementById('join-company-fields').style.display = mode === 'join' ? 'block' : 'none';
-  var btnNew = document.getElementById('toggle-new');
-  var btnJoin = document.getElementById('toggle-join');
-  if (mode === 'new') {
-    btnNew.style.background = 'var(--blue)'; btnNew.style.color = '#fff'; btnNew.style.borderColor = 'var(--blue)';
-    btnJoin.style.background = 'transparent'; btnJoin.style.color = 'var(--slate)'; btnJoin.style.borderColor = 'rgba(0,0,0,.12)';
-  } else {
-    btnJoin.style.background = 'var(--blue)'; btnJoin.style.color = '#fff'; btnJoin.style.borderColor = 'var(--blue)';
-    btnNew.style.background = 'transparent'; btnNew.style.color = 'var(--slate)'; btnNew.style.borderColor = 'rgba(0,0,0,.12)';
-  }
-  hideMsg();
+  // No-op kept for backward compatibility — always join
+  companyMode = 'join';
 }
 function hideMsg() {
   document.getElementById('auth-msg').className = 'auth-msg';
@@ -349,15 +337,9 @@ async function doSignup() {
     return;
   }
 
-  if (companyMode === 'join') {
-    showMsg('Account created! Joining ' + existingCompany.name + '...', 'success');
-    setTimeout(function() { window.location.href = 'Soterra.html'; }, 1000);
-  } else {
-    // New company → upload historical reports first (The Brain onboarding)
-    // then they can create their first project.
-    showMsg('Account created! Let\'s set up your company intelligence...', 'success');
-    setTimeout(function() { window.location.href = 'upload-reports.html?first=1'; }, 1000);
-  }
+  // Join mode is the only path — always go to dashboard
+  showMsg('Account created! Joining ' + (existingCompany ? existingCompany.name : 'your company') + '...', 'success');
+  setTimeout(function() { window.location.href = 'Soterra.html'; }, 1000);
 }
 
 // Enter key to submit
