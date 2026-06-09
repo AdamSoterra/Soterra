@@ -7,7 +7,7 @@ type Screen = "login" | "onboard" | Tab | "sheet";
 type Cite = { code: string; title: string; sub: string; ans: string; hlTag: string };
 type Msg =
   | { role: "u"; text: string }
-  | { role: "a"; src?: string; text: string; cite?: Cite; event?: { title: string; when: string } };
+  | { role: "a"; src?: string; text: string; cite?: Cite; event?: { title: string; when: string }; pending?: boolean };
 
 const FINISH_SHEET: Cite = {
   code: "A-602",
@@ -69,6 +69,7 @@ export default function Page() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>(SEED);
   const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
   const [obMode, setObMode] = useState<"setup" | "join">("setup");
   const [obStep, setObStep] = useState(1);
   const [sheet, setSheet] = useState<Cite>(FINISH_SHEET);
@@ -93,27 +94,29 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, isSignedIn]);
 
-  const send = (text?: string) => {
+  const send = async (text?: string) => {
     const t = (text ?? input).trim();
-    if (!t) return;
-    setMessages((m) => [
-      ...m,
-      { role: "u", text: t },
-      {
-        role: "a",
-        src: "📐 FROM YOUR PLANS",
-        text:
-          'Here\'s what the drawings say — with the exact sheet to check. <span style="color:var(--mut)">(Demo: wired to live plan-search in the real app.)</span>',
-        cite: {
-          code: "A-200",
-          title: "Floor Plan — Level 1",
-          sub: "95% Detail Design · Sheet 21 of 85",
-          ans: "This is the cited sheet the answer was read from. In the live app the relevant area is highlighted.",
-          hlTag: "Reference",
-        },
-      },
-    ]);
+    if (!t || busy) return;
     setInput("");
+    setBusy(true);
+    setMessages((m) => [...m, { role: "u", text: t }, { role: "a", text: "📐 Reading your plans…", pending: true }]);
+    try {
+      const res = await fetch("/api/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: t }),
+      });
+      const data = await res.json();
+      const ans = String(data.answer || data.error || "Sorry, something went wrong.");
+      const sm = ans.match(/\n*\s*Source:\s*([^\n]+)\s*$/i);
+      const body = sm ? ans.slice(0, sm.index).trim() : ans;
+      const cite = sm ? makeCite(sm[1].trim(), body) : undefined;
+      setMessages((prev) => [...prev.slice(0, -1), { role: "a", src: "📐 FROM YOUR PLANS", text: fmt(body), cite }]);
+    } catch {
+      setMessages((prev) => [...prev.slice(0, -1), { role: "a", text: "Sorry — couldn't reach the plans just now. Try again." }]);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const calCells = useMemo(() => {
@@ -391,6 +394,23 @@ export default function Page() {
       </div>
     </div>
   );
+}
+
+// Escape, then render **bold** and line breaks from Claude's plain-text answer.
+function fmt(s: string): string {
+  return s
+    .replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] as string))
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/\n+/g, "<br/>");
+}
+
+// Turn Claude's "Source: Detail Design · ED003 · … · page 60 of 85" into a citation card.
+function makeCite(sourceLine: string, body: string): Cite {
+  const parts = sourceLine.split("·").map((x) => x.trim()).filter(Boolean);
+  const doc = parts[0] || "Source";
+  const code = parts.find((p, i) => i > 0 && /[A-Z]/.test(p) && /\d/.test(p)) || doc;
+  const rest = parts.filter((p) => p !== doc && p !== code).join(" · ");
+  return { code, title: rest || doc, sub: doc, ans: fmt(body), hlTag: code };
 }
 
 function UpItem({ t, n, s }: { t: string; n: string; s: string }) {
