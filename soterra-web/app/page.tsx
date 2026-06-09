@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
 
-type Tab = "assistant" | "calendar" | "plans" | "upload";
+type Tab = "assistant" | "calendar" | "tasks" | "plans" | "upload";
 type Cite = { code: string; title: string; sub: string; ans: string; hlTag: string };
 type Msg =
   | { role: "u"; text: string }
@@ -28,10 +28,12 @@ const I = {
   cal: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4.5" width="18" height="16" rx="2.5" /><path d="M3 9h18M8 2.5v4M16 2.5v4" /></svg>),
   plans: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3 3 7.5 12 12l9-4.5L12 3z" /><path d="M3 12l9 4.5L21 12M3 16.5 12 21l9-4.5" /></svg>),
   up: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 20h16" /></svg>),
+  tasks: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 6h12M9 12h12M9 18h12" /><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" /></svg>),
 };
 const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "assistant", label: "Assistant", icon: I.chat },
   { id: "calendar", label: "Calendar", icon: I.cal },
+  { id: "tasks", label: "Tasks", icon: I.tasks },
   { id: "plans", label: "Plans", icon: I.plans },
   { id: "upload", label: "Upload", icon: I.up },
 ];
@@ -43,6 +45,14 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState<Cite | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [tasks, setTasks] = useState([
+    { id: 1, title: "Send RFI — beam size over the garage", due: "Today", who: "You", vis: "me", done: false },
+    { id: 2, title: "Order GIB for Level 3", due: "Wed 17", who: "Site mgr", vis: "team", done: false },
+    { id: 3, title: "Chase plumber — PS3 sign-off", due: "Mon 15", who: "You", vis: "me", done: false },
+    { id: 4, title: "Confirm slab pour weather window", due: "Thu 11", who: "Foreman", vis: "team", done: false },
+    { id: 5, title: "Pre-line QA — Unit 49", due: "Done", who: "You", vis: "team", done: true },
+  ]);
+  const toggleTask = (id: number) => setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -120,11 +130,42 @@ export default function Page() {
     user?.firstName || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || user?.username || "there";
   const initials = (firstName[0] || "S").toUpperCase();
 
+  const cbox = (
+    <div className="cbox">
+      <textarea
+        ref={taRef}
+        rows={1}
+        value={input}
+        placeholder="Ask your plans, or anything on site…"
+        onChange={(e) => {
+          setInput(e.target.value);
+          e.target.style.height = "auto";
+          e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px";
+        }}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+      />
+      <div className="crow">
+        <span className="hint">Enter to send · Shift+Enter for a new line</span>
+        <div className="ract">
+          <button className="attach" title="Attach">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 18.6a1.7 1.7 0 0 1-2.3-2.3l7.8-7.8" /></svg>
+          </button>
+          <button className="send" disabled={busy || !input.trim()} onClick={() => send()}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="shell">
       {/* ─── top nav ─── */}
       <header className="topnav">
-        <div className="brand" onClick={() => setTab("assistant")}>Soter<span>ra</span></div>
+        <div className="brand" onClick={() => setTab("assistant")}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="brand-logo" src="/logo.png" alt="" />Soter<span>ra</span>
+        </div>
         <nav className="navtabs">
           {NAV.map((n) => (
             <button key={n.id} className={"navtab" + (tab === n.id ? " act" : "")} onClick={() => setTab(n.id)}>
@@ -150,78 +191,52 @@ export default function Page() {
         {/* ─── ASSISTANT ─── */}
         {tab === "assistant" && (
           <div className="assistant">
-            <div className="asst-scroll" ref={scrollRef}>
-              <div className="asst-inner">
-                {messages.length === 0 ? (
-                  <div className="hero">
-                    <div className="hero-mark">S</div>
-                    <h1>Hi <b>{firstName}</b>, how can I help?</h1>
-                    <p>Ask anything about the 1 Arthur Road plans &amp; specs — you&apos;ll get the answer in seconds, with the exact sheet to back it up.</p>
-                    <div className="chips" style={{ marginTop: 26 }}>
-                      {CHIPS.map((c) => <button key={c} className="chip" onClick={() => send(c)}>{c}</button>)}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="thread">
-                    {messages.map((m, i) =>
-                      m.role === "u" ? (
-                        <div className="msg u" key={i}><div className="bub">{m.text}</div></div>
-                      ) : (
-                        <div className="msg a" key={i}>
-                          <div className="bub">
-                            {m.src && <div className="src">{m.src}</div>}
-                            {m.pending ? (
-                              <span className="typing"><i /><i /><i /></span>
-                            ) : (
-                              <span dangerouslySetInnerHTML={{ __html: m.text }} />
-                            )}
-                            {m.cite && (
-                              <div className="cite" onClick={() => setSheet(m.cite!)}>
-                                <div className="cic">📐</div>
-                                <div className="ct"><b>{m.cite.code} · {m.cite.title}</b><small>{m.cite.sub}</small></div>
-                                <div className="ca">›</div>
-                              </div>
-                            )}
-                            {m.event && (
-                              <div className="evcard"><div className="bar" /><div className="et"><b>{m.event.title}</b><small>{m.event.when}</small></div><div className="ec">🗓️</div></div>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    )}
-                  </div>
-                )}
+            {messages.length === 0 ? (
+              <div className="hero-full">
+                <div className="hero-logo"><img src="/logo.png" alt="Soterra" /></div>
+                <h1>Hi <b>{firstName}</b>, how can I help?</h1>
+                <div className="chips">
+                  {CHIPS.map((c) => <button key={c} className="chip" onClick={() => send(c)}>{c}</button>)}
+                </div>
+                <div className="hero-composer">{cbox}</div>
               </div>
-            </div>
-            <div className="composer-wrap">
-              <div className="composer">
-                <div className="cbox">
-                  <textarea
-                    ref={taRef}
-                    rows={1}
-                    value={input}
-                    placeholder="Ask your plans, or anything on site…"
-                    onChange={(e) => {
-                      setInput(e.target.value);
-                      e.target.style.height = "auto";
-                      e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px";
-                    }}
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                  />
-                  <div className="crow">
-                    <span className="hint">Enter to send · Shift+Enter for a new line</span>
-                    <div className="ract">
-                      <button className="attach" title="Attach">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 18.6a1.7 1.7 0 0 1-2.3-2.3l7.8-7.8" /></svg>
-                      </button>
-                      <button className="send" disabled={busy || !input.trim()} onClick={() => send()}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
-                      </button>
+            ) : (
+              <>
+                <div className="asst-scroll" ref={scrollRef}>
+                  <div className="asst-inner">
+                    <div className="thread">
+                      {messages.map((m, i) =>
+                        m.role === "u" ? (
+                          <div className="msg u" key={i}><div className="bub">{m.text}</div></div>
+                        ) : (
+                          <div className="msg a" key={i}>
+                            <div className="bub">
+                              {m.src && <div className="src">{m.src}</div>}
+                              {m.pending ? (
+                                <span className="typing"><i /><i /><i /></span>
+                              ) : (
+                                <span dangerouslySetInnerHTML={{ __html: m.text }} />
+                              )}
+                              {m.cite && (
+                                <div className="cite" onClick={() => setSheet(m.cite!)}>
+                                  <div className="cic">📐</div>
+                                  <div className="ct"><b>{m.cite.code} · {m.cite.title}</b><small>{m.cite.sub}</small></div>
+                                  <div className="ca">›</div>
+                                </div>
+                              )}
+                              {m.event && (
+                                <div className="evcard"><div className="bar" /><div className="et"><b>{m.event.title}</b><small>{m.event.when}</small></div><div className="ec">🗓️</div></div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      )}
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
+                <div className="composer-wrap"><div className="composer">{cbox}</div></div>
+              </>
+            )}
           </div>
         )}
 
@@ -246,6 +261,22 @@ export default function Page() {
             <Ev bar="var(--green)" when="WED 10 · 7:30am" title="GIB delivery — Level 2" sub="Carter Holt · 142 sheets" tag="Delivery" tagBg="rgba(16,185,129,.12)" tagFg="var(--green)" />
             <Ev bar="var(--navy)" when="FRI 12 · 6:00am" title="Slab pour — Block C" sub="Weather check Thu PM · whole crew" tag="Pour" tagBg="rgba(10,37,64,.1)" tagFg="var(--navy)" />
             <Ev bar="var(--amber)" when="MON 15 · —" title="PS3 due — plumbing" sub="Private reminder · just you" tag="Reminder" tagBg="rgba(245,158,11,.14)" tagFg="var(--amber)" />
+          </div></div>
+        )}
+
+        {/* ─── TASKS ─── */}
+        {tab === "tasks" && (
+          <div className="page"><div className="page-inner">
+            <div className="page-h">Tasks</div>
+            <div className="page-sub">1 Arthur Road · your to-dos and the team&apos;s — what&apos;s coming up</div>
+            {tasks.map((t) => (
+              <div className={"task" + (t.done ? " done" : "")} key={t.id}>
+                <div className="cb" onClick={() => toggleTask(t.id)}>{t.done ? "✓" : ""}</div>
+                <div className="tk"><b>{t.title}</b><small>{t.who}{t.due !== "Done" ? ` · due ${t.due}` : ""}</small></div>
+                <span className={"vis " + t.vis}>{t.vis === "team" ? "Team" : "Just me"}</span>
+              </div>
+            ))}
+            <button className="task-add">＋ Add a task</button>
           </div></div>
         )}
 
