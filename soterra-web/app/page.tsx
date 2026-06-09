@@ -105,9 +105,10 @@ export default function Page() {
     return (
       <div className="login">
         <div className="login-card">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="lg-logo" src="/logo-mark.png" alt="Soterra" />
           <div className="lg-pill">Ask your plans</div>
-          <div className="lg-mark">Soter<span>ra</span></div>
-          <h1 className="lg-h">The answer&apos;s in the plans.<br /><b>Just ask.</b></h1>
+          <h1 className="lg-h">The answer&apos;s in the plans.<br /><b className="grad">Just ask.</b></h1>
           <p className="lg-sub">
             Your whole crew can ask any question about the project&apos;s drawings and specs — and get the answer in
             seconds, with the exact sheet to back it up.
@@ -162,10 +163,7 @@ export default function Page() {
     <div className="shell">
       {/* ─── top nav ─── */}
       <header className="topnav">
-        <div className="brand" onClick={() => setTab("assistant")}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="brand-logo" src="/logo.png" alt="" />Soter<span>ra</span>
-        </div>
+        <div className="brand grad" onClick={() => setTab("assistant")}>Soterra</div>
         <nav className="navtabs">
           {NAV.map((n) => (
             <button key={n.id} className={"navtab" + (tab === n.id ? " act" : "")} onClick={() => setTab(n.id)}>
@@ -193,11 +191,9 @@ export default function Page() {
           <div className="assistant">
             {messages.length === 0 ? (
               <div className="hero-full">
-                <div className="hero-logo"><img src="/logo.png" alt="Soterra" /></div>
-                <h1>Hi <b>{firstName}</b>, how can I help?</h1>
-                <div className="chips">
-                  {CHIPS.map((c) => <button key={c} className="chip" onClick={() => send(c)}>{c}</button>)}
-                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img className="hero-logo" src="/logo-mark.png" alt="Soterra" />
+                <h1>Hi <b className="grad">{firstName}</b>, how can I help?</h1>
                 <div className="hero-composer">{cbox}</div>
               </div>
             ) : (
