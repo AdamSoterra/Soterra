@@ -8,6 +8,117 @@ type Msg =
   | { role: "u"; text: string }
   | { role: "a"; src?: string; text: string; cite?: Cite; event?: { title: string; when: string }; pending?: boolean };
 
+// ─── Calendar + Tasks ─── (ported/adapted from the Montázs naptar/teendők)
+const PROJECT_ID = "1-arthur-road";
+// Soterra's project timezone. TODO: per-project tz once projects carry one.
+const TZ = "Pacific/Auckland";
+
+type EventKind = "inspection" | "delivery" | "pour" | "reminder" | "event";
+type CalEvent = {
+  id: string;
+  title: string;
+  startsAt: string; // ISO
+  endsAt: string | null;
+  allDay: boolean;
+  location: string | null;
+  kind: EventKind;
+  visibility: "team" | "private";
+  creatorName: string | null;
+};
+type CalTask = {
+  id: string;
+  title: string;
+  dueAt: string | null; // ISO
+  done: boolean;
+  visibility: "team" | "private";
+  creatorName: string | null;
+};
+
+const EVENT_KINDS: { value: EventKind; label: string }[] = [
+  { value: "inspection", label: "Inspection" },
+  { value: "delivery", label: "Delivery" },
+  { value: "pour", label: "Pour" },
+  { value: "reminder", label: "Reminder" },
+];
+
+// TODO: colour by crew member once a crew table exists. For now we colour by
+// event kind, reusing the existing dot/bar classes + CSS vars.
+const KIND_DOT: Record<EventKind, string> = {
+  inspection: "bl",
+  delivery: "gr",
+  pour: "nv",
+  reminder: "am",
+  event: "bl",
+};
+const KIND_BAR: Record<EventKind, string> = {
+  inspection: "var(--brand)",
+  delivery: "var(--green)",
+  pour: "var(--navy)",
+  reminder: "var(--amber)",
+  event: "var(--brand)",
+};
+const KIND_TAG: Record<EventKind, { label: string; bg: string; fg: string }> = {
+  inspection: { label: "Inspection", bg: "rgba(14,116,189,.1)", fg: "var(--brand-d)" },
+  delivery: { label: "Delivery", bg: "rgba(16,185,129,.12)", fg: "var(--green)" },
+  pour: { label: "Pour", bg: "rgba(10,37,64,.1)", fg: "var(--navy)" },
+  reminder: { label: "Reminder", bg: "rgba(245,158,11,.14)", fg: "var(--amber)" },
+  event: { label: "Event", bg: "rgba(14,116,189,.1)", fg: "var(--brand-d)" },
+};
+
+const NZ_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+// Auckland-anchored YYYY-MM-DD key — keeps timezones honest so two events on the
+// same local day never land on separate cells. (Montázs uses Europe/Budapest.)
+function dayKey(d: Date): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+function todayKey(): string {
+  return dayKey(new Date());
+}
+function fmtTime(iso: string): string {
+  return new Intl.DateTimeFormat("en-NZ", {
+    timeZone: TZ,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(iso));
+}
+// "FRI 12" style agenda stamp in the project timezone.
+function fmtAgendaDay(iso: string): string {
+  const wd = new Intl.DateTimeFormat("en-NZ", { timeZone: TZ, weekday: "short" }).format(new Date(iso)).toUpperCase();
+  const day = new Intl.DateTimeFormat("en-NZ", { timeZone: TZ, day: "numeric" }).format(new Date(iso));
+  return `${wd} ${day}`;
+}
+// Short due-date label for task rows, e.g. "Wed 17". Null dueAt → no label.
+function fmtDue(iso: string | null): string | null {
+  if (!iso) return null;
+  return new Intl.DateTimeFormat("en-NZ", { timeZone: TZ, weekday: "short", day: "numeric" }).format(new Date(iso));
+}
+
+// Build a Mon-start grid sized to whatever the month needs (5 weeks usually, 6
+// on overflow). Trailing all-out-of-month weeks are dropped to stay compact.
+// Ported verbatim from Montázs buildMonthGrid.
+function buildMonthGrid(year: number, month: number): Date[] {
+  const firstOfMonth = new Date(year, month, 1, 12, 0, 0); // noon dodges DST edges
+  const dow = (firstOfMonth.getDay() + 6) % 7; // Monday-start: shift so Mon=0
+  const gridStart = new Date(year, month, 1 - dow, 12, 0, 0);
+  const days: Date[] = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    days.push(d);
+  }
+  let lastInMonthIdx = 0;
+  for (let i = 0; i < 42; i++) if (days[i].getMonth() === month) lastInMonthIdx = i;
+  const weeksNeeded = Math.ceil((lastInMonthIdx + 1) / 7);
+  return days.slice(0, weeksNeeded * 7);
+}
+
 const CHIPS = [
   "What's the fire rating on the exterior doors?",
   "What GIB do I use in the bathrooms?",
@@ -45,14 +156,136 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState<Cite | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [tasks, setTasks] = useState([
-    { id: 1, title: "Send RFI — beam size over the garage", due: "Today", who: "You", vis: "me", done: false },
-    { id: 2, title: "Order GIB for Level 3", due: "Wed 17", who: "Site mgr", vis: "team", done: false },
-    { id: 3, title: "Chase plumber — PS3 sign-off", due: "Mon 15", who: "You", vis: "me", done: false },
-    { id: 4, title: "Confirm slab pour weather window", due: "Thu 11", who: "Foreman", vis: "team", done: false },
-    { id: 5, title: "Pre-line QA — Unit 49", due: "Done", who: "You", vis: "team", done: true },
-  ]);
-  const toggleTask = (id: number) => setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+
+  // ─── live Calendar + Tasks state ───
+  const now = useMemo(() => new Date(), []);
+  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [tasks, setTasks] = useState<CalTask[]>([]);
+  const [evLoaded, setEvLoaded] = useState(false);
+  const [taskLoaded, setTaskLoaded] = useState(false);
+  const [calYear, setCalYear] = useState(now.getFullYear());
+  const [calMonth, setCalMonth] = useState(now.getMonth()); // 0-indexed
+  const [showEventForm, setShowEventForm] = useState(false);
+  const [newTask, setNewTask] = useState("");
+  const [newTaskVis, setNewTaskVis] = useState<"team" | "private">("private");
+  const [addingTask, setAddingTask] = useState(false);
+
+  const loadEvents = async () => {
+    try {
+      const res = await fetch("/api/events");
+      const data = await res.json();
+      if (Array.isArray(data.events)) setEvents(data.events);
+    } catch {
+      /* leave list as-is on failure */
+    } finally {
+      setEvLoaded(true);
+    }
+  };
+  const loadTasks = async () => {
+    try {
+      const res = await fetch("/api/tasks");
+      const data = await res.json();
+      if (Array.isArray(data.tasks)) setTasks(data.tasks);
+    } catch {
+      /* leave list as-is on failure */
+    } finally {
+      setTaskLoaded(true);
+    }
+  };
+
+  // Lazy-load each tab's data the first time it's opened.
+  useEffect(() => {
+    if (tab === "calendar" && !evLoaded) loadEvents();
+    if (tab === "tasks" && !taskLoaded) loadTasks();
+  }, [tab, evLoaded, taskLoaded]);
+
+  const toggleTask = async (t: CalTask) => {
+    const next = !t.done;
+    setTasks((ts) => ts.map((x) => (x.id === t.id ? { ...x, done: next } : x))); // optimistic
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: t.id, done: next }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setTasks((ts) => ts.map((x) => (x.id === t.id ? { ...x, done: !next } : x))); // revert
+    }
+  };
+
+  const addTask = async () => {
+    const title = newTask.trim();
+    if (!title || addingTask) return;
+    setAddingTask(true);
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, visibility: newTaskVis }),
+      });
+      const data = await res.json();
+      if (data.task) {
+        setTasks((ts) => [...ts, data.task as CalTask]);
+        setNewTask("");
+      }
+    } catch {
+      /* swallow — input keeps its value so the user can retry */
+    } finally {
+      setAddingTask(false);
+    }
+  };
+
+  // Create-event form state. Date defaults to today (Auckland), kind=inspection,
+  // visibility=team (the crew should see the schedule).
+  const [evTitle, setEvTitle] = useState("");
+  const [evDate, setEvDate] = useState(todayKey());
+  const [evTime, setEvTime] = useState("");
+  const [evKind, setEvKind] = useState<EventKind>("inspection");
+  const [evLocation, setEvLocation] = useState("");
+  const [evVis, setEvVis] = useState<"team" | "private">("team");
+  const [evSaving, setEvSaving] = useState(false);
+  const [evError, setEvError] = useState<string | null>(null);
+
+  const resetEventForm = () => {
+    setEvTitle(""); setEvDate(todayKey()); setEvTime(""); setEvKind("inspection");
+    setEvLocation(""); setEvVis("team"); setEvError(null);
+  };
+
+  const saveEvent = async () => {
+    if (evSaving) return;
+    const title = evTitle.trim();
+    if (!title || !evDate) { setEvError("Title and date are required."); return; }
+    setEvSaving(true);
+    setEvError(null);
+    // Build an ISO instant. With a time → that wall-clock; without → all-day at
+    // local noon so it lands on the right Auckland day regardless of UTC offset.
+    // (Simpler than Montázs's budapestWallClockToUtc; good enough until we add a
+    // proper tz-aware picker. TODO: convert wall-clock in the project tz exactly.)
+    const allDay = !evTime;
+    const startsAt = new Date(`${evDate}T${evTime || "12:00"}:00`).toISOString();
+    try {
+      const res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, startsAt, allDay, kind: evKind, location: evLocation.trim() || null, visibility: evVis }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.event) throw new Error(data.error || "Save failed");
+      setEvents((es) => [...es, data.event as CalEvent]);
+      // Jump the grid to the new event's month so the dot is visible.
+      const d = new Date(data.event.startsAt);
+      setCalYear(d.getFullYear());
+      setCalMonth(d.getMonth());
+      setShowEventForm(false);
+      resetEventForm();
+    } catch (err) {
+      setEvError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setEvSaving(false);
+    }
+  };
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -90,13 +323,57 @@ export default function Page() {
     }
   };
 
+  // Group events by Auckland day-key, time-sorted within each day (Montázs pattern).
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, CalEvent[]>();
+    for (const e of events) {
+      const k = dayKey(new Date(e.startsAt));
+      const list = map.get(k) ?? [];
+      list.push(e);
+      map.set(k, list);
+    }
+    for (const list of map.values())
+      list.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+    return map;
+  }, [events]);
+
+  // Month grid cells: day number, today flag, out-of-month (mut), and the
+  // distinct kind-dots present on that day.
   const calCells = useMemo(() => {
-    const events: Record<number, string[]> = { 9: ["bl"], 10: ["gr"], 12: ["bl", "nv"], 15: ["am"], 18: ["gr"], 23: ["bl"] };
-    const cells: { n: number; today: boolean; dots: string[]; mut: boolean }[] = [];
-    for (let d = 1; d <= 30; d++) cells.push({ n: d, today: d === 9, dots: events[d] || [], mut: false });
-    for (let d = 1; d <= 5; d++) cells.push({ n: d, today: false, dots: [], mut: true });
-    return cells;
-  }, []);
+    const grid = buildMonthGrid(calYear, calMonth);
+    const tk = todayKey();
+    return grid.map((d) => {
+      const k = dayKey(d);
+      const dayEvents = eventsByDay.get(k) ?? [];
+      const dots: string[] = [];
+      for (const e of dayEvents) {
+        const dot = KIND_DOT[e.kind] ?? "bl";
+        if (!dots.includes(dot)) dots.push(dot); // one dot per distinct kind
+      }
+      return { n: d.getDate(), today: k === tk, dots: dots.slice(0, 4), mut: d.getMonth() !== calMonth };
+    });
+  }, [calYear, calMonth, eventsByDay]);
+
+  // "This week": events from today through the next 7 days, in the project tz.
+  const weekEvents = useMemo(() => {
+    const ms = Date.now();
+    const weekAhead = ms + 7 * 24 * 60 * 60 * 1000;
+    return events
+      .filter((e) => {
+        const t = new Date(e.startsAt).getTime();
+        return t >= ms - 12 * 60 * 60 * 1000 && t <= weekAhead;
+      })
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+  }, [events]);
+
+  function gotoMonth(delta: number) {
+    let m = calMonth + delta;
+    let y = calYear;
+    while (m < 0) { m += 12; y -= 1; }
+    while (m > 11) { m -= 12; y += 1; }
+    setCalMonth(m);
+    setCalYear(y);
+  }
 
   if (!isLoaded) return <div className="boot" />;
 
@@ -241,7 +518,14 @@ export default function Page() {
           <div className="page"><div className="page-inner">
             <div className="page-h">Calendar</div>
             <div className="page-sub">1 Arthur Road · site schedule (NZ time)</div>
-            <div className="cal-top"><b>June 2026</b><div className="cal-nav"><button>‹</button><button>›</button></div></div>
+            <div className="cal-top">
+              <b>{NZ_MONTHS[calMonth]} {calYear}</b>
+              <div className="cal-nav">
+                <button onClick={() => gotoMonth(-1)} aria-label="Previous month">‹</button>
+                <button onClick={() => gotoMonth(1)} aria-label="Next month">›</button>
+                <button className="task-add" style={{ width: "auto", padding: "0 14px", marginTop: 0, fontSize: 13 }} onClick={() => setShowEventForm(true)}>＋ New event</button>
+              </div>
+            </div>
             <div className="cal-card">
               <div className="cal-dow"><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div><div>S</div></div>
               <div className="cal-days">
@@ -253,10 +537,20 @@ export default function Page() {
               </div>
             </div>
             <div className="ag-k">This week</div>
-            <Ev bar="var(--blue)" when="FRI 12 · 9:00am" title="Pre-line inspection · Unit 49" sub="Booked from chat · You" tag="Inspection" tagBg="rgba(14,116,189,.1)" tagFg="var(--blue)" />
-            <Ev bar="var(--green)" when="WED 10 · 7:30am" title="GIB delivery — Level 2" sub="Carter Holt · 142 sheets" tag="Delivery" tagBg="rgba(16,185,129,.12)" tagFg="var(--green)" />
-            <Ev bar="var(--navy)" when="FRI 12 · 6:00am" title="Slab pour — Block C" sub="Weather check Thu PM · whole crew" tag="Pour" tagBg="rgba(10,37,64,.1)" tagFg="var(--navy)" />
-            <Ev bar="var(--amber)" when="MON 15 · —" title="PS3 due — plumbing" sub="Private reminder · just you" tag="Reminder" tagBg="rgba(245,158,11,.14)" tagFg="var(--amber)" />
+            {!evLoaded ? (
+              <div className="page-sub" style={{ marginBottom: 0 }}>Loading…</div>
+            ) : weekEvents.length === 0 ? (
+              <div className="page-sub" style={{ marginBottom: 0 }}>Nothing booked in the next 7 days. Add an event to get the crew on the same page.</div>
+            ) : (
+              weekEvents.map((e) => {
+                const tag = KIND_TAG[e.kind] ?? KIND_TAG.event;
+                const when = `${fmtAgendaDay(e.startsAt)} · ${e.allDay ? "all day" : fmtTime(e.startsAt)}`;
+                const sub = [e.location, e.visibility === "team" ? "whole crew" : "just you", e.creatorName].filter(Boolean).join(" · ");
+                return (
+                  <Ev key={e.id} bar={KIND_BAR[e.kind] ?? "var(--brand)"} when={when} title={e.title} sub={sub} tag={tag.label} tagBg={tag.bg} tagFg={tag.fg} />
+                );
+              })
+            )}
           </div></div>
         )}
 
@@ -264,15 +558,49 @@ export default function Page() {
         {tab === "tasks" && (
           <div className="page"><div className="page-inner">
             <div className="page-h">Tasks</div>
-            <div className="page-sub">1 Arthur Road · your to-dos and the team&apos;s — what&apos;s coming up</div>
-            {tasks.map((t) => (
-              <div className={"task" + (t.done ? " done" : "")} key={t.id}>
-                <div className="cb" onClick={() => toggleTask(t.id)}>{t.done ? "✓" : ""}</div>
-                <div className="tk"><b>{t.title}</b><small>{t.who}{t.due !== "Done" ? ` · due ${t.due}` : ""}</small></div>
-                <span className={"vis " + t.vis}>{t.vis === "team" ? "Team" : "Just me"}</span>
-              </div>
-            ))}
-            <button className="task-add">＋ Add a task</button>
+            <div className="page-sub">1 Arthur Road · your to-dos and the crew&apos;s — what&apos;s coming up</div>
+            {taskLoaded && tasks.length === 0 && (
+              <div className="page-sub" style={{ marginBottom: 14 }}>No tasks yet. Add your first one below.</div>
+            )}
+            {tasks.map((t) => {
+              const due = fmtDue(t.dueAt);
+              const meta = [t.creatorName, t.done ? "done" : due ? `due ${due}` : null].filter(Boolean).join(" · ");
+              const vis = t.visibility === "team" ? "team" : "me";
+              return (
+                <div className={"task" + (t.done ? " done" : "")} key={t.id}>
+                  <div className="cb" onClick={() => toggleTask(t)}>{t.done ? "✓" : ""}</div>
+                  <div className="tk"><b>{t.title}</b>{meta && <small>{meta}</small>}</div>
+                  <span className={"vis " + vis}>{vis === "team" ? "Team" : "Just me"}</span>
+                </div>
+              );
+            })}
+            {/* Inline add-a-task row: type → Enter or +, with a Team/Just-me toggle. */}
+            <div className="task-add" style={{ cursor: "default" }} onClick={(e) => e.stopPropagation()}>
+              <input
+                value={newTask}
+                onChange={(e) => setNewTask(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTask(); } }}
+                placeholder="Add a task…"
+                style={{ flex: 1, border: "none", outline: "none", background: "none", fontFamily: "var(--font)", fontSize: 14, color: "var(--navy)" }}
+              />
+              <button
+                onClick={() => setNewTaskVis((v) => (v === "team" ? "private" : "team"))}
+                className={"vis " + (newTaskVis === "team" ? "team" : "me")}
+                style={{ border: "none", cursor: "pointer" }}
+                title="Toggle who can see this task"
+              >
+                {newTaskVis === "team" ? "Team" : "Just me"}
+              </button>
+              <button
+                onClick={addTask}
+                disabled={!newTask.trim() || addingTask}
+                className="send"
+                style={{ width: 34, height: 34, opacity: !newTask.trim() || addingTask ? 0.5 : 1 }}
+                aria-label="Add task"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              </button>
+            </div>
           </div></div>
         )}
 
@@ -333,6 +661,75 @@ export default function Page() {
               </div>
             </div>
             <div className="sh-ans"><div className="src">📐 ANSWER FROM THIS SHEET</div><p dangerouslySetInnerHTML={{ __html: sheet.ans }} /></div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── create-event modal (ported/adapted from Montázs event-form) ─── */}
+      {showEventForm && (
+        <div className="scrim" onClick={() => { setShowEventForm(false); resetEventForm(); }}>
+          <div className="sheet" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti"><b>New event</b><small>1 Arthur Road · NZ time</small></div>
+              <button className="sh-x" onClick={() => { setShowEventForm(false); resetEventForm(); }}>✕</button>
+            </div>
+            <div style={{ padding: "20px 22px 24px", overflowY: "auto" }}>
+              <label className="ev-lbl">Event</label>
+              <input
+                className="ev-in"
+                value={evTitle}
+                autoFocus
+                onChange={(e) => setEvTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveEvent(); } }}
+                placeholder="e.g. Pre-line inspection — Unit 49"
+              />
+
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 14 }}>
+                <div>
+                  <label className="ev-lbl">Date</label>
+                  <input className="ev-in" type="date" value={evDate} onChange={(e) => setEvDate(e.target.value)} style={{ width: "auto" }} />
+                </div>
+                <div>
+                  <label className="ev-lbl">Time <span style={{ color: "var(--mut)", fontWeight: 400 }}>· optional</span></label>
+                  <input className="ev-in" type="time" value={evTime} onChange={(e) => setEvTime(e.target.value)} style={{ width: "auto" }} />
+                </div>
+              </div>
+
+              <label className="ev-lbl" style={{ marginTop: 14 }}>Type</label>
+              <div className="ev-kinds">
+                {EVENT_KINDS.map((k) => (
+                  <button
+                    key={k.value}
+                    className={"ev-kind" + (evKind === k.value ? " act" : "")}
+                    onClick={() => setEvKind(k.value)}
+                    type="button"
+                  >
+                    <span className={"d " + (KIND_DOT[k.value] ?? "bl")} style={{ width: 8, height: 8, borderRadius: "50%", display: "inline-block" }} />
+                    {k.label}
+                  </button>
+                ))}
+              </div>
+
+              <label className="ev-lbl" style={{ marginTop: 14 }}>Location <span style={{ color: "var(--mut)", fontWeight: 400 }}>· optional</span></label>
+              <input className="ev-in" value={evLocation} onChange={(e) => setEvLocation(e.target.value)} placeholder="e.g. Block C, Level 2" />
+
+              <label className="ev-lbl" style={{ marginTop: 14 }}>Visible to</label>
+              <div className="ev-kinds">
+                <button type="button" className={"ev-kind" + (evVis === "team" ? " act" : "")} onClick={() => setEvVis("team")}>Team</button>
+                <button type="button" className={"ev-kind" + (evVis === "private" ? " act" : "")} onClick={() => setEvVis("private")}>Just me</button>
+              </div>
+
+              {evError && <div className="ev-err">{evError}</div>}
+
+              <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+                <button className="lg-btn primary" style={{ height: 46, margin: 0, flex: 1 }} disabled={evSaving} onClick={saveEvent}>
+                  {evSaving ? "Saving…" : "Add event"}
+                </button>
+                <button className="lg-btn" style={{ height: 46, margin: 0, width: "auto", padding: "0 20px" }} disabled={evSaving} onClick={() => { setShowEventForm(false); resetEventForm(); }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
