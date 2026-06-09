@@ -1,105 +1,66 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
 
-type Tab = "chat" | "calendar" | "plans";
-type Screen = "login" | "onboard" | Tab | "sheet";
+type Tab = "assistant" | "calendar" | "plans" | "upload";
 type Cite = { code: string; title: string; sub: string; ans: string; hlTag: string };
 type Msg =
   | { role: "u"; text: string }
   | { role: "a"; src?: string; text: string; cite?: Cite; event?: { title: string; when: string }; pending?: boolean };
 
-const FINISH_SHEET: Cite = {
+const CHIPS = [
+  "What's the fire rating on the exterior doors?",
+  "What GIB do I use in the bathrooms?",
+  "Beam size over the garage?",
+  "Insulation R-value — external walls?",
+];
+
+const DEMO_SHEET: Cite = {
   code: "A-602",
   title: "Internal Finishes Schedule",
   sub: "95% Detail Design · Sheet 47 of 85",
-  ans: 'Unit 43 — living &amp; bedrooms: <b>Resene &quot;Alabaster&quot;</b> (half strength). Wet areas: <b>Resene &quot;Black White&quot;</b>, semi-gloss. Ceilings: <b>Resene &quot;Half White Pointer&quot;</b> throughout.',
+  ans: 'Unit 43 — living &amp; bedrooms: <b>Resene "Alabaster"</b> (half strength). Wet areas: <b>Resene "Black White"</b>, semi-gloss. Ceilings: <b>Resene "Half White Pointer"</b> throughout.',
   hlTag: "Unit 43 · finishes",
 };
-const FIRE_SHEET: Cite = {
-  code: "A-110",
-  title: "Fire & Acoustic Separations",
-  sub: "95% Detail Design · Sheet 12 of 85",
-  ans: 'Level 1–3 corridor walls: <b>60/60/60 (FRR)</b> — fire-rated <b>GIB Barrier&reg;</b> system, double-layer each side on a 92mm steel stud.',
-  hlTag: "Corridor · FRR",
+
+const I = {
+  chat: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.8-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5z" /></svg>),
+  cal: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4.5" width="18" height="16" rx="2.5" /><path d="M3 9h18M8 2.5v4M16 2.5v4" /></svg>),
+  plans: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3 3 7.5 12 12l9-4.5L12 3z" /><path d="M3 12l9 4.5L21 12M3 16.5 12 21l9-4.5" /></svg>),
+  up: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 20h16" /></svg>),
 };
-
-const SEED: Msg[] = [
-  { role: "u", text: "What's the wall colour in unit 43?" },
-  {
-    role: "a",
-    src: "📐 FROM YOUR PLANS",
-    text:
-      'Unit 43\'s living &amp; bedroom walls are <b>Resene &quot;Alabaster&quot;</b> (half strength). Wet areas (bathroom &amp; ensuite) are <b>Resene &quot;Black White&quot;</b>, semi-gloss.',
-    cite: FINISH_SHEET,
-  },
-  { role: "u", text: "And the fire rating on the corridor walls?" },
-  {
-    role: "a",
-    src: "📐 FROM YOUR PLANS",
-    text:
-      'The Level 1–3 corridor walls are rated <b>60/60/60 (FRR)</b> — a fire-rated <b>GIB Barrier&reg;</b> system, double-layer each side on a 92mm steel stud.',
-    cite: FIRE_SHEET,
-  },
-  { role: "u", text: "Book the pre-line inspection for unit 49 this Friday 9am" },
-  {
-    role: "a",
-    text: "Done — added it to your calendar. I'll remind the team the day before.",
-    event: { title: "Pre-line inspection · Unit 49", when: "Fri 12 Jun · 9:00am" },
-  },
+const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: "assistant", label: "Assistant", icon: I.chat },
+  { id: "calendar", label: "Calendar", icon: I.cal },
+  { id: "plans", label: "Plans", icon: I.plans },
+  { id: "upload", label: "Upload", icon: I.up },
 ];
-
-const CHIPS = [
-  "Beam size over the garage?",
-  "Glazing spec — north elevation?",
-  "Insulation R-value, external walls?",
-  "Book a delivery",
-];
-
-const Hamburger = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M3 6h18M3 12h18M3 18h18" />
-  </svg>
-);
 
 export default function Page() {
-  const [screen, setScreen] = useState<Screen>("login");
-  const [tab, setTab] = useState<Tab>("chat");
-  const [lastTab, setLastTab] = useState<Tab>("chat");
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [messages, setMessages] = useState<Msg[]>(SEED);
+  const [tab, setTab] = useState<Tab>("assistant");
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [obMode, setObMode] = useState<"setup" | "join">("setup");
-  const [obStep, setObStep] = useState(1);
-  const [sheet, setSheet] = useState<Cite>(FINISH_SHEET);
+  const [sheet, setSheet] = useState<Cite | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
 
-  const { isLoaded, isSignedIn } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const clerk = useClerk();
 
-  const isTab = screen === "chat" || screen === "calendar" || screen === "plans";
-  const on = (s: Screen) => (screen === s ? "screen on" : "screen");
-
-  const enterApp = () => { setScreen("chat"); setTab("chat"); setLastTab("chat"); };
-  const go = (t: Tab) => { setTab(t); setLastTab(t); setScreen(t); };
-  const openSheet = (c: Cite) => { setSheet(c); setScreen("sheet"); };
-  const closeSheet = () => setScreen(lastTab);
-  const logout = () => { setMenuOpen(false); clerk.signOut(); };
-
-  // Keep the screen in sync with Clerk auth: signed in → app, signed out → login.
   useEffect(() => {
-    if (!isLoaded) return;
-    if (isSignedIn) enterApp();
-    else setScreen("login");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, isSignedIn]);
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
 
   const send = async (text?: string) => {
     const t = (text ?? input).trim();
     if (!t || busy) return;
     setInput("");
+    if (taRef.current) taRef.current.style.height = "auto";
     setBusy(true);
-    setMessages((m) => [...m, { role: "u", text: t }, { role: "a", text: "📐 Reading your plans…", pending: true }]);
+    setTab("assistant");
+    setMessages((m) => [...m, { role: "u", text: t }, { role: "a", text: "…", pending: true }]);
     try {
       const res = await fetch("/api/ask", {
         method: "POST",
@@ -127,284 +88,238 @@ export default function Page() {
     return cells;
   }, []);
 
-  if (!isLoaded) return <div className="app" aria-busy="true" />;
+  if (!isLoaded) return <div className="boot" />;
+
+  /* ─── Signed out: login ─── */
+  if (!isSignedIn) {
+    return (
+      <div className="login">
+        <div className="login-card">
+          <div className="lg-pill">Ask your plans</div>
+          <div className="lg-mark">Soter<span>ra</span></div>
+          <h1 className="lg-h">The answer&apos;s in the plans.<br /><b>Just ask.</b></h1>
+          <p className="lg-sub">
+            Your whole crew can ask any question about the project&apos;s drawings and specs — and get the answer in
+            seconds, with the exact sheet to back it up.
+          </p>
+          <button className="lg-btn" onClick={() => clerk.openSignIn()}>
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" /><path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38z" /></svg>
+            Continue with Google
+          </button>
+          <button className="lg-btn primary" onClick={() => clerk.openSignIn()}>Continue with email</button>
+          <div className="lg-alt">
+            New company? <a onClick={() => clerk.openSignUp()}>Set up your project →</a><br />
+            Joining your team? <a onClick={() => clerk.openSignUp()}>Enter an invite code →</a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const firstName =
+    user?.firstName || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || user?.username || "there";
+  const initials = (firstName[0] || "S").toUpperCase();
 
   return (
-    <div className="app">
-      {/* ══ LOGIN ══ */}
-      <section className={on("login")} id="login">
-        <div className="lg-pill">Ask your plans</div>
-        <div className="lg-mark">Soter<span>ra</span></div>
-        <h1 className="lg-h">The answer&apos;s in the plans.<br /><b>Just ask.</b></h1>
-        <p className="lg-sub">
-          Your whole crew can ask any question about the project&apos;s drawings and specs — and get the answer in
-          seconds, with the exact sheet to back it up.
-        </p>
-        <button className="lg-btn" onClick={() => clerk.openSignIn()}>
-          <svg width="18" height="18" viewBox="0 0 24 24">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
-            <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z" />
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38z" />
-          </svg>
-          Continue with Google
-        </button>
-        <button className="lg-btn primary" onClick={() => clerk.openSignIn()}>Continue with email</button>
-        <div className="lg-alt">
-          New company? <a onClick={() => clerk.openSignUp()}>Set up your project →</a><br />
-          Joining your team? <a onClick={() => clerk.openSignUp()}>Enter an invite code →</a>
-        </div>
-      </section>
-
-      {/* ══ ONBOARDING ══ */}
-      <section className={on("onboard")} id="onboard">
-        <div className="ob-top">
-          <span className="ob-back" onClick={() => { if (obMode === "join" || obStep === 1) setScreen("login"); else setObStep(obStep - 1); }}>‹</span>
-          <div className="ob-steps" style={{ visibility: obMode === "join" ? "hidden" : "visible" }}>
-            <div className={"ob-dot" + (obStep >= 1 ? " on" : "")} />
-            <div className={"ob-dot" + (obStep >= 2 ? " on" : "")} />
-            <div className={"ob-dot" + (obStep >= 3 ? " on" : "")} />
-          </div>
-        </div>
-        <div className="ob-body">
-          {obMode === "join" ? (
-            <>
-              <div className="ob-k">Join your team</div>
-              <div className="ob-h">Enter your invite code</div>
-              <div className="ob-p">Your site manager shared a code or link. Pop it in and you&apos;re straight onto the project — no setup.</div>
-              <div className="fld"><label>Invite code</label><input defaultValue="ARTH-7K42" style={{ letterSpacing: ".18em", fontWeight: 600, textTransform: "uppercase" }} /></div>
-            </>
-          ) : obStep === 1 ? (
-            <>
-              <div className="ob-k">Step 1 · Your project</div>
-              <div className="ob-h">Set up your first project</div>
-              <div className="ob-p">This is what your crew will ask questions about. You can add more projects later.</div>
-              <div className="fld"><label>Company</label><input defaultValue="Arthur Road Construction" /></div>
-              <div className="fld"><label>Project name</label><input defaultValue="1 Arthur Road" /></div>
-              <div className="fld"><label>Type</label><input defaultValue="Multi-unit housing" /></div>
-            </>
-          ) : obStep === 2 ? (
-            <>
-              <div className="ob-k">Step 2 · The plans</div>
-              <div className="ob-h">Upload the drawings &amp; specs</div>
-              <div className="ob-p">Drop in everything for this project — architectural, structural, services, specs. Soterra reads &amp; indexes the lot.</div>
-              <div className="drop"><div className="ic">⬆️</div><b>Drop PDFs here</b><small>or tap to browse</small></div>
-              <div className="uplist">
-                <UpItem t="A3" n="95% Detail Design" s="85 sheets" />
-                <UpItem t="A1" n="P25-152 Detailed Design" s="78 sheets" />
-                <UpItem t="EL" n="8084-ELEC-ESET" s="17 sheets" />
-                <UpItem t="ME" n="8084-MECH-MSET" s="7 sheets" />
-                <UpItem t="SP" n="95% Project Spec" s="280 pages" />
-                <UpItem t="ST" n="Structural Spec" s="104 pages" />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="ob-k">Step 3 · Your crew</div>
-              <div className="ob-h">You&apos;re ready. Bring the team on.</div>
-              <div className="ob-p">Share this code with anyone on site. They sign up, enter the code, and they&apos;re asking the plans in seconds — no seats to manage.</div>
-              <div className="code-box"><small>Project invite code</small><div className="code">ARTH-7K42</div><div className="cap">1 Arthur Road · the whole crew, one code</div></div>
-              <button className="bigbtn ghost" style={{ marginBottom: 0 }}>Copy invite link</button>
-            </>
-          )}
-        </div>
-        <div className="ob-foot">
-          {obMode === "join" ? (
-            <button className="bigbtn" onClick={enterApp}>Join 1 Arthur Road →</button>
-          ) : obStep === 1 ? (
-            <button className="bigbtn" onClick={() => setObStep(2)}>Next — add the plans →</button>
-          ) : obStep === 2 ? (
-            <button className="bigbtn" onClick={() => setObStep(3)}>Index 571 pages →</button>
-          ) : (
-            <button className="bigbtn" onClick={enterApp}>Enter Soterra →</button>
-          )}
-        </div>
-      </section>
-
-      {/* ══ CHAT / CALENDAR / PLANS — inside the flexible content area, above the tab bar ══ */}
-      <div className="content">
-      <section className={on("chat") + " tabbed"} id="chat">
-        <div className="top">
-          <div className="proj" onClick={() => setMenuOpen(true)}>
-            <b>1 Arthur Road <span className="chev">▾</span></b>
-            <small>Multi-unit housing · 6 documents</small>
-          </div>
-          <div className="sp" />
-          <button className="icbtn" onClick={() => setMenuOpen(true)}><Hamburger /></button>
-        </div>
-        <div className="chat-scroll">
-          <div className="daypill">Today</div>
-          {messages.map((m, i) =>
-            m.role === "u" ? (
-              <div className="msg u" key={i}><div className="bub">{m.text}</div></div>
-            ) : (
-              <div className="msg a" key={i}>
-                <div className="bub">
-                  {m.src && <div className="src">{m.src}</div>}
-                  <span dangerouslySetInnerHTML={{ __html: m.text }} />
-                  {m.cite && (
-                    <div className="cite" onClick={() => openSheet(m.cite!)}>
-                      <div className="cic">📐</div>
-                      <div className="ct"><b>{m.cite.code} · {m.cite.title}</b><small>{m.cite.sub}</small></div>
-                      <div className="ca">›</div>
-                    </div>
-                  )}
-                  {m.event && (
-                    <div className="evcard">
-                      <div className="bar" />
-                      <div className="et"><b>{m.event.title}</b><small>{m.event.when}</small></div>
-                      <div className="ec">🗓️</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          )}
-        </div>
-        <div className="composer">
-          <div className="chips">
-            {CHIPS.map((c) => <div className="chip" key={c} onClick={() => send(c)}>{c}</div>)}
-          </div>
-          <div className="inbar">
-            <input
-              value={input}
-              placeholder="Ask your plans or anything on site…"
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") send(); }}
-            />
-            <button className="send" onClick={() => send()}>
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-              </svg>
+    <div className="shell">
+      {/* ─── top nav ─── */}
+      <header className="topnav">
+        <div className="brand" onClick={() => setTab("assistant")}>Soter<span>ra</span></div>
+        <nav className="navtabs">
+          {NAV.map((n) => (
+            <button key={n.id} className={"navtab" + (tab === n.id ? " act" : "")} onClick={() => setTab(n.id)}>
+              {n.icon}<span>{n.label}</span>
             </button>
-          </div>
-        </div>
-      </section>
-
-      {/* ══ CALENDAR ══ */}
-      <section className={on("calendar") + " tabbed"} id="calendar">
-        <div className="top">
-          <div className="proj"><b>Calendar</b><small>1 Arthur Road</small></div>
-          <div className="sp" />
-          <button className="icbtn" onClick={() => setMenuOpen(true)}><Hamburger /></button>
-        </div>
-        <div className="cal-wrap">
-          <div className="cal-head"><b>June 2026</b><div className="cal-nav"><button>‹</button><button>›</button></div></div>
-          <div className="cal-grid">
-            <div className="cal-dow"><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div><div>S</div></div>
-            <div className="cal-days">
-              {calCells.map((c, i) => (
-                <div className={"cd" + (c.today ? " today" : "") + (c.mut ? " mut" : "")} key={i}>
-                  {c.n}
-                  {c.dots.length > 0 && <div className="dots">{c.dots.map((d, j) => <span className={"d " + d} key={j} />)}</div>}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="agenda">
-            <div className="ag-k">This week</div>
-            <Ev bar="var(--blue)" when="FRI 12 9:00am" title="Pre-line inspection · Unit 49" sub="Booked from chat" tag="Inspection" tagBg="rgba(14,116,189,.1)" tagFg="var(--blue)" />
-            <Ev bar="var(--green)" when="WED 10 7:30am" title="GIB delivery — Level 2" sub="Carter Holt · 142 sheets" tag="Delivery" tagBg="rgba(16,185,129,.12)" tagFg="var(--green)" />
-            <Ev bar="var(--navy)" when="FRI 12 6:00am" title="Slab pour — Block C" sub="Weather check Thu PM" tag="Pour" tagBg="rgba(10,37,64,.1)" tagFg="var(--navy)" />
-            <Ev bar="var(--amber)" when="MON 15 —" title="PS3 due — plumbing" sub="Reminder · chase subcontractor" tag="Reminder" tagBg="rgba(245,158,11,.14)" tagFg="var(--amber)" />
-          </div>
-        </div>
-      </section>
-
-      {/* ══ PLANS ══ */}
-      <section className={on("plans") + " tabbed"} id="plans">
-        <div className="top">
-          <div className="proj"><b>Plans &amp; specs</b><small>1 Arthur Road</small></div>
-          <div className="sp" />
-          <button className="icbtn" onClick={() => setMenuOpen(true)}><Hamburger /></button>
-        </div>
-        <div className="plans-wrap">
-          <div className="idx">
-            <div><div className="big">571</div><small>pages indexed</small></div>
-            <div style={{ flex: 1 }}>
-              <small>Every drawing &amp; spec on this project, searchable in seconds.</small>
-              <span className="grn">● Ready — last updated today</span>
-            </div>
-          </div>
-          <div className="pg-k">Architectural</div>
-          <Doc ic="arc" tag="A3" name="95% Detail Design" sub="85 sheets · floor plans, elevations, details" onClick={() => openSheet(FINISH_SHEET)} />
-          <Doc ic="arc" tag="A1" name="P25-152-FDS-08 — Detailed Design" sub="78 sheets · A1" onClick={() => openSheet(FINISH_SHEET)} />
-          <div className="pg-k" style={{ marginTop: 16 }}>Services</div>
-          <Doc ic="srv" tag="ELEC" name="8084-ELEC-ESET" sub="17 sheets · power, lighting, data" onClick={() => openSheet(FINISH_SHEET)} />
-          <Doc ic="srv" tag="MECH" name="8084-MECH-MSET" sub="7 sheets · HVAC, ventilation" onClick={() => openSheet(FINISH_SHEET)} />
-          <div className="pg-k" style={{ marginTop: 16 }}>Specifications</div>
-          <Doc ic="spc" tag="SPEC" name="95% Project Spec" sub="280 pages · materials, finishes, workmanship" onClick={() => openSheet(FINISH_SHEET)} />
-          <Doc ic="spc" tag="STR" name="P25-152-SPC-01 — Structural Spec" sub="104 pages" onClick={() => openSheet(FINISH_SHEET)} />
-        </div>
-      </section>
-
-      </div>
-
-      {/* ══ SHEET VIEW ══ */}
-      <section className={on("sheet")} id="sheet">
-        <div className="sh-top">
-          <span className="bk" onClick={closeSheet}>‹</span>
-          <div className="ti"><b>{sheet.code}</b><small>{sheet.title}</small></div>
-          <button className="icbtn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
-          </button>
-        </div>
-        <div className="sh-canvas">
-          <div className="sheetpaper">
-            <div className="frame" />
-            <div className="hl" style={{ left: "14%", top: "30%", width: "30%", height: "16%" }} />
-            <div className="hltag" style={{ left: "14%", top: "24%" }}>{sheet.hlTag}</div>
-            <div className="tb"><b>{sheet.code}</b><span>{sheet.title}</span><br /><span style={{ color: "#9AA7B4" }}>1 Arthur Rd · 95% Detail Design</span></div>
-          </div>
-        </div>
-        <div className="sh-ans">
-          <div className="src">📐 ANSWER FROM THIS SHEET</div>
-          <p dangerouslySetInnerHTML={{ __html: sheet.ans }} />
-        </div>
-      </section>
-
-      {/* ══ BOTTOM TABS ══ */}
-      {isTab && (
-        <nav className="tabs">
-          <button className={"tab" + (tab === "chat" ? " act" : "")} onClick={() => go("chat")}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.8-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5z" /></svg>
-            Chat
-          </button>
-          <button className={"tab" + (tab === "calendar" ? " act" : "")} onClick={() => go("calendar")}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4.5" width="18" height="16" rx="2.5" /><path d="M3 9h18M8 2.5v4M16 2.5v4" /></svg>
-            Calendar
-          </button>
-          <button className={"tab" + (tab === "plans" ? " act" : "")} onClick={() => go("plans")}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3 3 7.5 12 12l9-4.5L12 3z" /><path d="M3 12l9 4.5L21 12M3 16.5 12 21l9-4.5" /></svg>
-            Plans
-          </button>
+          ))}
         </nav>
-      )}
+        <div className="navright">
+          <div className="proj-chip"><span className="dot" /> 1 Arthur Road <small>· 6 docs</small></div>
+          <button className="avatar" onClick={() => setMenuOpen((o) => !o)}>{initials}</button>
+          {menuOpen && (
+            <div className="menu">
+              <div className="mrow"><span className="mi">🏗️</span><div><b>1 Arthur Road</b><br /><small>Multi-unit housing</small></div></div>
+              <div className="mrow"><span className="mi">➕</span> Switch / add project</div>
+              <div className="mrow"><span className="mi">👥</span> Crew &amp; invite code</div>
+              <div className="mrow sep" onClick={() => clerk.signOut()}><span className="mi">↩️</span> Sign out</div>
+            </div>
+          )}
+        </div>
+      </header>
 
-      {/* ══ MENU ══ */}
-      <div className={"scrim" + (menuOpen ? " on" : "")} onClick={() => setMenuOpen(false)} />
-      <div className={"menu" + (menuOpen ? " on" : "")}>
-        <div className="grab" />
-        <div className="mrow"><span className="mi">🏗️</span> 1 Arthur Road <span className="proj-tag">Current</span></div>
-        <div className="mrow"><span className="mi">➕</span> Switch / add project</div>
-        <div className="mrow"><span className="mi">👥</span> Crew &amp; invite code</div>
-        <div className="mrow"><span className="mi">⬆️</span> Upload more plans</div>
-        <div className="mrow sep"><span className="mi">⚙️</span> Settings</div>
-        <div className="mrow" onClick={logout}><span className="mi">↩️</span> Sign out</div>
+      <div className="content">
+        {/* ─── ASSISTANT ─── */}
+        {tab === "assistant" && (
+          <div className="assistant">
+            <div className="asst-scroll" ref={scrollRef}>
+              <div className="asst-inner">
+                {messages.length === 0 ? (
+                  <div className="hero">
+                    <div className="hero-mark">S</div>
+                    <h1>Hi <b>{firstName}</b>, how can I help?</h1>
+                    <p>Ask anything about the 1 Arthur Road plans &amp; specs — you&apos;ll get the answer in seconds, with the exact sheet to back it up.</p>
+                    <div className="chips" style={{ marginTop: 26 }}>
+                      {CHIPS.map((c) => <button key={c} className="chip" onClick={() => send(c)}>{c}</button>)}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="thread">
+                    {messages.map((m, i) =>
+                      m.role === "u" ? (
+                        <div className="msg u" key={i}><div className="bub">{m.text}</div></div>
+                      ) : (
+                        <div className="msg a" key={i}>
+                          <div className="bub">
+                            {m.src && <div className="src">{m.src}</div>}
+                            {m.pending ? (
+                              <span className="typing"><i /><i /><i /></span>
+                            ) : (
+                              <span dangerouslySetInnerHTML={{ __html: m.text }} />
+                            )}
+                            {m.cite && (
+                              <div className="cite" onClick={() => setSheet(m.cite!)}>
+                                <div className="cic">📐</div>
+                                <div className="ct"><b>{m.cite.code} · {m.cite.title}</b><small>{m.cite.sub}</small></div>
+                                <div className="ca">›</div>
+                              </div>
+                            )}
+                            {m.event && (
+                              <div className="evcard"><div className="bar" /><div className="et"><b>{m.event.title}</b><small>{m.event.when}</small></div><div className="ec">🗓️</div></div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="composer-wrap">
+              <div className="composer">
+                <div className="cbox">
+                  <textarea
+                    ref={taRef}
+                    rows={1}
+                    value={input}
+                    placeholder="Ask your plans, or anything on site…"
+                    onChange={(e) => {
+                      setInput(e.target.value);
+                      e.target.style.height = "auto";
+                      e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px";
+                    }}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                  />
+                  <div className="crow">
+                    <span className="hint">Enter to send · Shift+Enter for a new line</span>
+                    <div className="ract">
+                      <button className="attach" title="Attach">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 18.6a1.7 1.7 0 0 1-2.3-2.3l7.8-7.8" /></svg>
+                      </button>
+                      <button className="send" disabled={busy || !input.trim()} onClick={() => send()}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── CALENDAR ─── */}
+        {tab === "calendar" && (
+          <div className="page"><div className="page-inner">
+            <div className="page-h">Calendar</div>
+            <div className="page-sub">1 Arthur Road · site schedule (NZ time)</div>
+            <div className="cal-top"><b>June 2026</b><div className="cal-nav"><button>‹</button><button>›</button></div></div>
+            <div className="cal-card">
+              <div className="cal-dow"><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div><div>S</div></div>
+              <div className="cal-days">
+                {calCells.map((c, i) => (
+                  <div className={"cd" + (c.today ? " today" : "") + (c.mut ? " mut" : "")} key={i}>
+                    {c.n}{c.dots.length > 0 && <div className="dots">{c.dots.map((d, j) => <span className={"d " + d} key={j} />)}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="ag-k">This week</div>
+            <Ev bar="var(--blue)" when="FRI 12 · 9:00am" title="Pre-line inspection · Unit 49" sub="Booked from chat · You" tag="Inspection" tagBg="rgba(14,116,189,.1)" tagFg="var(--blue)" />
+            <Ev bar="var(--green)" when="WED 10 · 7:30am" title="GIB delivery — Level 2" sub="Carter Holt · 142 sheets" tag="Delivery" tagBg="rgba(16,185,129,.12)" tagFg="var(--green)" />
+            <Ev bar="var(--navy)" when="FRI 12 · 6:00am" title="Slab pour — Block C" sub="Weather check Thu PM · whole crew" tag="Pour" tagBg="rgba(10,37,64,.1)" tagFg="var(--navy)" />
+            <Ev bar="var(--amber)" when="MON 15 · —" title="PS3 due — plumbing" sub="Private reminder · just you" tag="Reminder" tagBg="rgba(245,158,11,.14)" tagFg="var(--amber)" />
+          </div></div>
+        )}
+
+        {/* ─── PLANS ─── */}
+        {tab === "plans" && (
+          <div className="page"><div className="page-inner">
+            <div className="page-h">Plans &amp; specs</div>
+            <div className="page-sub">1 Arthur Road · every drawing &amp; spec, searchable in seconds</div>
+            <div className="idx">
+              <div><div className="big">571</div><small>pages indexed</small></div>
+              <div style={{ flex: 1 }}><small>Architectural, structural, services and specs — all read and searchable.</small><span className="grn">● Ready — last updated today</span></div>
+            </div>
+            <div className="pg-k">Architectural</div>
+            <div className="docs">
+              <Doc ic="arc" tag="A3" name="95% Detail Design" sub="85 sheets · plans, elevations" onClick={() => setSheet(DEMO_SHEET)} />
+              <Doc ic="arc" tag="A1" name="P25-152-FDS-08" sub="78 sheets · detailed design" onClick={() => setSheet(DEMO_SHEET)} />
+            </div>
+            <div className="pg-k" style={{ marginTop: 18 }}>Services</div>
+            <div className="docs">
+              <Doc ic="srv" tag="ELEC" name="8084-ELEC-ESET" sub="17 sheets · power, lighting, data" onClick={() => setSheet(DEMO_SHEET)} />
+              <Doc ic="srv" tag="MECH" name="8084-MECH-MSET" sub="7 sheets · HVAC, ventilation" onClick={() => setSheet(DEMO_SHEET)} />
+            </div>
+            <div className="pg-k" style={{ marginTop: 18 }}>Specifications</div>
+            <div className="docs">
+              <Doc ic="spc" tag="SPEC" name="95% Project Spec" sub="280 pages · materials, finishes" onClick={() => setSheet(DEMO_SHEET)} />
+              <Doc ic="spc" tag="STR" name="P25-152-SPC-01 — Structural" sub="104 pages" onClick={() => setSheet(DEMO_SHEET)} />
+            </div>
+          </div></div>
+        )}
+
+        {/* ─── UPLOAD ─── */}
+        {tab === "upload" && (
+          <div className="page"><div className="page-inner">
+            <div className="page-h">Upload plans</div>
+            <div className="page-sub">Add drawings &amp; specs to this project</div>
+            <div className="drop">
+              <div className="ic">⬆️</div>
+              <b>Drop PDFs here</b>
+              <p>Architectural, structural, services, specs — Soterra reads &amp; indexes the lot so your crew can ask it anything.</p>
+              <span className="soon">Wiring up next</span>
+            </div>
+          </div></div>
+        )}
       </div>
+
+      {/* ─── sheet modal ─── */}
+      {sheet && (
+        <div className="scrim" onClick={() => setSheet(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti"><b>{sheet.code}</b><small>{sheet.title}</small></div>
+              <button className="sh-x" onClick={() => setSheet(null)}>✕</button>
+            </div>
+            <div className="sh-canvas">
+              <div className="sheetpaper">
+                <div className="frame" /><div className="hl" /><div className="hltag">{sheet.hlTag}</div>
+                <div className="tb"><b>{sheet.code}</b><span>{sheet.title}</span><br /><span style={{ color: "#9AA7B4" }}>1 Arthur Rd</span></div>
+              </div>
+            </div>
+            <div className="sh-ans"><div className="src">📐 ANSWER FROM THIS SHEET</div><p dangerouslySetInnerHTML={{ __html: sheet.ans }} /></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// Escape, then render **bold** and line breaks from Claude's plain-text answer.
+/* ── helpers ── */
 function fmt(s: string): string {
   return s
     .replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] as string))
     .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
     .replace(/\n+/g, "<br/>");
 }
-
-// Turn Claude's "Source: Detail Design · ED003 · … · page 60 of 85" into a citation card.
 function makeCite(sourceLine: string, body: string): Cite {
   const parts = sourceLine.split("·").map((x) => x.trim()).filter(Boolean);
   const doc = parts[0] || "Source";
@@ -412,18 +327,11 @@ function makeCite(sourceLine: string, body: string): Cite {
   const rest = parts.filter((p) => p !== doc && p !== code).join(" · ");
   return { code, title: rest || doc, sub: doc, ans: fmt(body), hlTag: code };
 }
-
-function UpItem({ t, n, s }: { t: string; n: string; s: string }) {
-  return (
-    <div className="upitem"><div className="dot">{t}</div><div className="nm">{n}<small>{s}</small></div><div className="ok">✓</div></div>
-  );
-}
 function Ev(p: { bar: string; when: string; title: string; sub: string; tag: string; tagBg: string; tagFg: string }) {
-  const [d, time] = [p.when.split(" ").slice(0, 2).join(" "), p.when.split(" ").slice(2).join(" ")];
   return (
     <div className="ev">
       <div className="bar" style={{ background: p.bar }} />
-      <div className="when">{d}<br />{time}</div>
+      <div className="when">{p.when}</div>
       <div className="body"><b>{p.title}</b><small>{p.sub}</small></div>
       <div className="tag" style={{ background: p.tagBg, color: p.tagFg }}>{p.tag}</div>
     </div>
