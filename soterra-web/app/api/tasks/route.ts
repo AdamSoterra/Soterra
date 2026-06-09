@@ -2,6 +2,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { and, asc, eq, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { tasks } from "@/lib/schema";
+import { zonedWallClockToUtc, resolveEndsAt } from "@/lib/date-tz";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,7 @@ function serialize(t: typeof tasks.$inferSelect) {
     id: t.id,
     title: t.title,
     dueAt: t.dueAt ? t.dueAt.toISOString() : null,
+    endsAt: t.endsAt ? t.endsAt.toISOString() : null,
     done: t.done,
     visibility: t.visibility,
     creatorName: t.creatorName,
@@ -57,11 +59,16 @@ export async function POST(req: Request) {
   const title = String(body.title ?? "").trim();
   if (!title) return Response.json({ error: "Title is required" }, { status: 400 });
 
-  let dueAt: Date | null = null;
-  if (body.dueAt) {
-    const d = new Date(String(body.dueAt));
-    if (!isNaN(d.getTime())) dueAt = d;
-  }
+  // Optional due date + time and an optional finish-by end date/time, all in the
+  // project wall-clock and converted server-side. A date with no time anchors at
+  // 00:00 (date-only "by this day"); the end fields populate tasks.endsAt.
+  const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.dueDate ?? "")) ? String(body.dueDate) : null;
+  const dueTime = /^\d{2}:\d{2}$/.test(String(body.dueTime ?? "")) ? String(body.dueTime) : null;
+  const endDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.endDate ?? "")) ? String(body.endDate) : null;
+  const endTime = /^\d{2}:\d{2}$/.test(String(body.endTime ?? "")) ? String(body.endTime) : null;
+
+  const dueAt = dueDate ? zonedWallClockToUtc(dueDate, dueTime) : null;
+  const endsAt = dueDate ? resolveEndsAt(dueDate, dueTime, endDate, endTime) : null;
 
   const visibility = body.visibility === "team" ? "team" : "private";
 
@@ -80,6 +87,7 @@ export async function POST(req: Request) {
       creatorName,
       title,
       dueAt,
+      endsAt,
       visibility,
     })
     .returning();

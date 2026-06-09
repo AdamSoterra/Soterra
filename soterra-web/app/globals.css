@@ -124,13 +124,31 @@ button,input,textarea{font-family:var(--font)}
 .cd .dots{display:flex;gap:3px;margin-top:5px}
 .cd .d{width:6px;height:6px;border-radius:50%}
 .d.bl{background:var(--brand)}.d.gr{background:var(--green)}.d.am{background:var(--amber)}.d.nv{background:var(--navy)}
+.d.pu{background:#8B5CF6}.d.sl{background:#94A6BE}
 .cd.today .d{background:#fff}
 .ag-k{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:6px 2px 13px}
 .ev{display:flex;gap:14px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:15px;margin-bottom:10px;align-items:center;box-shadow:0 2px 12px rgba(12,42,71,.04)}
 .ev .bar{width:4px;border-radius:3px;align-self:stretch}
-.ev .when{font-size:11.5px;color:var(--mut);width:64px;flex-shrink:0;font-weight:600}
-.ev .body{flex:1}.ev .body b{font-size:14px;color:var(--navy);display:block}.ev .body small{font-size:12.5px;color:var(--slate)}
-.ev .tag{font-size:10.5px;font-weight:600;padding:4px 11px;border-radius:8px}
+.ev .when{font-size:11px;color:var(--mut);width:82px;flex-shrink:0;font-weight:700;line-height:1.45}
+.ev .when-t{font-weight:500;color:var(--slate)}
+.ev .body{flex:1;min-width:0}.ev .body b{font-size:14px;color:var(--navy);display:block}.ev .body small{font-size:12.5px;color:var(--slate)}
+.ev .tag{font-size:10.5px;font-weight:600;padding:4px 11px;border-radius:8px;white-space:nowrap}
+
+/* calendar header controls: Month/Agenda toggle + Today/New */
+.seg{display:inline-flex;background:#fff;border:1px solid var(--line);border-radius:11px;padding:3px;box-shadow:0 1px 2px rgba(12,42,71,.04)}
+.seg button{font-size:13px;font-weight:600;color:var(--slate);background:none;border:none;cursor:pointer;padding:7px 16px;border-radius:8px;font-family:var(--font)}
+.seg button.on{background:rgba(65,195,255,.16);color:var(--brand-d)}
+.cal-nav{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.cal-monthlbl{font-size:15px;font-weight:600;color:var(--navy);margin-right:4px}
+.cal-today,.cal-new{height:34px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--slate);font-size:13px;font-weight:600;padding:0 14px;font-family:var(--font)}
+.cal-today:hover{border-color:rgba(14,143,230,.4);color:var(--brand-d)}
+.cal-new{background:var(--grad);color:#fff;border:none;box-shadow:0 6px 16px rgba(10,141,237,.28)}
+.cal-new:hover{filter:brightness(1.05)}
+
+/* agenda / Napirend */
+.agenda{display:flex;flex-direction:column;gap:18px}
+.ag-group{display:flex;flex-direction:column}
+.ag-day{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--brand-d);margin:0 2px 11px;padding-bottom:7px;border-bottom:1px solid var(--line)}
 
 /* plans */
 .idx{background:var(--grad);color:#fff;border-radius:18px;padding:22px 24px;margin-bottom:26px;display:flex;align-items:center;gap:20px;box-shadow:0 16px 40px rgba(10,141,237,.3)}
@@ -194,6 +212,20 @@ button,input,textarea{font-family:var(--font)}
 .ev-kind:hover{border-color:rgba(14,143,230,.35)}
 .ev-kind.act{background:rgba(65,195,255,.14);border-color:rgba(14,143,230,.4);color:var(--brand-d);font-weight:600}
 .ev-err{margin-top:14px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:var(--red);border-radius:11px;padding:10px 13px;font-size:13px}
+.ev-lbl .opt{color:var(--mut);font-weight:400;text-transform:none;letter-spacing:0}
+select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:36px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%2352698A' stroke-width='1.6' d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+.ev-in:disabled{background:var(--bg);color:var(--mut);cursor:not-allowed}
+.ev-lbl{margin-top:14px}
+.form-body .ev-lbl:first-child{margin-top:0}
+.ev-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.ev-grid .ev-lbl{margin-top:0}
+
+/* modal scroll bodies (day detail + create forms) */
+.form-body{flex:1 1 auto;min-height:0;padding:20px 22px 22px;overflow-y:auto}
+.form-actions{display:flex;gap:10px;margin-top:22px}
+.dm-body{flex:1;overflow-y:auto;padding:18px 20px 6px;min-height:80px}
+.dm-foot{flex:0 0 auto;display:flex;gap:10px;padding:14px 20px 18px;border-top:1px solid var(--line)}
 
 /* ════════ ACCOUNT MENU ════════ */
 .menu{position:absolute;top:50px;right:0;width:236px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 50px rgba(12,42,71,.2);padding:8px;z-index:60}

@@ -2,13 +2,16 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { and, asc, eq, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events } from "@/lib/schema";
+import { zonedWallClockToUtc, resolveEndsAt } from "@/lib/date-tz";
 
 export const runtime = "nodejs";
 
 // Hardcoded for now — multi-project comes later. Every query is scoped to this.
 const PROJECT_ID = "1-arthur-road";
 
-const KINDS = ["inspection", "delivery", "pour", "reminder", "event"] as const;
+// Optional event type. null/unknown → untyped (no tag). Kept in sync with the
+// EVENT_KINDS list in page.tsx and the assistant's create_event tool.
+const KINDS = ["inspection", "delivery", "pour", "meeting", "reminder", "other"] as const;
 type Kind = (typeof KINDS)[number];
 
 // ─── GET /api/events ───
@@ -62,23 +65,21 @@ export async function POST(req: Request) {
   const title = String(body.title ?? "").trim();
   if (!title) return Response.json({ error: "Title is required" }, { status: 400 });
 
-  // startsAt must be a parseable date/datetime string. The client sends an ISO
-  // string built from the date + time inputs (see page.tsx).
-  const startsRaw = String(body.startsAt ?? "");
-  const startsAt = new Date(startsRaw);
-  if (!startsRaw || isNaN(startsAt.getTime())) {
+  // Client sends date + optional time fields (project wall-clock); the server
+  // converts to UTC so the instant is correct regardless of where it runs.
+  const date = String(body.date ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return Response.json({ error: "A valid date is required" }, { status: 400 });
   }
+  const time = /^\d{2}:\d{2}$/.test(String(body.time ?? "")) ? String(body.time) : null;
+  const endDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.endDate ?? "")) ? String(body.endDate) : null;
+  const endTime = /^\d{2}:\d{2}$/.test(String(body.endTime ?? "")) ? String(body.endTime) : null;
 
-  let endsAt: Date | null = null;
-  if (body.endsAt) {
-    const e = new Date(String(body.endsAt));
-    if (!isNaN(e.getTime())) endsAt = e;
-  }
+  const startsAt = zonedWallClockToUtc(date, time);
+  const endsAt = resolveEndsAt(date, time, endDate, endTime);
+  const allDay = !time;
 
-  const kind: Kind = KINDS.includes(body.kind as Kind)
-    ? (body.kind as Kind)
-    : "inspection";
+  const kind: Kind | null = KINDS.includes(body.kind as Kind) ? (body.kind as Kind) : null;
   const visibility = body.visibility === "private" ? "private" : "team";
 
   const user = await currentUser();
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
       title,
       startsAt,
       endsAt,
-      allDay: Boolean(body.allDay),
+      allDay,
       location: body.location ? String(body.location).trim() || null : null,
       kind,
       visibility,

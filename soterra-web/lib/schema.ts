@@ -12,10 +12,14 @@ export const events = pgTable(
     creatorName: text("creator_name"),
     title: text("title").notNull(),
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
-    endsAt: timestamp("ends_at", { withTimezone: true }),
+    endsAt: timestamp("ends_at", { withTimezone: true }), // optional end date/time
     allDay: boolean("all_day").default(false).notNull(),
     location: text("location"),
-    kind: text("kind").default("event").notNull(), // inspection | delivery | pour | reminder | event
+    // Optional event type — null = untyped (no tag shown). When set, one of:
+    // inspection | delivery | pour | meeting | reminder | other. Nullable so the
+    // type can be left blank (Adam: "make it optional"); kept as free text so new
+    // types can be added without a migration.
+    kind: text("kind"),
     visibility: text("visibility").default("team").notNull(), // team | private
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -31,7 +35,8 @@ export const tasks = pgTable(
     creatorId: text("creator_id").notNull(),
     creatorName: text("creator_name"),
     title: text("title").notNull(),
-    dueAt: timestamp("due_at", { withTimezone: true }),
+    dueAt: timestamp("due_at", { withTimezone: true }), // optional start/due date+time
+    endsAt: timestamp("ends_at", { withTimezone: true }), // optional finish-by date+time
     done: boolean("done").default(false).notNull(),
     visibility: text("visibility").default("private").notNull(), // private | team
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
