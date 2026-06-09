@@ -1,6 +1,5 @@
-import { readFileSync } from "fs";
-import { join } from "path";
 import Anthropic from "@anthropic-ai/sdk";
+import indexData from "@/data/arthur-road-index.json";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -13,12 +12,8 @@ type Page = {
   code: string; title: string; text: string;
 };
 
-let INDEX: Page[] | null = null;
+const INDEX = indexData as unknown as Page[];
 function getIndex(): Page[] {
-  if (!INDEX) {
-    const p = join(process.cwd(), "data", "arthur-road-index.json");
-    INDEX = JSON.parse(readFileSync(p, "utf-8")) as Page[];
-  }
   return INDEX;
 }
 
