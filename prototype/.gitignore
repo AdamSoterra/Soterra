@@ -1,0 +1,6 @@
+# Never commit extracted plan content or rendered pages (client IP) or keys
+index_cache.json
+*.jpg
+*.jpeg
+*.png
+.env
