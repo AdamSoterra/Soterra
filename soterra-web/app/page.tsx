@@ -1,5 +1,6 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useUser, useClerk } from "@clerk/nextjs";
 
 type Tab = "chat" | "calendar" | "plans";
 type Screen = "login" | "onboard" | Tab | "sheet";
@@ -72,6 +73,9 @@ export default function Page() {
   const [obStep, setObStep] = useState(1);
   const [sheet, setSheet] = useState<Cite>(FINISH_SHEET);
 
+  const { isLoaded, isSignedIn } = useUser();
+  const clerk = useClerk();
+
   const isTab = screen === "chat" || screen === "calendar" || screen === "plans";
   const on = (s: Screen) => (screen === s ? "screen on" : "screen");
 
@@ -79,7 +83,15 @@ export default function Page() {
   const go = (t: Tab) => { setTab(t); setLastTab(t); setScreen(t); };
   const openSheet = (c: Cite) => { setSheet(c); setScreen("sheet"); };
   const closeSheet = () => setScreen(lastTab);
-  const logout = () => { setMenuOpen(false); setScreen("login"); };
+  const logout = () => { setMenuOpen(false); clerk.signOut(); };
+
+  // Keep the screen in sync with Clerk auth: signed in → app, signed out → login.
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (isSignedIn) enterApp();
+    else setScreen("login");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn]);
 
   const send = (text?: string) => {
     const t = (text ?? input).trim();
@@ -112,6 +124,8 @@ export default function Page() {
     return cells;
   }, []);
 
+  if (!isLoaded) return <div className="app" aria-busy="true" />;
+
   return (
     <div className="app">
       {/* ══ LOGIN ══ */}
@@ -123,7 +137,7 @@ export default function Page() {
           Your whole crew can ask any question about the project&apos;s drawings and specs — and get the answer in
           seconds, with the exact sheet to back it up.
         </p>
-        <button className="lg-btn" onClick={enterApp}>
+        <button className="lg-btn" onClick={() => clerk.openSignIn()}>
           <svg width="18" height="18" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
@@ -132,10 +146,10 @@ export default function Page() {
           </svg>
           Continue with Google
         </button>
-        <button className="lg-btn primary" onClick={enterApp}>Continue with email</button>
+        <button className="lg-btn primary" onClick={() => clerk.openSignIn()}>Continue with email</button>
         <div className="lg-alt">
-          New company? <a onClick={() => { setObMode("setup"); setObStep(1); setScreen("onboard"); }}>Set up your project →</a><br />
-          Joining your team? <a onClick={() => { setObMode("join"); setScreen("onboard"); }}>Enter an invite code →</a>
+          New company? <a onClick={() => clerk.openSignUp()}>Set up your project →</a><br />
+          Joining your team? <a onClick={() => clerk.openSignUp()}>Enter an invite code →</a>
         </div>
       </section>
 
