@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Soterra — App v0.1</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --font:'DM Sans',system-ui,sans-serif;
+  --blue:#0E74BD;--navy:#0A2540;--slate:#4A6080;--bg:#F0F7FF;--white:#fff;
+  --sky:#38BDF8;--green:#10B981;--amber:#F59E0B;--red:#EF4444;
+  --line:#E6EEF6;--ink:#13243A;--mut:#8A9BB0;
+}
+html,body{height:100%}
+body{font-family:var(--font);color:var(--navy);
+  background:var(--bg);
+  background-image:linear-gradient(rgba(14,116,189,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(14,116,189,.05) 1px,transparent 1px);
+  background-size:44px 44px;
+  display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+
+/* ── PHONE FRAME ── */
+.app{position:relative;width:430px;max-width:100%;height:880px;max-height:calc(100vh - 48px);
+  background:var(--white);border-radius:30px;overflow:hidden;
+  box-shadow:0 24px 70px rgba(10,37,64,.28),0 0 0 1px rgba(10,37,64,.04);display:flex;flex-direction:column}
+@media(max-width:480px){body{padding:0}.app{height:100vh;max-height:100vh;border-radius:0}}
+
+/* screens stack */
+.screen{position:absolute;inset:0;display:none;flex-direction:column;background:var(--white)}
+.screen.on{display:flex}
+
+/* ── shared top bar ── */
+.top{height:58px;flex:0 0 58px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--line);background:#fff;z-index:5}
+.brand{font-size:18px;font-weight:600;color:var(--blue);letter-spacing:.01em}
+.brand span{color:var(--navy)}
+.proj{display:flex;flex-direction:column;line-height:1.15;cursor:pointer}
+.proj b{font-size:14px;font-weight:600;color:var(--navy)}
+.proj small{font-size:11px;color:var(--mut)}
+.proj .chev{font-size:9px;color:var(--mut);margin-left:4px}
+.top .sp{flex:1}
+.icbtn{width:38px;height:38px;border-radius:10px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--slate)}
+.icbtn:hover{background:var(--bg)}
+
+/* ── bottom tab bar ── */
+.tabs{flex:0 0 64px;display:flex;border-top:1px solid var(--line);background:#fff;padding-bottom:env(safe-area-inset-bottom)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;cursor:pointer;color:var(--mut);font-family:var(--font);font-size:10.5px;font-weight:500;padding-top:6px}
+.tab svg{width:23px;height:23px}
+.tab.act{color:var(--blue)}
+
+/* ════════ LOGIN ════════ */
+#login{align-items:center;justify-content:center;padding:0 34px;text-align:center;
+  background:linear-gradient(180deg,#fff 0%,var(--bg) 100%)}
+.lg-mark{font-size:34px;font-weight:600;color:var(--blue);letter-spacing:.01em;margin-bottom:6px}
+.lg-mark span{color:var(--navy)}
+.lg-pill{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--blue);background:rgba(14,116,189,.07);border:1px solid rgba(14,116,189,.15);padding:5px 14px;border-radius:20px;margin-bottom:26px}
+.lg-h{font-size:24px;font-weight:300;line-height:1.25;letter-spacing:-.02em;margin-bottom:12px;color:var(--navy)}
+.lg-h b{font-weight:600;color:var(--blue)}
+.lg-sub{font-size:13.5px;color:var(--slate);line-height:1.7;margin-bottom:30px;max-width:320px}
+.lg-btn{width:100%;max-width:330px;height:50px;border-radius:12px;font-size:14.5px;font-weight:600;font-family:var(--font);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:11px;transition:transform .15s,box-shadow .15s;border:1.5px solid var(--line);background:#fff;color:var(--navy)}
+.lg-btn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(10,37,64,.08)}
+.lg-btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.lg-or{font-size:11px;color:var(--mut);margin:14px 0;display:flex;align-items:center;gap:10px;width:100%;max-width:330px}
+.lg-or::before,.lg-or::after{content:'';flex:1;height:1px;background:var(--line)}
+.lg-alt{font-size:13px;color:var(--slate);margin-top:24px;line-height:2}
+.lg-alt a{color:var(--blue);font-weight:600;text-decoration:none;cursor:pointer}
+
+/* ════════ ONBOARDING ════════ */
+#onboard{padding:0}
+.ob-top{height:58px;flex:0 0 58px;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--line)}
+.ob-back{cursor:pointer;color:var(--slate);font-size:20px;line-height:1}
+.ob-steps{display:flex;gap:6px;flex:1}
+.ob-dot{flex:1;height:4px;border-radius:2px;background:var(--line)}
+.ob-dot.on{background:var(--blue)}
+.ob-body{flex:1;overflow-y:auto;padding:28px 24px}
+.ob-k{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--blue);margin-bottom:10px}
+.ob-h{font-size:21px;font-weight:600;color:var(--navy);margin-bottom:8px;letter-spacing:-.01em}
+.ob-p{font-size:13px;color:var(--slate);line-height:1.65;margin-bottom:22px}
+.fld{margin-bottom:16px}
+.fld label{display:block;font-size:12px;font-weight:600;color:var(--navy);margin-bottom:6px}
+.fld input{width:100%;height:48px;border:1.5px solid var(--line);border-radius:11px;padding:0 14px;font-size:14px;font-family:var(--font);color:var(--navy);outline:none;background:#fff}
+.fld input:focus{border-color:var(--blue)}
+.drop{border:1.5px dashed rgba(14,116,189,.35);background:rgba(14,116,189,.03);border-radius:14px;padding:24px;text-align:center;margin-bottom:16px}
+.drop .ic{font-size:26px;margin-bottom:6px}
+.drop b{font-size:13.5px;color:var(--navy);font-weight:600}
+.drop small{display:block;font-size:11.5px;color:var(--mut);margin-top:3px}
+.uplist{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.upitem{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:#fff}
+.upitem .dot{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0}
+.upitem .nm{font-size:12.5px;font-weight:500;color:var(--navy);flex:1;line-height:1.3}
+.upitem .nm small{display:block;font-size:11px;color:var(--mut);font-weight:400}
+.upitem .ok{color:var(--green);font-size:15px}
+.code-box{background:linear-gradient(135deg,var(--navy),var(--blue));border-radius:16px;padding:26px;text-align:center;color:#fff;margin-bottom:18px}
+.code-box small{font-size:11px;color:rgba(255,255,255,.6);letter-spacing:.04em;text-transform:uppercase;font-weight:600}
+.code-box .code{font-size:30px;font-weight:700;letter-spacing:.18em;margin:10px 0 4px;font-variant-numeric:tabular-nums}
+.code-box .cap{font-size:11.5px;color:rgba(255,255,255,.5)}
+.ob-foot{flex:0 0 auto;padding:14px 24px 22px;border-top:1px solid var(--line)}
+.bigbtn{width:100%;height:50px;border-radius:12px;background:var(--blue);color:#fff;border:none;font-size:14.5px;font-weight:600;font-family:var(--font);cursor:pointer;transition:transform .15s}
+.bigbtn:hover{transform:translateY(-1px)}
+.bigbtn.ghost{background:#fff;color:var(--blue);border:1.5px solid var(--line)}
+
+/* ════════ CHAT ════════ */
+.chat-scroll{flex:1;overflow-y:auto;padding:18px 16px 8px;display:flex;flex-direction:column;gap:14px;background:var(--bg)}
+.daypill{align-self:center;font-size:11px;color:var(--mut);background:#fff;border:1px solid var(--line);padding:3px 12px;border-radius:20px}
+.msg{max-width:86%;font-size:13.5px;line-height:1.6}
+.msg.u{align-self:flex-end}
+.msg.a{align-self:flex-start;width:86%}
+.bub{padding:11px 14px;border-radius:16px}
+.msg.u .bub{background:var(--blue);color:#fff;border-bottom-right-radius:5px}
+.msg.a .bub{background:#fff;color:var(--ink);border:1px solid var(--line);border-bottom-left-radius:5px;box-shadow:0 1px 2px rgba(10,37,64,.03)}
+.msg.a .bub b{color:var(--navy)}
+.src{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--blue);margin-bottom:5px;display:flex;align-items:center;gap:5px}
+/* citation card */
+.cite{margin-top:9px;border:1px solid rgba(14,116,189,.22);background:rgba(14,116,189,.05);border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:11px;cursor:pointer;transition:background .15s}
+.cite:hover{background:rgba(14,116,189,.1)}
+.cite .cic{width:34px;height:34px;border-radius:9px;background:#fff;border:1px solid rgba(14,116,189,.2);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.cite .ct{flex:1;min-width:0}
+.cite .ct b{display:block;font-size:13px;font-weight:600;color:var(--navy)}
+.cite .ct small{display:block;font-size:11.5px;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cite .ca{color:var(--blue);font-size:18px;flex-shrink:0}
+/* calendar confirm card */
+.evcard{margin-top:9px;border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 13px;display:flex;align-items:center;gap:11px}
+.evcard .bar{width:4px;align-self:stretch;border-radius:3px;background:var(--blue)}
+.evcard .et{flex:1}
+.evcard .et b{display:block;font-size:13px;color:var(--navy)}
+.evcard .et small{font-size:11.5px;color:var(--slate)}
+.evcard .ec{font-size:18px}
+/* composer */
+.composer{flex:0 0 auto;background:#fff;border-top:1px solid var(--line);padding:10px 12px 12px}
+.chips{display:flex;gap:7px;overflow-x:auto;padding-bottom:9px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;font-size:12px;font-weight:500;color:var(--blue);background:rgba(14,116,189,.06);border:1px solid rgba(14,116,189,.16);border-radius:18px;padding:6px 13px;cursor:pointer;white-space:nowrap}
+.chip:hover{background:rgba(14,116,189,.12)}
+.inbar{display:flex;align-items:flex-end;gap:8px;background:var(--bg);border:1.5px solid var(--line);border-radius:22px;padding:5px 5px 5px 16px}
+.inbar input{flex:1;border:none;background:none;outline:none;font-size:14px;font-family:var(--font);color:var(--navy);height:38px}
+.send{width:40px;height:40px;border-radius:50%;background:var(--blue);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.send:hover{background:#0A5C97}
+
+/* ════════ CALENDAR ════════ */
+.cal-wrap{flex:1;overflow-y:auto;background:var(--bg)}
+.cal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px;background:#fff}
+.cal-head b{font-size:16px;font-weight:600;color:var(--navy)}
+.cal-nav{display:flex;gap:6px}
+.cal-nav button{width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--slate);font-size:14px}
+.cal-grid{background:#fff;padding:0 12px 14px}
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:10.5px;font-weight:600;color:var(--mut);padding:4px 0 8px}
+.cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cd{aspect-ratio:1;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:6px;font-size:12.5px;color:var(--navy);position:relative;cursor:pointer}
+.cd.mut{color:#CBD5E1}
+.cd.today{background:var(--blue);color:#fff;font-weight:600}
+.cd .dots{display:flex;gap:2px;margin-top:3px}
+.cd .d{width:5px;height:5px;border-radius:50%}
+.d.bl{background:var(--blue)}.d.gr{background:var(--green)}.d.am{background:var(--amber)}.d.nv{background:var(--navy)}
+.cd.today .d{background:#fff}
+.agenda{padding:14px 16px 20px}
+.ag-k{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:6px 2px 10px}
+.ev{display:flex;gap:12px;background:#fff;border:1px solid var(--line);border-radius:13px;padding:12px 13px;margin-bottom:9px}
+.ev .bar{width:4px;border-radius:3px;align-self:stretch}
+.ev .when{font-size:11px;color:var(--mut);width:54px;flex-shrink:0;font-weight:600;padding-top:1px}
+.ev .body b{font-size:13.5px;color:var(--navy);display:block}
+.ev .body small{font-size:12px;color:var(--slate)}
+.ev .tag{margin-left:auto;font-size:10px;font-weight:600;padding:3px 8px;border-radius:6px;align-self:center}
+
+/* ════════ PLANS ════════ */
+.plans-wrap{flex:1;overflow-y:auto;background:var(--bg);padding:16px}
+.idx{background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;border-radius:14px;padding:15px 16px;margin-bottom:18px;display:flex;align-items:center;gap:13px}
+.idx .big{font-size:26px;font-weight:700;line-height:1}
+.idx small{font-size:11.5px;color:rgba(255,255,255,.7);display:block;line-height:1.4}
+.idx .grn{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#A7F3D0;font-weight:600;margin-top:4px}
+.pg-k{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:4px 2px 9px}
+.doc{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:13px;padding:13px;margin-bottom:9px;cursor:pointer}
+.doc:hover{border-color:rgba(14,116,189,.35)}
+.doc .ic{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:11px;font-weight:700;letter-spacing:.02em}
+.ic.arc{background:linear-gradient(135deg,#0A2540,#0E74BD)}
+.ic.srv{background:linear-gradient(135deg,#0E74BD,#38BDF8)}
+.ic.spc{background:linear-gradient(135deg,#475569,#64748B)}
+.doc .dt{flex:1;min-width:0}
+.doc .dt b{font-size:13.5px;color:var(--navy);display:block;line-height:1.3}
+.doc .dt small{font-size:11.5px;color:var(--mut)}
+.doc .arr{color:var(--mut);font-size:18px}
+
+/* ════════ SHEET VIEW ════════ */
+#sheet{background:#fff;z-index:20}
+.sh-top{height:54px;flex:0 0 54px;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid var(--line)}
+.sh-top .bk{cursor:pointer;color:var(--navy);font-size:21px}
+.sh-top .ti{flex:1;line-height:1.2}
+.sh-top .ti b{font-size:13.5px;color:var(--navy);display:block}
+.sh-top .ti small{font-size:11px;color:var(--mut)}
+.sh-canvas{flex:1;overflow:auto;background:#52606D;display:flex;align-items:center;justify-content:center;padding:18px}
+.sheetpaper{width:100%;max-width:360px;aspect-ratio:1.414/1;background:#fff;box-shadow:0 8px 30px rgba(0,0,0,.4);position:relative;font-size:7px;color:#9AA7B4}
+.sheetpaper .tb{position:absolute;right:0;bottom:0;width:34%;border-left:1px solid #C9D3DD;border-top:1px solid #C9D3DD;padding:5px 6px;background:#fff}
+.sheetpaper .tb b{font-size:8px;color:#5A6B7D;display:block}
+.sheetpaper .frame{position:absolute;inset:7px;border:1px solid #C9D3DD}
+.sheetpaper .hl{position:absolute;border:2px solid var(--amber);background:rgba(245,158,11,.14);border-radius:3px;animation:pulse 1.8s infinite}
+.sheetpaper .hltag{position:absolute;background:var(--amber);color:#3a2a00;font-size:8px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4)}50%{box-shadow:0 0 0 6px rgba(245,158,11,0)}}
+.sh-ans{flex:0 0 auto;background:#fff;border-top:1px solid var(--line);padding:14px 16px 18px;max-height:42%;overflow-y:auto}
+.sh-ans .src{margin-bottom:6px}
+.sh-ans p{font-size:13.5px;line-height:1.6;color:var(--ink)}
+.sh-ans p b{color:var(--navy)}
+
+/* menu sheet */
+.scrim{position:absolute;inset:0;background:rgba(10,37,64,.4);display:none;z-index:30}
+.scrim.on{display:block}
+.menu{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:20px 20px 0 0;padding:10px 0 22px;z-index:31;transform:translateY(100%);transition:transform .25s}
+.menu.on{transform:translateY(0)}
+.menu .grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 12px}
+.mrow{display:flex;align-items:center;gap:13px;padding:13px 22px;font-size:14px;color:var(--navy);cursor:pointer}
+.mrow:hover{background:var(--bg)}
+.mrow .mi{width:22px;text-align:center;color:var(--slate)}
+.mrow.sep{border-top:1px solid var(--line);margin-top:6px;padding-top:16px}
+.proj-tag{font-size:10px;font-weight:600;color:var(--blue);background:rgba(14,116,189,.08);padding:2px 8px;border-radius:6px;margin-left:auto}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- ══════════ LOGIN ══════════ -->
+  <section class="screen on" id="login">
+    <div class="lg-pill">Ask your plans</div>
+    <div class="lg-mark">Soter<span>ra</span></div>
+    <h1 class="lg-h">The answer's in the plans.<br><b>Just ask.</b></h1>
+    <p class="lg-sub">Your whole crew can ask any question about the project's drawings and specs — and get the answer in seconds, with the exact sheet to back it up.</p>
+    <button class="lg-btn" onclick="enterApp()">
+      <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38z"/></svg>
+      Continue with Google
+    </button>
+    <button class="lg-btn primary" onclick="enterApp()">Continue with email</button>
+    <div class="lg-alt">
+      New company? <a onclick="startOnboard()">Set up your project →</a><br>
+      Joining your team? <a onclick="startJoin()">Enter an invite code →</a>
+    </div>
+  </section>
+
+  <!-- ══════════ ONBOARDING ══════════ -->
+  <section class="screen" id="onboard">
+    <div class="ob-top">
+      <span class="ob-back" onclick="obBack()">‹</span>
+      <div class="ob-steps">
+        <div class="ob-dot on" id="od1"></div><div class="ob-dot" id="od2"></div><div class="ob-dot" id="od3"></div>
+      </div>
+    </div>
+    <div class="ob-body" id="obBody"></div>
+    <div class="ob-foot" id="obFoot"></div>
+  </section>
+
+  <!-- ══════════ CHAT ══════════ -->
+  <section class="screen" id="chat">
+    <div class="top">
+      <div class="proj" onclick="openMenu()">
+        <b>1 Arthur Road <span class="chev">▾</span></b>
+        <small>Multi-unit housing · 6 documents</small>
+      </div>
+      <div class="sp"></div>
+      <button class="icbtn" onclick="openMenu()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+    </div>
+
+    <div class="chat-scroll" id="feed">
+      <div class="daypill">Today</div>
+
+      <div class="msg u"><div class="bub">What's the wall colour in unit 43?</div></div>
+
+      <div class="msg a">
+        <div class="bub">
+          <div class="src">📐 FROM YOUR PLANS</div>
+          Unit 43's living &amp; bedroom walls are <b>Resene "Alabaster"</b> (half strength). Wet areas (bathroom &amp; ensuite) are <b>Resene "Black White"</b>, semi-gloss.
+          <div class="cite" onclick="openSheet('A-602','Internal Finishes Schedule','Sheet 47 of 85','finish')">
+            <div class="cic">📐</div>
+            <div class="ct"><b>A-602 · Internal Finishes Schedule</b><small>95% Detail Design · Sheet 47 of 85</small></div>
+            <div class="ca">›</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="msg u"><div class="bub">And the fire rating on the corridor walls?</div></div>
+
+      <div class="msg a">
+        <div class="bub">
+          <div class="src">📐 FROM YOUR PLANS</div>
+          The Level 1–3 corridor walls are rated <b>60/60/60 (FRR)</b> — a fire-rated <b>GIB Barrier®</b> system, double-layer each side on a 92mm steel stud.
+          <div class="cite" onclick="openSheet('A-110','Fire &amp; Acoustic Separations','Sheet 12 of 85','fire')">
+            <div class="cic">📐</div>
+            <div class="ct"><b>A-110 · Fire &amp; Acoustic Separations</b><small>95% Detail Design · Sheet 12 of 85</small></div>
+            <div class="ca">›</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="msg u"><div class="bub">Book the pre-line inspection for unit 49 this Friday 9am</div></div>
+
+      <div class="msg a">
+        <div class="bub">
+          Done — added it to your calendar. I'll remind the team the day before.
+          <div class="evcard">
+            <div class="bar"></div>
+            <div class="et"><b>Pre-line inspection · Unit 49</b><small>Fri 12 Jun · 9:00am</small></div>
+            <div class="ec">🗓️</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="chips">
+        <div class="chip" onclick="ask(this)">Beam size over the garage?</div>
+        <div class="chip" onclick="ask(this)">Glazing spec — north elevation?</div>
+        <div class="chip" onclick="ask(this)">Insulation R-value, external walls?</div>
+        <div class="chip" onclick="ask(this)">Book a delivery</div>
+      </div>
+      <div class="inbar">
+        <input id="msgIn" placeholder="Ask your plans or anything on site…" onkeydown="if(event.key==='Enter')sendMsg()">
+        <button class="send" onclick="sendMsg()">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ CALENDAR ══════════ -->
+  <section class="screen" id="calendar">
+    <div class="top">
+      <div class="proj"><b>Calendar</b><small>1 Arthur Road</small></div>
+      <div class="sp"></div>
+      <button class="icbtn" onclick="openMenu()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+    </div>
+    <div class="cal-wrap">
+      <div class="cal-head">
+        <b>June 2026</b>
+        <div class="cal-nav"><button>‹</button><button>›</button></div>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-dow"><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div><div>S</div></div>
+        <div class="cal-days" id="calDays"></div>
+      </div>
+      <div class="agenda">
+        <div class="ag-k">This week</div>
+        <div class="ev">
+          <div class="bar" style="background:var(--blue)"></div>
+          <div class="when">FRI 12<br>9:00am</div>
+          <div class="body"><b>Pre-line inspection · Unit 49</b><small>Booked from chat</small></div>
+          <div class="tag" style="background:rgba(14,116,189,.1);color:var(--blue)">Inspection</div>
+        </div>
+        <div class="ev">
+          <div class="bar" style="background:var(--green)"></div>
+          <div class="when">WED 10<br>7:30am</div>
+          <div class="body"><b>GIB delivery — Level 2</b><small>Carter Holt · 142 sheets</small></div>
+          <div class="tag" style="background:rgba(16,185,129,.12);color:var(--green)">Delivery</div>
+        </div>
+        <div class="ev">
+          <div class="bar" style="background:var(--navy)"></div>
+          <div class="when">FRI 12<br>6:00am</div>
+          <div class="body"><b>Slab pour — Block C</b><small>Weather check Thu PM</small></div>
+          <div class="tag" style="background:rgba(10,37,64,.1);color:var(--navy)">Pour</div>
+        </div>
+        <div class="ev">
+          <div class="bar" style="background:var(--amber)"></div>
+          <div class="when">MON 15<br>—</div>
+          <div class="body"><b>PS3 due — plumbing</b><small>Reminder · chase subcontractor</small></div>
+          <div class="tag" style="background:rgba(245,158,11,.14);color:var(--amber)">Reminder</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ PLANS ══════════ -->
+  <section class="screen" id="plans">
+    <div class="top">
+      <div class="proj"><b>Plans &amp; specs</b><small>1 Arthur Road</small></div>
+      <div class="sp"></div>
+      <button class="icbtn" onclick="openMenu()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+    </div>
+    <div class="plans-wrap">
+      <div class="idx">
+        <div><div class="big">571</div><small>pages indexed</small></div>
+        <div style="flex:1">
+          <small>Every drawing &amp; spec on this project, searchable in seconds.</small>
+          <span class="grn">● Ready — last updated today</span>
+        </div>
+      </div>
+
+      <div class="pg-k">Architectural</div>
+      <div class="doc" onclick="openSheet('A-602','Internal Finishes Schedule','Sheet 47 of 85','finish')">
+        <div class="ic arc">A3</div>
+        <div class="dt"><b>95% Detail Design</b><small>85 sheets · floor plans, elevations, details</small></div>
+        <div class="arr">›</div>
+      </div>
+      <div class="doc" onclick="openSheet('P25-152','Detailed Design Set','Sheet 1 of 78','finish')">
+        <div class="ic arc">A1</div>
+        <div class="dt"><b>P25-152-FDS-08 — Detailed Design</b><small>78 sheets · A1</small></div>
+        <div class="arr">›</div>
+      </div>
+
+      <div class="pg-k" style="margin-top:16px">Services</div>
+      <div class="doc" onclick="openSheet('E-1.0','Electrical Layout','Sheet 1 of 17','finish')">
+        <div class="ic srv">ELEC</div>
+        <div class="dt"><b>8084-ELEC-ESET</b><small>17 sheets · power, lighting, data</small></div>
+        <div class="arr">›</div>
+      </div>
+      <div class="doc" onclick="openSheet('M-1.0','Mechanical Layout','Sheet 1 of 7','finish')">
+        <div class="ic srv">MECH</div>
+        <div class="dt"><b>8084-MECH-MSET</b><small>7 sheets · HVAC, ventilation</small></div>
+        <div class="arr">›</div>
+      </div>
+
+      <div class="pg-k" style="margin-top:16px">Specifications</div>
+      <div class="doc" onclick="openSheet('SPEC','Project Specification','Page 1 of 280','finish')">
+        <div class="ic spc">SPEC</div>
+        <div class="dt"><b>95% Project Spec</b><small>280 pages · materials, finishes, workmanship</small></div>
+        <div class="arr">›</div>
+      </div>
+      <div class="doc" onclick="openSheet('S-SPC','Structural Specification','Page 1 of 104','finish')">
+        <div class="ic spc">STR</div>
+        <div class="dt"><b>P25-152-SPC-01 — Structural Spec</b><small>104 pages</small></div>
+        <div class="arr">›</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ SHEET VIEW (overlay) ══════════ -->
+  <section class="screen" id="sheet">
+    <div class="sh-top">
+      <span class="bk" onclick="closeSheet()">‹</span>
+      <div class="ti"><b id="shCode">A-602</b><small id="shTitle">Internal Finishes Schedule</small></div>
+      <button class="icbtn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+    </div>
+    <div class="sh-canvas">
+      <div class="sheetpaper">
+        <div class="frame"></div>
+        <div class="hl" id="shHl" style="left:14%;top:30%;width:30%;height:16%"></div>
+        <div class="hltag" id="shHlTag" style="left:14%;top:24%">Unit 43 · finishes</div>
+        <div class="tb"><b id="shTb">A-602</b><span id="shTb2">Internal Finishes Schedule</span><br><span style="color:#9AA7B4">1 Arthur Rd · 95% Detail Design</span></div>
+      </div>
+    </div>
+    <div class="sh-ans">
+      <div class="src">📐 ANSWER FROM THIS SHEET</div>
+      <p id="shAns"><b>Unit 43</b> — living &amp; bedrooms: <b>Resene "Alabaster"</b> (half strength). Wet areas: <b>Resene "Black White"</b>, semi-gloss. Ceilings: <b>Resene "Half White Pointer"</b> throughout.</p>
+    </div>
+  </section>
+
+  <!-- ══════════ BOTTOM TABS ══════════ -->
+  <nav class="tabs" id="tabs" style="display:none">
+    <button class="tab act" id="t-chat" onclick="go('chat')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.8-.8L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5z"/></svg>
+      Chat
+    </button>
+    <button class="tab" id="t-calendar" onclick="go('calendar')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>
+      Calendar
+    </button>
+    <button class="tab" id="t-plans" onclick="go('plans')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 3 7.5 12 12l9-4.5L12 3z"/><path d="M3 12l9 4.5L21 12M3 16.5 12 21l9-4.5"/></svg>
+      Plans
+    </button>
+  </nav>
+
+  <!-- menu -->
+  <div class="scrim" id="scrim" onclick="closeMenu()"></div>
+  <div class="menu" id="menu">
+    <div class="grab"></div>
+    <div class="mrow"><span class="mi">🏗️</span> 1 Arthur Road <span class="proj-tag">Current</span></div>
+    <div class="mrow"><span class="mi">➕</span> Switch / add project</div>
+    <div class="mrow"><span class="mi">👥</span> Crew &amp; invite code</div>
+    <div class="mrow"><span class="mi">⬆️</span> Upload more plans</div>
+    <div class="mrow sep"><span class="mi">⚙️</span> Settings</div>
+    <div class="mrow"><span class="mi">↩️</span> <span onclick="logout()">Sign out</span></div>
+  </div>
+
+</div>
+
+<script>
+/* ───── screen routing ───── */
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));document.getElementById(id).classList.add('on');}
+let lastTab='chat';
+function enterApp(){document.getElementById('tabs').style.display='flex';go('chat');}
+function go(tab){lastTab=tab;show(tab);document.querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));document.getElementById('t-'+tab).classList.add('act');document.getElementById('tabs').style.display='flex';}
+function logout(){document.getElementById('tabs').style.display='none';closeMenu();show('login');}
+
+/* ───── sheet view ───── */
+function openSheet(code,title,page,kind){
+  document.getElementById('shCode').textContent=code;
+  document.getElementById('shTitle').innerHTML=title;
+  document.getElementById('shTb').textContent=code;
+  document.getElementById('shTb2').innerHTML=title;
+  show('sheet');
+}
+function closeSheet(){show(lastTab);}
+
+/* ───── menu ───── */
+function openMenu(){document.getElementById('scrim').classList.add('on');document.getElementById('menu').classList.add('on');}
+function closeMenu(){document.getElementById('scrim').classList.remove('on');document.getElementById('menu').classList.remove('on');}
+
+/* ───── chat demo ───── */
+function ask(chip){document.getElementById('msgIn').value=chip.textContent;sendMsg();}
+function sendMsg(){
+  const inp=document.getElementById('msgIn');const t=inp.value.trim();if(!t)return;
+  const feed=document.getElementById('feed');
+  feed.insertAdjacentHTML('beforeend','<div class="msg u"><div class="bub">'+esc(t)+'</div></div>');
+  inp.value='';feed.scrollTop=feed.scrollHeight;
+  setTimeout(()=>{
+    feed.insertAdjacentHTML('beforeend',
+      '<div class="msg a"><div class="bub"><div class="src">📐 FROM YOUR PLANS</div>'+
+      'Here\'s what the drawings say — with the exact sheet to check. <span style="color:var(--mut)">(Demo: wired to live plan-search in the real app.)</span>'+
+      '<div class="cite" onclick="openSheet(\'A-200\',\'Floor Plan — Level 1\',\'Sheet 21 of 85\',\'finish\')">'+
+      '<div class="cic">📐</div><div class="ct"><b>A-200 · Floor Plan — Level 1</b><small>95% Detail Design · Sheet 21 of 85</small></div><div class="ca">›</div></div>'+
+      '</div></div>');
+    feed.scrollTop=feed.scrollHeight;
+  },550);
+}
+function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+/* ───── calendar grid ───── */
+(function(){
+  const days=document.getElementById('calDays');
+  // June 2026 starts on a Monday(1). 30 days. Today = 9th.
+  let html='';
+  // trailing May (mon-start): June 1 2026 is a Monday → no leading blanks
+  const events={9:['bl'],10:['gr'],12:['bl','nv'],15:['am'],18:['gr'],23:['bl']};
+  for(let d=1;d<=30;d++){
+    const ev=events[d]?('<div class="dots">'+events[d].map(c=>'<span class="d '+c+'"></span>').join('')+'</div>'):'';
+    html+='<div class="cd'+(d===9?' today':'')+'">'+d+ev+'</div>';
+  }
+  // pad to fill last row (Jun 30 2026 = Tuesday → 5 trailing days)
+  for(let d=1;d<=5;d++)html+='<div class="cd mut">'+d+'</div>';
+  days.innerHTML=html;
+})();
+
+/* ───── onboarding flow ───── */
+let obStep=1,obMode='setup';
+const obBody=document.getElementById('obBody'),obFoot=document.getElementById('obFoot');
+function startOnboard(){obMode='setup';obStep=1;renderOb();show('onboard');}
+function startJoin(){obMode='join';renderJoin();show('onboard');}
+function obBack(){if(obMode==='join'||obStep===1){show('login');}else{obStep--;renderOb();}}
+function setDots(){[1,2,3].forEach(n=>document.getElementById('od'+n).classList.toggle('on',n<=obStep));}
+function renderJoin(){
+  document.querySelector('.ob-steps').style.visibility='hidden';
+  obBody.innerHTML=
+    '<div class="ob-k">Join your team</div>'+
+    '<div class="ob-h">Enter your invite code</div>'+
+    '<div class="ob-p">Your site manager shared a code or link. Pop it in and you\'re straight onto the project — no setup.</div>'+
+    '<div class="fld"><label>Invite code</label><input value="ARTH-7K42" style="letter-spacing:.18em;font-weight:600;text-transform:uppercase"></div>';
+  obFoot.innerHTML='<button class="bigbtn" onclick="enterApp()">Join 1 Arthur Road →</button>';
+}
+function renderOb(){
+  document.querySelector('.ob-steps').style.visibility='visible';
+  setDots();
+  if(obStep===1){
+    obBody.innerHTML=
+      '<div class="ob-k">Step 1 · Your project</div>'+
+      '<div class="ob-h">Set up your first project</div>'+
+      '<div class="ob-p">This is what your crew will ask questions about. You can add more projects later.</div>'+
+      '<div class="fld"><label>Company</label><input value="Arthur Road Construction"></div>'+
+      '<div class="fld"><label>Project name</label><input value="1 Arthur Road"></div>'+
+      '<div class="fld"><label>Type</label><input value="Multi-unit housing"></div>';
+    obFoot.innerHTML='<button class="bigbtn" onclick="obStep=2;renderOb()">Next — add the plans →</button>';
+  }else if(obStep===2){
+    obBody.innerHTML=
+      '<div class="ob-k">Step 2 · The plans</div>'+
+      '<div class="ob-h">Upload the drawings &amp; specs</div>'+
+      '<div class="ob-p">Drop in everything for this project — architectural, structural, services, specs. Soterra reads &amp; indexes the lot.</div>'+
+      '<div class="drop"><div class="ic">⬆️</div><b>Drop PDFs here</b><small>or tap to browse</small></div>'+
+      '<div class="uplist">'+
+        upitem('A3','95% Detail Design','85 sheets')+
+        upitem('A1','P25-152 Detailed Design','78 sheets')+
+        upitem('EL','8084-ELEC-ESET','17 sheets')+
+        upitem('ME','8084-MECH-MSET','7 sheets')+
+        upitem('SP','95% Project Spec','280 pages')+
+        upitem('ST','Structural Spec','104 pages')+
+      '</div>';
+    obFoot.innerHTML='<button class="bigbtn" onclick="obStep=3;renderOb()">Index 571 pages →</button>';
+  }else{
+    obBody.innerHTML=
+      '<div class="ob-k">Step 3 · Your crew</div>'+
+      '<div class="ob-h">You\'re ready. Bring the team on.</div>'+
+      '<div class="ob-p">Share this code with anyone on site. They sign up, enter the code, and they\'re asking the plans in seconds — no seats to manage.</div>'+
+      '<div class="code-box"><small>Project invite code</small><div class="code">ARTH-7K42</div><div class="cap">1 Arthur Road · the whole crew, one code</div></div>'+
+      '<button class="bigbtn ghost" style="margin-bottom:0">Copy invite link</button>';
+    obFoot.innerHTML='<button class="bigbtn" onclick="enterApp()">Enter Soterra →</button>';
+  }
+}
+function upitem(t,n,s){return '<div class="upitem"><div class="dot">'+t+'</div><div class="nm">'+n+'<small>'+s+'</small></div><div class="ok">✓</div></div>';}
+</script>
+</body>
+</html>
