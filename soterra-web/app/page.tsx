@@ -15,8 +15,9 @@ type AsstCard = {
   visibility: "team" | "private";
 };
 type Msg =
-  | { role: "u"; text: string }
+  | { role: "u"; text: string; att?: string }
   | { role: "a"; src?: string; text: string; raw?: string; cite?: Cite; cards?: AsstCard[]; pending?: boolean };
+type Attachment = { kind: "image" | "pdf"; mediaType: string; data: string; name: string };
 
 // ─── Calendar + Tasks ─── (ported/adapted from the Montázs naptar/teendők)
 const PROJECT_ID = "1-arthur-road";
@@ -177,6 +178,17 @@ export default function Page() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [threadsLoaded, setThreadsLoaded] = useState(false);
   const [railOpen, setRailOpen] = useState(false); // mobile drawer
+  const [railCollapsed, setRailCollapsed] = useState(false); // desktop collapse
+
+  // ─── voice + file attach (chat composer) ───
+  const [isRecording, setIsRecording] = useState(false);
+  const [sttSupported, setSttSupported] = useState(false);
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [attachBusy, setAttachBusy] = useState(false);
+  const [attachErr, setAttachErr] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ─── live Calendar + Tasks state ───
   const now = useMemo(() => new Date(), []);
@@ -427,19 +439,108 @@ export default function Page() {
     if (isSignedIn && !threadsLoaded) loadThreads();
   }, [isSignedIn, threadsLoaded]);
 
+  // Restore the desktop sidebar collapse preference.
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("soterra:rail-collapsed") === "true") setRailCollapsed(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Web Speech API setup (desktop browsers). Native STT (Capacitor) comes later.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    setSttSupported(true);
+    const rec = new SR();
+    rec.lang = "en-NZ";
+    rec.continuous = false;
+    rec.interimResults = false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      const transcript = e.results?.[0]?.[0]?.transcript ?? "";
+      if (transcript) setInput((prev) => (prev.trim() ? prev + " " : "") + transcript);
+    };
+    rec.onend = () => setIsRecording(false);
+    rec.onerror = () => setIsRecording(false);
+    recognitionRef.current = rec;
+  }, []);
+
+  const toggleRailCollapsed = () => {
+    setRailCollapsed((c) => {
+      const next = !c;
+      try {
+        window.localStorage.setItem("soterra:rail-collapsed", String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
+  const toggleRecording = () => {
+    const r = recognitionRef.current;
+    if (!r) return;
+    if (isRecording) {
+      try { r.stop(); } catch { /* ignore */ }
+      setIsRecording(false);
+      return;
+    }
+    setAttachErr(null);
+    try {
+      r.start();
+      setIsRecording(true);
+    } catch {
+      /* already started — ignore */
+    }
+  };
+
+  const clearAttachment = () => setAttachment(null);
+  const onFilePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!file) return;
+    setAttachErr(null);
+    setAttachBusy(true);
+    try {
+      const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+      if (isPdf) {
+        if (file.size > 3 * 1024 * 1024) throw new Error("PDF too big here (max 3 MB) — use the Upload tab for full plan sets.");
+        const data = await fileToBase64(file);
+        setAttachment({ kind: "pdf", mediaType: "application/pdf", data, name: file.name });
+      } else if (file.type.startsWith("image/")) {
+        const { mediaType, data } = await fileToResizedJpegBase64(file);
+        setAttachment({ kind: "image", mediaType, data, name: file.name });
+      } else {
+        throw new Error("Attach a photo or a PDF.");
+      }
+    } catch (err) {
+      setAttachErr(err instanceof Error ? err.message : "Couldn't attach that file.");
+    } finally {
+      setAttachBusy(false);
+    }
+  };
+
   const send = async (text?: string) => {
     const t = (text ?? input).trim();
-    if (!t || busy) return;
+    const att = attachment;
+    if ((!t && !att) || busy) return;
+    const question = t || "Take a look at this attachment and tell me what's relevant.";
     setInput("");
+    setAttachment(null);
+    setAttachErr(null);
     if (taRef.current) taRef.current.style.height = "auto";
     setBusy(true);
     setTab("assistant");
-    setMessages((m) => [...m, { role: "u", text: t }, { role: "a", text: "…", pending: true }]);
+    setMessages((m) => [...m, { role: "u", text: t, att: att?.name }, { role: "a", text: "…", pending: true }]);
     try {
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: t, threadId }),
+        body: JSON.stringify({ question, threadId, attachment: att }),
       });
       const data = await res.json();
       const ans = String(data.answer || data.error || "Sorry, something went wrong.");
@@ -586,9 +687,18 @@ export default function Page() {
   const firstName =
     user?.firstName || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || user?.username || "there";
   const initials = (firstName[0] || "S").toUpperCase();
+  // Collapse only applies on desktop; the mobile drawer (railOpen) always shows full.
+  const showCollapsed = railCollapsed && !railOpen;
 
   const cbox = (
     <div className="cbox">
+      {attachment && (
+        <div className="att-chip">
+          <span>{attachment.kind === "pdf" ? "📄" : "🖼️"}</span>
+          <span className="att-name">{attachment.name}</span>
+          <button className="att-x" onClick={clearAttachment} aria-label="Remove attachment">✕</button>
+        </div>
+      )}
       <textarea
         ref={taRef}
         rows={1}
@@ -601,13 +711,24 @@ export default function Page() {
         }}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
       />
+      <input ref={fileInputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={onFilePick} />
       <div className="crow">
-        <span className="hint">Enter to send · Shift+Enter for a new line</span>
+        <span className="hint">
+          {attachErr ? <span style={{ color: "var(--red)" }}>{attachErr}</span>
+            : isRecording ? "Listening… speak now"
+            : attachBusy ? "Attaching…"
+            : "Enter to send · Shift+Enter for a new line"}
+        </span>
         <div className="ract">
-          <button className="attach" title="Attach">
+          {sttSupported && (
+            <button className={"attach" + (isRecording ? " rec" : "")} title="Voice — dictate your message" onClick={toggleRecording}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+            </button>
+          )}
+          <button className="attach" title="Attach a photo or PDF" onClick={() => fileInputRef.current?.click()} disabled={attachBusy}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 18.6a1.7 1.7 0 0 1-2.3-2.3l7.8-7.8" /></svg>
           </button>
-          <button className="send" disabled={busy || !input.trim()} onClick={() => send()}>
+          <button className="send" disabled={busy || (!input.trim() && !attachment)} onClick={() => send()}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
           </button>
         </div>
@@ -646,24 +767,42 @@ export default function Page() {
         {tab === "assistant" && (
           <div className="asst-layout">
             {railOpen && <div className="rail-scrim" onClick={() => setRailOpen(false)} />}
-            <aside className={"chat-rail" + (railOpen ? " open" : "")}>
-              <button className="newchat" onClick={newChat}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                New chat
-              </button>
-              {threads.length > 0 && <div className="rail-k">Recent</div>}
-              <ul className="rail-list">
-                {threads.map((th) => (
-                  <li
-                    key={th.id}
-                    className={"rail-item" + (th.id === threadId ? " act" : "")}
-                    onClick={() => loadThread(th.id)}
-                    title={th.title || "Conversation"}
-                  >
-                    {th.title || "Conversation"}
-                  </li>
-                ))}
-              </ul>
+            <aside className={"chat-rail" + (railOpen ? " open" : "") + (showCollapsed ? " collapsed" : "")}>
+              {showCollapsed ? (
+                <>
+                  <button className="rail-icon" onClick={toggleRailCollapsed} title="Expand conversations" aria-label="Expand conversations">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                  </button>
+                  <button className="rail-icon" onClick={newChat} title="New chat" aria-label="New chat">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="rail-head">
+                    <button className="newchat" onClick={newChat}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                      New chat
+                    </button>
+                    <button className="rail-collapse" onClick={toggleRailCollapsed} title="Collapse" aria-label="Collapse conversations">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+                    </button>
+                  </div>
+                  {threads.length > 0 && <div className="rail-k">Recent</div>}
+                  <ul className="rail-list">
+                    {threads.map((th) => (
+                      <li
+                        key={th.id}
+                        className={"rail-item" + (th.id === threadId ? " act" : "")}
+                        onClick={() => loadThread(th.id)}
+                        title={th.title || "Conversation"}
+                      >
+                        {th.title || "Conversation"}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </aside>
             <button className="chat-fab" onClick={() => setRailOpen(true)} aria-label="Past conversations">☰ Chats</button>
           <div className="assistant">
@@ -681,7 +820,7 @@ export default function Page() {
                     <div className="thread">
                       {messages.map((m, i) =>
                         m.role === "u" ? (
-                          <div className="msg u" key={i}><div className="bub">{m.text}</div></div>
+                          <div className="msg u" key={i}><div className="bub">{m.att && <span className="bub-att">📎 {m.att}</span>}{m.text}</div></div>
                         ) : (
                           <div className="msg a" key={i}>
                             <div className="bub">
@@ -1030,6 +1169,39 @@ function fmt(str: string): string {
     .replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] as string))
     .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
     .replace(/\n+/g, "<br/>");
+}
+// Read a file to a base64 string (no data: prefix).
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] || "");
+    r.onerror = () => reject(new Error("Couldn't read the file."));
+    r.readAsDataURL(file);
+  });
+}
+// Downscale an image to <=1568px (Claude's sweet spot) and return JPEG base64,
+// keeping the request well under the serverless body limit. Canvas-only, no deps.
+function fileToResizedJpegBase64(file: File): Promise<{ mediaType: string; data: string }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      const max = 1568;
+      const m = Math.max(width, height);
+      if (m > max) { const s = max / m; width = Math.round(width * s); height = Math.round(height * s); }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { reject(new Error("Image processing unavailable.")); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve({ mediaType: "image/jpeg", data: canvas.toDataURL("image/jpeg", 0.85).split(",")[1] || "" });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That image couldn't be read.")); };
+    img.src = url;
+  });
 }
 // Turn a stored/streamed assistant reply into a renderable message: pull a
 // trailing "Source: …" line into a citation card, format the rest. Shared by

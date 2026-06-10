@@ -63,6 +63,13 @@ button,input,textarea{font-family:var(--font)}
 .rail-item{font-size:13.5px;color:var(--slate);padding:9px 11px;border-radius:9px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rail-item:hover{background:rgba(14,143,230,.06);color:var(--navy)}
 .rail-item.act{background:rgba(65,195,255,.14);color:var(--brand-d);font-weight:600}
+.rail-head{display:flex;align-items:center;gap:8px}
+.rail-head .newchat{flex:1}
+.rail-collapse{width:36px;height:38px;flex-shrink:0;border:1px solid var(--line);background:#fff;border-radius:10px;color:var(--slate);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.rail-collapse:hover{border-color:rgba(14,143,230,.4);color:var(--brand-d)}
+.chat-rail.collapsed{width:56px;padding:14px 8px;align-items:center;gap:8px}
+.rail-icon{width:38px;height:38px;border:1px solid var(--line);background:#fff;border-radius:10px;color:var(--slate);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rail-icon:hover{border-color:rgba(14,143,230,.4);color:var(--brand-d)}
 .chat-fab{display:none}
 @media(max-width:859px){
   .chat-rail{position:absolute;top:0;bottom:0;left:0;z-index:30;transform:translateX(-100%);transition:transform .2s;background:#fff;box-shadow:0 10px 40px rgba(12,42,71,.18)}
@@ -114,6 +121,14 @@ button,input,textarea{font-family:var(--font)}
 .crow .ract{display:flex;align-items:center;gap:9px}
 .attach{width:38px;height:38px;border-radius:11px;border:1px solid var(--line);background:#fff;color:var(--slate);cursor:pointer;display:flex;align-items:center;justify-content:center}
 .attach:hover{background:var(--bg);color:var(--brand)}
+.attach:disabled{opacity:.5;cursor:default}
+.attach.rec{background:var(--red);border-color:var(--red);color:#fff;animation:recpulse 1.4s infinite}
+@keyframes recpulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 7px rgba(239,68,68,0)}}
+.att-chip{display:inline-flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin-bottom:10px;font-size:12.5px;color:var(--navy);max-width:100%}
+.att-chip .att-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px;font-weight:500}
+.att-chip .att-x{border:none;background:none;color:var(--mut);cursor:pointer;font-size:13px;line-height:1;padding:0 2px}
+.att-chip .att-x:hover{color:var(--red)}
+.bub-att{display:block;font-size:12px;opacity:.92;margin-bottom:5px;font-weight:600}
 .send{width:40px;height:40px;border-radius:12px;background:var(--grad);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(10,141,237,.32)}
 .send:hover{filter:brightness(1.05)}
 .send:disabled{background:#C9D6E6;box-shadow:none;cursor:default}

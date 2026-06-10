@@ -623,6 +623,8 @@ const STATIC_PROMPT = `You are Soterra's site assistant for the construction pro
 1) PLAN-READER — answer questions about the project's drawings & specifications. For ANY such question (materials, dimensions, fire ratings, schedules, finishes, "what does the spec say…") you MUST call search_plans, then answer ONLY from the page text it returns, finishing with a line: "Source: <the exact page label>". Never invent codes, ratings, products or numbers. If the answer isn't in the pages, say what's missing and which drawing set might have it.
 2) CALENDAR & TASKS — create, find, change and delete events and to-dos using the tools.
 
+If the user attaches a photo or PDF, read it and answer about it — and if it relates to the project's drawings or specs, you can still call search_plans to cross-check details.
+
 Talk like a sharp, helpful site engineer: warm, concise (1–4 sentences), plain English. State resolved dates explicitly ("Tuesday 16 June"), not just "Tuesday".
 
 SAVE-FIRST: when the user wants to book an event (you have a title + date) or add a task (you have a title), call the create tool RIGHT AWAY. Do not ask about optional fields (time, location, type, visibility) before saving — save first, then you may offer to add detail.
@@ -645,10 +647,18 @@ export async function POST(req: Request) {
 
   let question = "";
   let reqThreadId: string | null = null;
+  let attachment: { kind: "image" | "pdf"; mediaType: string; data: string } | null = null;
   try {
     const body = await req.json();
     question = String(body.question ?? "").trim();
     if (typeof body.threadId === "string" && body.threadId) reqThreadId = body.threadId;
+    if (body.attachment && typeof body.attachment === "object") {
+      const a = body.attachment as Record<string, unknown>;
+      const kind = a.kind === "pdf" ? "pdf" : a.kind === "image" ? "image" : null;
+      const data = typeof a.data === "string" ? a.data : "";
+      const mediaType = typeof a.mediaType === "string" ? a.mediaType : "";
+      if (kind && data && mediaType) attachment = { kind, mediaType, data };
+    }
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -694,6 +704,16 @@ export async function POST(req: Request) {
     role: m.role === "assistant" ? "assistant" : "user",
     content: m.content,
   }));
+
+  // Attach the photo/PDF to the current (last) user turn so Claude can read it.
+  // The attachment itself isn't persisted — it's a one-shot for this question.
+  if (attachment && messages.length) {
+    const block =
+      attachment.kind === "pdf"
+        ? { type: "document", source: { type: "base64", media_type: attachment.mediaType, data: attachment.data } }
+        : { type: "image", source: { type: "base64", media_type: attachment.mediaType, data: attachment.data } };
+    messages[messages.length - 1].content = [{ type: "text", text: question }, block];
+  }
 
   const allCards: Card[] = [];
   const anthropic = new Anthropic({ maxRetries: 3 });
