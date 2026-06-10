@@ -5,12 +5,14 @@ import { useUser, useClerk } from "@clerk/nextjs";
 type Tab = "assistant" | "calendar" | "tasks" | "plans" | "upload";
 type Cite = { code: string; title: string; sub: string; ans: string; hlTag: string };
 type AsstCard = {
+  id: string;
   itemType: "event" | "task";
   action: "created" | "updated" | "deleted";
   title: string;
   when: string;
   sub: string;
   kind: string | null;
+  visibility: "team" | "private";
 };
 type Msg =
   | { role: "u"; text: string }
@@ -139,15 +141,6 @@ function buildMonthGrid(year: number, month: number): Date[] {
   return days.slice(0, weeksNeeded * 7);
 }
 
-// Example prompts — a mix of plan questions and calendar bookings so the crew
-// discovers both halves of the assistant.
-const CHIPS = [
-  "What's the fire rating on the exterior doors?",
-  "Book a GIB delivery for next Tuesday 1pm",
-  "What's on this week?",
-  "Add a task to call the engineer tomorrow",
-];
-
 const DEMO_SHEET: Cite = {
   code: "A-602",
   title: "Internal Finishes Schedule",
@@ -233,6 +226,40 @@ export default function Page() {
       if (!res.ok) throw new Error();
     } catch {
       setTasks((ts) => ts.map((x) => (x.id === t.id ? { ...x, done: !next } : x))); // revert
+    }
+  };
+
+  // Flip a confirmation card's visibility (the "who sees this" tick-box) — one
+  // click to correct the assistant when it guessed team-vs-just-me wrong, no
+  // retyping. Optimistic; reverts on failure; refreshes the calendar/tasks.
+  const flipCardVisibility = async (msgIdx: number, cardIdx: number) => {
+    const msg = messages[msgIdx];
+    if (msg.role !== "a" || !msg.cards) return;
+    const card = msg.cards[cardIdx];
+    if (!card || card.action === "deleted") return;
+    const prev = card.visibility;
+    const next = prev === "team" ? "private" : "team";
+    const setVis = (v: "team" | "private") =>
+      setMessages((ms) =>
+        ms.map((m, i) =>
+          i === msgIdx && m.role === "a" && m.cards
+            ? { ...m, cards: m.cards.map((c, j) => (j === cardIdx ? { ...c, visibility: v } : c)) }
+            : m
+        )
+      );
+    setVis(next); // optimistic
+    try {
+      const url = card.itemType === "event" ? "/api/events" : "/api/tasks";
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: card.id, visibility: next }),
+      });
+      if (!res.ok) throw new Error();
+      loadEvents();
+      loadTasks();
+    } catch {
+      setVis(prev); // revert
     }
   };
 
@@ -582,11 +609,6 @@ export default function Page() {
                 <img className="hero-logo" src="/logo-mark.png" alt="Soterra" />
                 <h1>Hi <b className="grad">{firstName}</b>, how can I help?</h1>
                 <div className="hero-composer">{cbox}</div>
-                <div className="chips">
-                  {CHIPS.map((c) => (
-                    <button key={c} className="chip" onClick={() => send(c)}>{c}</button>
-                  ))}
-                </div>
               </div>
             ) : (
               <>
@@ -619,6 +641,15 @@ export default function Page() {
                                     <b>{c.action === "deleted" ? "Removed: " : ""}{c.title}</b>
                                     <small>{c.when}{c.sub ? ` · ${c.sub}` : ""}</small>
                                   </div>
+                                  {c.action !== "deleted" && (
+                                    <button
+                                      className={"vis-toggle " + (c.visibility === "team" ? "team" : "me")}
+                                      onClick={() => flipCardVisibility(i, j)}
+                                      title="Tap to change who can see this"
+                                    >
+                                      {c.visibility === "team" ? "👁 Whole crew" : "🔒 Just me"}
+                                    </button>
+                                  )}
                                   <div className="ec">{c.itemType === "task" ? "✅" : "🗓️"}</div>
                                 </div>
                               ))}
@@ -646,13 +677,13 @@ export default function Page() {
                 <button className={calView === "month" ? "on" : ""} onClick={() => setCalView("month")}>Month</button>
                 <button className={calView === "agenda" ? "on" : ""} onClick={() => setCalView("agenda")}>Agenda</button>
               </div>
-              <div className="cal-nav">
+              <div className="cal-controls">
                 {calView === "month" && (
-                  <>
-                    <b className="cal-monthlbl">{NZ_MONTHS[calMonth]} {calYear}</b>
+                  <div className="cal-monthnav">
                     <button onClick={() => gotoMonth(-1)} aria-label="Previous month">‹</button>
+                    <b>{NZ_MONTHS[calMonth]} {calYear}</b>
                     <button onClick={() => gotoMonth(1)} aria-label="Next month">›</button>
-                  </>
+                  </div>
                 )}
                 <button className="cal-today" onClick={gotoToday}>Today</button>
                 <button className="cal-new" onClick={() => openEventForm()}>＋ New event</button>

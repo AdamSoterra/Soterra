@@ -91,12 +91,14 @@ function pageLabel(p: Page): string {
 // ── Card = a compact confirmation the client renders under the reply when the
 //    assistant changes the calendar/tasks (so the user sees what landed). ──
 type Card = {
+  id: string;
   itemType: "event" | "task";
   action: "created" | "updated" | "deleted";
   title: string;
   when: string;
   sub: string;
   kind: string | null;
+  visibility: "team" | "private";
 };
 
 const dayFmt = new Intl.DateTimeFormat("en-NZ", { timeZone: PROJECT_TZ, weekday: "short", day: "numeric", month: "short" });
@@ -329,7 +331,10 @@ function eventInsertFromInput(input: Record<string, unknown>, userId: string, cr
     allDay: !time,
     location: s(input.location),
     kind: validKind(input.kind),
-    visibility: visRaw === "private" ? "private" : "team",
+    // Default to private — never auto-broadcast to the whole crew unless the
+    // user clearly asked (the assistant passes 'team' explicitly when it sees a
+    // crew/team/everyone cue). The user can flip to crew with one tap.
+    visibility: visRaw === "team" ? "team" : "private",
   };
 }
 function taskInsertFromInput(input: Record<string, unknown>, userId: string, creatorName: string | null) {
@@ -380,8 +385,8 @@ async function executeTool(
         const vals = eventInsertFromInput(input, userId, creatorName);
         const [row] = await db.insert(events).values(vals).returning();
         return {
-          content: JSON.stringify({ ok: true, id: row.id, created: "event", title: row.title }),
-          cards: [{ itemType: "event", action: "created", title: row.title, when: eventWhen(row.startsAt, row.endsAt, row.allDay), sub: [row.kind ? cap(row.kind) : null, visLabel(row.visibility), row.location].filter(Boolean).join(" · "), kind: row.kind }],
+          content: JSON.stringify({ ok: true, id: row.id, created: "event", title: row.title, visibility: row.visibility }),
+          cards: [card("event", "created", row)],
         };
       }
 
@@ -389,8 +394,8 @@ async function executeTool(
         const vals = taskInsertFromInput(input, userId, creatorName);
         const [row] = await db.insert(tasks).values(vals).returning();
         return {
-          content: JSON.stringify({ ok: true, id: row.id, created: "task", title: row.title }),
-          cards: [{ itemType: "task", action: "created", title: row.title, when: taskWhen(row.dueAt, row.endsAt), sub: visLabel(row.visibility), kind: null }],
+          content: JSON.stringify({ ok: true, id: row.id, created: "task", title: row.title, visibility: row.visibility }),
+          cards: [card("task", "created", row)],
         };
       }
 
@@ -401,7 +406,7 @@ async function executeTool(
         const inserted = await db.insert(events).values(rows).returning();
         return {
           content: JSON.stringify({ ok: true, created: "events", count: inserted.length, ids: inserted.map((e) => e.id) }),
-          cards: inserted.map((r) => ({ itemType: "event" as const, action: "created" as const, title: r.title, when: eventWhen(r.startsAt, r.endsAt, r.allDay), sub: [r.kind ? cap(r.kind) : null, visLabel(r.visibility), r.location].filter(Boolean).join(" · "), kind: r.kind })),
+          cards: inserted.map((r) => card("event", "created", r)),
         };
       }
 
@@ -412,7 +417,7 @@ async function executeTool(
         const inserted = await db.insert(tasks).values(rows).returning();
         return {
           content: JSON.stringify({ ok: true, created: "tasks", count: inserted.length, ids: inserted.map((t) => t.id) }),
-          cards: inserted.map((r) => ({ itemType: "task" as const, action: "created" as const, title: r.title, when: taskWhen(r.dueAt, r.endsAt), sub: visLabel(r.visibility), kind: null })),
+          cards: inserted.map((r) => card("task", "created", r)),
         };
       }
 
@@ -482,7 +487,7 @@ async function executeTool(
         const [row] = await db.select().from(events).where(eq(events.id, id)).limit(1);
         return {
           content: JSON.stringify({ ok: true, message: "Event updated." }),
-          cards: [{ itemType: "event", action: "updated", title: row.title, when: eventWhen(row.startsAt, row.endsAt, row.allDay), sub: [row.kind ? cap(row.kind) : null, visLabel(row.visibility), row.location].filter(Boolean).join(" · "), kind: row.kind }],
+          cards: [card("event", "updated", row)],
         };
       }
 
@@ -519,7 +524,7 @@ async function executeTool(
         const [row] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
         return {
           content: JSON.stringify({ ok: true, message: "Task updated." }),
-          cards: [{ itemType: "task", action: "updated", title: row.title, when: taskWhen(row.dueAt, row.endsAt), sub: [row.done ? "done" : null, visLabel(row.visibility)].filter(Boolean).join(" · "), kind: null }],
+          cards: [card("task", "updated", row)],
         };
       }
 
@@ -531,7 +536,7 @@ async function executeTool(
           return { content: JSON.stringify({ ok: false, error: "not found" }), cards: [] };
         }
         await db.delete(events).where(eq(events.id, id));
-        return { content: JSON.stringify({ ok: true, message: "Event deleted." }), cards: [{ itemType: "event", action: "deleted", title: existing.title, when: eventWhen(existing.startsAt, existing.endsAt, existing.allDay), sub: "removed", kind: existing.kind }] };
+        return { content: JSON.stringify({ ok: true, message: "Event deleted." }), cards: [card("event", "deleted", existing)] };
       }
 
       case "delete_task": {
@@ -542,7 +547,7 @@ async function executeTool(
           return { content: JSON.stringify({ ok: false, error: "not found" }), cards: [] };
         }
         await db.delete(tasks).where(eq(tasks.id, id));
-        return { content: JSON.stringify({ ok: true, message: "Task deleted." }), cards: [{ itemType: "task", action: "deleted", title: existing.title, when: taskWhen(existing.dueAt, existing.endsAt), sub: "removed", kind: null }] };
+        return { content: JSON.stringify({ ok: true, message: "Task deleted." }), cards: [card("task", "deleted", existing)] };
       }
 
       default:
@@ -555,6 +560,34 @@ async function executeTool(
 
 function cap(x: string): string {
   return x.charAt(0).toUpperCase() + x.slice(1);
+}
+
+// Build a confirmation Card (with id + visibility for the client's tick-box)
+// from a freshly read DB row.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function card(itemType: "event" | "task", action: Card["action"], row: any): Card {
+  if (itemType === "event") {
+    return {
+      id: row.id,
+      itemType,
+      action,
+      title: row.title,
+      when: eventWhen(row.startsAt, row.endsAt, row.allDay),
+      sub: [row.kind ? cap(row.kind) : null, row.location].filter(Boolean).join(" · "),
+      kind: row.kind ?? null,
+      visibility: row.visibility,
+    };
+  }
+  return {
+    id: row.id,
+    itemType,
+    action,
+    title: row.title,
+    when: taskWhen(row.dueAt, row.endsAt),
+    sub: row.done ? "done" : "",
+    kind: null,
+    visibility: row.visibility,
+  };
 }
 
 // Build the dynamic context block: today + the project's upcoming events and
@@ -594,7 +627,11 @@ Talk like a sharp, helpful site engineer: warm, concise (1–4 sentences), plain
 
 SAVE-FIRST: when the user wants to book an event (you have a title + date) or add a task (you have a title), call the create tool RIGHT AWAY. Do not ask about optional fields (time, location, type, visibility) before saving — save first, then you may offer to add detail.
 
-VISIBILITY: site events (inspections, deliveries, pours, meetings) default to the whole crew (visibility 'team'). A personal to-do defaults to 'private' (just the creator). If it's genuinely unclear whether something is for the whole team or just the user, you may ask — but default sensibly rather than stalling.
+VISIBILITY — read the wording, do NOT assume from the event type:
+- Always set the visibility field when creating an event or task.
+- "my calendar", "for me", "I have", "remind me", "just me", "mine", "book me" → 'private' (just the creator) — even for an inspection or delivery.
+- "the crew", "the team", "everyone", "all of us", "the lads", "site-wide", "put it on the team calendar", "tell everyone" → 'team' (whole crew).
+- If NEITHER is signalled, default to 'private'. NEVER put something on the whole crew's calendar unless the user clearly asked. Don't ask about it — save it private and move on; the user can share it to the crew with one tap on the card.
 
 TYPE is optional: set kind only when the type is obvious (a "GIB delivery" → delivery, "pre-line inspection" → inspection, "site meeting" → meeting, "slab pour" → pour). Leave it unset otherwise.
 

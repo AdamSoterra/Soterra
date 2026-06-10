@@ -125,6 +125,21 @@ export async function PATCH(req: Request) {
     return Response.json({ error: "Task not found" }, { status: 404 });
   }
 
+  // Visibility change (the card tick-box) is creator-only — only the person who
+  // made the task can share it to the crew or pull it back to private.
+  if (body.visibility === "team" || body.visibility === "private") {
+    if (existing.creatorId !== userId) {
+      return Response.json({ error: "Task not found" }, { status: 404 });
+    }
+    const [row] = await db
+      .update(tasks)
+      .set({ visibility: body.visibility })
+      .where(eq(tasks.id, id))
+      .returning();
+    return Response.json({ task: serialize(row) });
+  }
+
+  // Otherwise it's a done-toggle (allowed for a team task or your own).
   // Explicit done if provided, otherwise flip.
   const done = typeof body.done === "boolean" ? body.done : !existing.done;
 

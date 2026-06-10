@@ -33,19 +33,7 @@ export async function GET() {
     )
     .orderBy(asc(events.startsAt));
 
-  return Response.json({
-    events: rows.map((e) => ({
-      id: e.id,
-      title: e.title,
-      startsAt: e.startsAt.toISOString(),
-      endsAt: e.endsAt ? e.endsAt.toISOString() : null,
-      allDay: e.allDay,
-      location: e.location,
-      kind: e.kind,
-      visibility: e.visibility,
-      creatorName: e.creatorName,
-    })),
-  });
+  return Response.json({ events: rows.map(serialize) });
 }
 
 // ─── POST /api/events ───
@@ -105,20 +93,52 @@ export async function POST(req: Request) {
     })
     .returning();
 
-  return Response.json(
-    {
-      event: {
-        id: row.id,
-        title: row.title,
-        startsAt: row.startsAt.toISOString(),
-        endsAt: row.endsAt ? row.endsAt.toISOString() : null,
-        allDay: row.allDay,
-        location: row.location,
-        kind: row.kind,
-        visibility: row.visibility,
-        creatorName: row.creatorName,
-      },
-    },
-    { status: 201 }
-  );
+  return Response.json({ event: serialize(row) }, { status: 201 });
+}
+
+function serialize(e: typeof events.$inferSelect) {
+  return {
+    id: e.id,
+    title: e.title,
+    startsAt: e.startsAt.toISOString(),
+    endsAt: e.endsAt ? e.endsAt.toISOString() : null,
+    allDay: e.allDay,
+    location: e.location,
+    kind: e.kind,
+    visibility: e.visibility,
+    creatorName: e.creatorName,
+  };
+}
+
+// ─── PATCH /api/events ───
+// Change an event's visibility (the "who can see this" tick-box). Restricted to
+// the creator — only the person who made it can share it to the crew or pull it
+// back to private. Body: { id, visibility: "team" | "private" }.
+export async function PATCH(req: Request) {
+  const { userId } = await auth();
+  if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const id = String(body.id ?? "");
+  if (!id) return Response.json({ error: "Event id is required" }, { status: 400 });
+  const visibility = body.visibility === "team" ? "team" : body.visibility === "private" ? "private" : null;
+  if (!visibility) return Response.json({ error: "Nothing to update" }, { status: 400 });
+
+  const [existing] = await db
+    .select()
+    .from(events)
+    .where(and(eq(events.id, id), eq(events.projectId, PROJECT_ID)))
+    .limit(1);
+  if (!existing || existing.creatorId !== userId) {
+    return Response.json({ error: "Event not found" }, { status: 404 });
+  }
+
+  const [row] = await db.update(events).set({ visibility }).where(eq(events.id, id)).returning();
+  return Response.json({ event: serialize(row) });
 }

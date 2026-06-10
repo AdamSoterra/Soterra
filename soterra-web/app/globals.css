@@ -110,10 +110,7 @@ button,input,textarea{font-family:var(--font)}
 .page-sub{font-size:13.5px;color:var(--slate);margin-bottom:26px}
 
 /* calendar */
-.cal-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
-.cal-top b{font-size:17px;font-weight:600;color:var(--navy)}
-.cal-nav{display:flex;gap:7px}
-.cal-nav button{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--slate);font-size:15px}
+.cal-top{display:flex;align-items:center;justify-content:space-between;gap:12px 16px;flex-wrap:wrap;margin-bottom:16px}
 .cal-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:24px;box-shadow:0 6px 26px rgba(12,42,71,.05)}
 .cal-dow{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;font-weight:600;color:var(--mut);padding:2px 0 10px}
 .cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
@@ -134,16 +131,24 @@ button,input,textarea{font-family:var(--font)}
 .ev .body{flex:1;min-width:0}.ev .body b{font-size:14px;color:var(--navy);display:block}.ev .body small{font-size:12.5px;color:var(--slate)}
 .ev .tag{font-size:10.5px;font-weight:600;padding:4px 11px;border-radius:8px;white-space:nowrap}
 
-/* calendar header controls: Month/Agenda toggle + Today/New */
+/* calendar header controls: Month/Agenda toggle + month nav + Today/New */
 .seg{display:inline-flex;background:#fff;border:1px solid var(--line);border-radius:11px;padding:3px;box-shadow:0 1px 2px rgba(12,42,71,.04)}
 .seg button{font-size:13px;font-weight:600;color:var(--slate);background:none;border:none;cursor:pointer;padding:7px 16px;border-radius:8px;font-family:var(--font)}
 .seg button.on{background:rgba(65,195,255,.16);color:var(--brand-d)}
-.cal-nav{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
-.cal-monthlbl{font-size:15px;font-weight:600;color:var(--navy);margin-right:4px}
-.cal-today,.cal-new{height:34px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--slate);font-size:13px;font-weight:600;padding:0 14px;font-family:var(--font)}
+.cal-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cal-monthnav{display:flex;align-items:center;gap:2px}
+.cal-monthnav b{font-size:15px;font-weight:600;color:var(--navy);min-width:124px;text-align:center}
+.cal-monthnav button{width:32px;height:34px;border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--slate);font-size:16px;line-height:1}
+.cal-monthnav button:hover{border-color:rgba(14,143,230,.4);color:var(--brand-d)}
+.cal-today,.cal-new{height:34px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--slate);font-size:13px;font-weight:600;padding:0 14px;font-family:var(--font);white-space:nowrap;flex-shrink:0}
 .cal-today:hover{border-color:rgba(14,143,230,.4);color:var(--brand-d)}
 .cal-new{background:var(--grad);color:#fff;border:none;box-shadow:0 6px 16px rgba(10,141,237,.28)}
 .cal-new:hover{filter:brightness(1.05)}
+/* visibility tick-box on assistant confirmation cards */
+.vis-toggle{font-size:10.5px;font-weight:600;padding:6px 11px;border-radius:8px;border:1px solid transparent;cursor:pointer;white-space:nowrap;font-family:var(--font);flex-shrink:0}
+.vis-toggle.team{background:rgba(14,143,230,.1);color:var(--brand-d)}
+.vis-toggle.me{background:rgba(146,166,190,.16);color:var(--slate)}
+.vis-toggle:hover{border-color:rgba(14,143,230,.4)}
 
 /* agenda / Napirend */
 .agenda{display:flex;flex-direction:column;gap:18px}
