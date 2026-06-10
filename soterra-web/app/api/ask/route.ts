@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { and, asc, eq, gte, ilike, lt, or } from "drizzle-orm";
+import { and, asc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { events, tasks, chatThreads, chatMessages } from "@/lib/schema";
 import {
@@ -294,6 +294,80 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
       required: ["tasks"],
     },
   },
+  {
+    name: "update_events_bulk",
+    description:
+      "Change several events in ONE call. Call find_items FIRST to get the ids. Use for 'move all the H&S meetings to 2pm', 'push next week's inspections back a day'. Each item is an id plus only the fields you're changing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        updates: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              title: { type: "string" },
+              date: { type: "string" },
+              time: { type: "string" },
+              end_date: { type: "string" },
+              end_time: { type: "string" },
+              kind: { type: "string", enum: [...KINDS] },
+              location: { type: "string" },
+              visibility: { type: "string", enum: ["team", "private"] },
+            },
+            required: ["id"],
+          },
+        },
+      },
+      required: ["updates"],
+    },
+  },
+  {
+    name: "update_tasks_bulk",
+    description: "Change several tasks in ONE call. Call find_items first for the ids. Use for 'tick off all of these', 'move all these deadlines to Friday'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        updates: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              title: { type: "string" },
+              due_date: { type: "string" },
+              due_time: { type: "string" },
+              end_date: { type: "string" },
+              end_time: { type: "string" },
+              visibility: { type: "string", enum: ["team", "private"] },
+              status: { type: "string", enum: ["open", "done"] },
+            },
+            required: ["id"],
+          },
+        },
+      },
+      required: ["updates"],
+    },
+  },
+  {
+    name: "delete_events_bulk",
+    description: "Delete several events in ONE call. Call find_items first for the ids. Use for 'cancel all the H&S meetings', 'clear next week'. Only on a clear request.",
+    input_schema: {
+      type: "object",
+      properties: { ids: { type: "array", items: { type: "string" } } },
+      required: ["ids"],
+    },
+  },
+  {
+    name: "delete_tasks_bulk",
+    description: "Delete several tasks in ONE call. Call find_items first for the ids.",
+    input_schema: {
+      type: "object",
+      properties: { ids: { type: "array", items: { type: "string" } } },
+      required: ["ids"],
+    },
+  },
 ];
 
 const s = (v: unknown): string | null => {
@@ -353,6 +427,61 @@ function taskInsertFromInput(input: Record<string, unknown>, userId: string, cre
     endsAt,
     visibility: visRaw === "team" ? "team" : "private",
   };
+}
+
+// Partial-update field computation, shared by the single + bulk update tools so
+// "move this" and "move all of these" behave identically.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function computeEventUpdateFields(existing: typeof events.$inferSelect, input: Record<string, unknown>): Record<string, any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fields: Record<string, any> = {};
+  if (input.title !== undefined) fields.title = s(input.title) ?? existing.title;
+  if (input.location !== undefined) fields.location = s(input.location);
+  if (input.kind !== undefined) fields.kind = validKind(input.kind);
+  if (input.visibility !== undefined) fields.visibility = input.visibility === "private" ? "private" : "team";
+  const dateChanged = input.date !== undefined;
+  const timeChanged = input.time !== undefined;
+  const endChanged = input.end_date !== undefined || input.end_time !== undefined;
+  if (dateChanged || timeChanged || endChanged) {
+    const cur = eventParts(existing);
+    const newDate = dateChanged ? s(input.date) ?? cur.date : cur.date;
+    const newTime = timeChanged ? s(input.time) : cur.time;
+    if (dateChanged || timeChanged) {
+      fields.startsAt = zonedWallClockToUtc(newDate, newTime);
+      fields.allDay = !newTime;
+    }
+    const newEndDate = input.end_date !== undefined ? s(input.end_date) : cur.endDate;
+    const newEndTime = input.end_time !== undefined ? s(input.end_time) : cur.endTime;
+    fields.endsAt = resolveEndsAt(newDate, newTime, newEndDate, newEndTime);
+  }
+  return fields;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function computeTaskUpdateFields(existing: typeof tasks.$inferSelect, input: Record<string, unknown>): Record<string, any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fields: Record<string, any> = {};
+  if (input.title !== undefined) fields.title = s(input.title) ?? existing.title;
+  if (input.visibility !== undefined) fields.visibility = input.visibility === "team" ? "team" : "private";
+  if (input.status === "done") fields.done = true;
+  if (input.status === "open") fields.done = false;
+  const dateChanged = input.due_date !== undefined;
+  const timeChanged = input.due_time !== undefined;
+  const endChanged = input.end_date !== undefined || input.end_time !== undefined;
+  if (dateChanged || timeChanged || endChanged) {
+    const curDate = existing.dueAt ? ymdFmt.format(existing.dueAt) : null;
+    const curTimeRaw = existing.dueAt ? hm24.format(existing.dueAt) : null;
+    const curTime = curTimeRaw === "00:00" ? null : curTimeRaw;
+    const curEndDate = existing.endsAt ? ymdFmt.format(existing.endsAt) : null;
+    const curEndTime = existing.endsAt ? hm24.format(existing.endsAt) : null;
+    const newDate = dateChanged ? s(input.due_date) : curDate;
+    const newTime = timeChanged ? s(input.due_time) : curTime;
+    if (dateChanged || timeChanged) fields.dueAt = newDate ? zonedWallClockToUtc(newDate, newTime) : null;
+    const newEndDate = input.end_date !== undefined ? s(input.end_date) : curEndDate;
+    const newEndTime = input.end_time !== undefined ? s(input.end_time) : curEndTime;
+    fields.endsAt = newDate ? resolveEndsAt(newDate, newTime, newEndDate, newEndTime) : null;
+  }
+  return fields;
 }
 
 // Execute one tool. Returns the JSON string the model sees + any client cards.
@@ -430,26 +559,40 @@ async function executeTool(
         }
         const dayStart = date ? zonedWallClockToUtc(date, "00:00") : null;
         const dayEnd = date ? zonedWallClockToUtc(addOneDay(dateTo || date), "00:00") : null;
-        const [foundEvents, foundTasks] = await Promise.all([
-          db.select().from(events).where(and(
-            eq(events.projectId, PROJECT_ID),
-            evVisible,
-            query ? ilike(events.title, `%${query}%`) : undefined,
-            dayStart ? gte(events.startsAt, dayStart) : undefined,
-            dayEnd ? lt(events.startsAt, dayEnd) : undefined,
-          )).orderBy(asc(events.startsAt)).limit(100),
-          db.select().from(tasks).where(and(
-            eq(tasks.projectId, PROJECT_ID),
-            tkVisible,
-            query ? ilike(tasks.title, `%${query}%`) : undefined,
-            dayStart ? gte(tasks.dueAt, dayStart) : undefined,
-            dayEnd ? lt(tasks.dueAt, dayEnd) : undefined,
-          )).orderBy(asc(tasks.dueAt)).limit(100),
+        const FIND_LIMIT = 100;
+        // Build the WHERE once, reuse it for the 100-row fetch AND an exact count
+        // so we can tell the user the real total instead of silently dropping
+        // everything past 100 (the Montázs bug).
+        const evWhere = and(
+          eq(events.projectId, PROJECT_ID),
+          evVisible,
+          query ? ilike(events.title, `%${query}%`) : undefined,
+          dayStart ? gte(events.startsAt, dayStart) : undefined,
+          dayEnd ? lt(events.startsAt, dayEnd) : undefined,
+        );
+        const tkWhere = and(
+          eq(tasks.projectId, PROJECT_ID),
+          tkVisible,
+          query ? ilike(tasks.title, `%${query}%`) : undefined,
+          dayStart ? gte(tasks.dueAt, dayStart) : undefined,
+          dayEnd ? lt(tasks.dueAt, dayEnd) : undefined,
+        );
+        const [foundEvents, foundTasks, evCount, tkCount] = await Promise.all([
+          db.select().from(events).where(evWhere).orderBy(asc(events.startsAt)).limit(FIND_LIMIT),
+          db.select().from(tasks).where(tkWhere).orderBy(asc(tasks.dueAt)).limit(FIND_LIMIT),
+          db.select({ n: sql<number>`count(*)::int` }).from(events).where(evWhere),
+          db.select({ n: sql<number>`count(*)::int` }).from(tasks).where(tkWhere),
         ]);
+        const eventsTotal = evCount[0]?.n ?? foundEvents.length;
+        const tasksTotal = tkCount[0]?.n ?? foundTasks.length;
         return {
           content: JSON.stringify({
             events: foundEvents.map((e) => ({ id: e.id, title: e.title, when: eventWhen(e.startsAt, e.endsAt, e.allDay), kind: e.kind, location: e.location, visibility: e.visibility })),
             tasks: foundTasks.map((t) => ({ id: t.id, title: t.title, when: taskWhen(t.dueAt, t.endsAt), done: t.done, visibility: t.visibility })),
+            events_total: eventsTotal,
+            events_truncated: eventsTotal > FIND_LIMIT,
+            tasks_total: tasksTotal,
+            tasks_truncated: tasksTotal > FIND_LIMIT,
           }),
           cards: [],
         };
@@ -462,28 +605,7 @@ async function executeTool(
         if (!existing || (existing.visibility !== "team" && existing.creatorId !== userId)) {
           return { content: JSON.stringify({ ok: false, error: "not found" }), cards: [] };
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const fields: Record<string, any> = {};
-        if (input.title !== undefined) fields.title = s(input.title) ?? existing.title;
-        if (input.location !== undefined) fields.location = s(input.location);
-        if (input.kind !== undefined) fields.kind = validKind(input.kind);
-        if (input.visibility !== undefined) fields.visibility = input.visibility === "private" ? "private" : "team";
-        const dateChanged = input.date !== undefined;
-        const timeChanged = input.time !== undefined;
-        const endChanged = input.end_date !== undefined || input.end_time !== undefined;
-        if (dateChanged || timeChanged || endChanged) {
-          const cur = eventParts(existing);
-          const newDate = dateChanged ? s(input.date) ?? cur.date : cur.date;
-          const newTime = timeChanged ? s(input.time) : cur.time;
-          if (dateChanged || timeChanged) {
-            fields.startsAt = zonedWallClockToUtc(newDate, newTime);
-            fields.allDay = !newTime;
-          }
-          const newEndDate = input.end_date !== undefined ? s(input.end_date) : cur.endDate;
-          const newEndTime = input.end_time !== undefined ? s(input.end_time) : cur.endTime;
-          fields.endsAt = resolveEndsAt(newDate, newTime, newEndDate, newEndTime);
-        }
-        await db.update(events).set(fields).where(eq(events.id, id));
+        await db.update(events).set(computeEventUpdateFields(existing, input)).where(eq(events.id, id));
         const [row] = await db.select().from(events).where(eq(events.id, id)).limit(1);
         return {
           content: JSON.stringify({ ok: true, message: "Event updated." }),
@@ -498,29 +620,7 @@ async function executeTool(
         if (!existing || (existing.visibility !== "team" && existing.creatorId !== userId)) {
           return { content: JSON.stringify({ ok: false, error: "not found" }), cards: [] };
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const fields: Record<string, any> = {};
-        if (input.title !== undefined) fields.title = s(input.title) ?? existing.title;
-        if (input.visibility !== undefined) fields.visibility = input.visibility === "team" ? "team" : "private";
-        if (input.status === "done") fields.done = true;
-        if (input.status === "open") fields.done = false;
-        const dateChanged = input.due_date !== undefined;
-        const timeChanged = input.due_time !== undefined;
-        const endChanged = input.end_date !== undefined || input.end_time !== undefined;
-        if (dateChanged || timeChanged || endChanged) {
-          const curDate = existing.dueAt ? ymdFmt.format(existing.dueAt) : null;
-          const curTimeRaw = existing.dueAt ? hm24.format(existing.dueAt) : null;
-          const curTime = curTimeRaw === "00:00" ? null : curTimeRaw;
-          const curEndDate = existing.endsAt ? ymdFmt.format(existing.endsAt) : null;
-          const curEndTime = existing.endsAt ? hm24.format(existing.endsAt) : null;
-          const newDate = dateChanged ? s(input.due_date) : curDate;
-          const newTime = timeChanged ? s(input.due_time) : curTime;
-          if (dateChanged || timeChanged) fields.dueAt = newDate ? zonedWallClockToUtc(newDate, newTime) : null;
-          const newEndDate = input.end_date !== undefined ? s(input.end_date) : curEndDate;
-          const newEndTime = input.end_time !== undefined ? s(input.end_time) : curEndTime;
-          fields.endsAt = newDate ? resolveEndsAt(newDate, newTime, newEndDate, newEndTime) : null;
-        }
-        await db.update(tasks).set(fields).where(eq(tasks.id, id));
+        await db.update(tasks).set(computeTaskUpdateFields(existing, input)).where(eq(tasks.id, id));
         const [row] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
         return {
           content: JSON.stringify({ ok: true, message: "Task updated." }),
@@ -548,6 +648,79 @@ async function executeTool(
         }
         await db.delete(tasks).where(eq(tasks.id, id));
         return { content: JSON.stringify({ ok: true, message: "Task deleted." }), cards: [card("task", "deleted", existing)] };
+      }
+
+      // ─── Bulk update / delete — one round-trip for "move/cancel all of these".
+      // One SELECT for all ids (scoped to project + visible-to-caller), then the
+      // per-row updates run together. Delete is a single scoped statement.
+      case "update_events_bulk": {
+        const updates = Array.isArray(input.updates) ? (input.updates as Record<string, unknown>[]) : [];
+        if (!updates.length) return { content: JSON.stringify({ ok: false, error: "empty updates" }), cards: [] };
+        const ids = updates.map((u) => s(u.id)).filter((x): x is string => !!x);
+        const rows = ids.length
+          ? await db.select().from(events).where(and(eq(events.projectId, PROJECT_ID), inArray(events.id, ids), evVisible))
+          : [];
+        const byId = new Map(rows.map((e) => [e.id, e]));
+        let updated = 0;
+        await Promise.all(
+          updates.map(async (u) => {
+            const id = s(u.id);
+            const existing = id ? byId.get(id) : undefined;
+            if (!id || !existing) return;
+            try {
+              await db.update(events).set(computeEventUpdateFields(existing, u)).where(eq(events.id, id));
+              updated++;
+            } catch {
+              /* skip the bad one, keep the rest */
+            }
+          })
+        );
+        return { content: JSON.stringify({ ok: true, updated, total: updates.length }), cards: [] };
+      }
+
+      case "update_tasks_bulk": {
+        const updates = Array.isArray(input.updates) ? (input.updates as Record<string, unknown>[]) : [];
+        if (!updates.length) return { content: JSON.stringify({ ok: false, error: "empty updates" }), cards: [] };
+        const ids = updates.map((u) => s(u.id)).filter((x): x is string => !!x);
+        const rows = ids.length
+          ? await db.select().from(tasks).where(and(eq(tasks.projectId, PROJECT_ID), inArray(tasks.id, ids), tkVisible))
+          : [];
+        const byId = new Map(rows.map((t) => [t.id, t]));
+        let updated = 0;
+        await Promise.all(
+          updates.map(async (u) => {
+            const id = s(u.id);
+            const existing = id ? byId.get(id) : undefined;
+            if (!id || !existing) return;
+            try {
+              await db.update(tasks).set(computeTaskUpdateFields(existing, u)).where(eq(tasks.id, id));
+              updated++;
+            } catch {
+              /* skip */
+            }
+          })
+        );
+        return { content: JSON.stringify({ ok: true, updated, total: updates.length }), cards: [] };
+      }
+
+      case "delete_events_bulk": {
+        const ids = (Array.isArray(input.ids) ? input.ids : []).map((x) => s(x)).filter((x): x is string => !!x);
+        if (!ids.length) return { content: JSON.stringify({ ok: false, error: "empty ids" }), cards: [] };
+        const res = await db
+          .delete(events)
+          .where(and(eq(events.projectId, PROJECT_ID), inArray(events.id, ids), evVisible))
+          .returning({ id: events.id });
+        return { content: JSON.stringify({ ok: true, deleted: res.length, requested: ids.length }), cards: [] };
+      }
+
+      case "delete_tasks_bulk": {
+        const ids = (Array.isArray(input.ids) ? input.ids : []).map((x) => s(x)).filter((x): x is string => !!x);
+        if (!ids.length) return { content: JSON.stringify({ ok: false, error: "empty ids" }), cards: [] };
+        const res = await db
+          .delete(tasks)
+          .where(and(eq(tasks.projectId, PROJECT_ID), inArray(tasks.id, ids), tkVisible))
+          .returning({ id: tasks.id });
+        return { content: JSON.stringify({ ok: true, deleted: res.length, requested: ids.length }), cards: [] };
       }
 
       default:
@@ -639,6 +812,17 @@ TYPE is optional: set kind only when the type is obvious (a "GIB delivery" → d
 
 RELATIVE DATES & TIME ARITHMETIC: compute dates/times yourself from today's date, step by step in your head. NEVER show the calculation or any intermediate numbers in your reply — only the final result and what you did ("Booked the GIB delivery for Tuesday 16 June, 1:00pm ✅").
 
+BULK / RECURRING — do it in ONE call, never one-by-one:
+- 3+ items in one message, OR a recurring pattern ("an H&S meeting every Monday for the next 20 weeks", "weekly toolbox talk till August") → work out all the dates yourself and use create_events_bulk / create_tasks_bulk in a SINGLE call. NEVER fire 20 separate create_event calls.
+- Changing many at once ("move every H&S meeting to 2pm", "push next week's inspections back a day") → call find_items first for the ids, then update_events_bulk / update_tasks_bulk in ONE call.
+- Deleting many ("cancel all the H&S meetings", "clear next week") → find_items for the ids, then delete_events_bulk / delete_tasks_bulk in ONE call.
+- 1–2 items: just use the single create/update/delete tools.
+- After a bulk action, confirm with the COUNT ("Booked 20 H&S meetings — every Monday 9am ✅"). Don't list all 20 unless asked.
+
+ID MEMORY — don't re-search what you just made: after a create_*_bulk the tool result already gave you every new id. If the user immediately tweaks or cancels those same items, reuse those ids in update_*_bulk / delete_*_bulk — do NOT call find_items again.
+
+TRUNCATION: if find_items returns events_truncated or tasks_truncated = true, you only got the first 100 of events_total / tasks_total. Tell the user the real total and ask how to narrow it (a date range, a tighter search). Never act on just the 100, and never tell the user to do it by hand.
+
 For "what's on / coming up" use the CONTEXT below if it's there, or call find_items for a specific search. To change or delete something, call find_items first to get its id (unless you already have the id from a create you just did).`;
 
 export async function POST(req: Request) {
@@ -717,14 +901,18 @@ export async function POST(req: Request) {
 
   const allCards: Card[] = [];
   const anthropic = new Anthropic({ maxRetries: 3 });
-  const MAX_ROUNDS = 8;
+  const MAX_ROUNDS = 10;
 
   try {
     let answer = "";
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const resp = await anthropic.messages.create({
         model: MODEL,
-        max_tokens: 4096,
+        // 8192 (not 4096): a bulk call serialises its whole array INTO the
+        // model's output tokens — a 50-item create_events_bulk is ~2k tokens of
+        // JSON, and a lower cap truncates the tool call mid-emit (the Montázs
+        // "1 week worked, 2 weeks didn't" cliff).
+        max_tokens: 8192,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         system: [
           { type: "text", text: STATIC_PROMPT, cache_control: { type: "ephemeral" } },
