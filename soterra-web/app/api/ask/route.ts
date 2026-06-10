@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { and, asc, eq, gte, ilike, lt, or } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { events, tasks } from "@/lib/schema";
+import { events, tasks, chatThreads, chatMessages } from "@/lib/schema";
 import {
   PROJECT_TZ,
   zonedWallClockToUtc,
@@ -639,23 +639,16 @@ RELATIVE DATES & TIME ARITHMETIC: compute dates/times yourself from today's date
 
 For "what's on / coming up" use the CONTEXT below if it's there, or call find_items for a specific search. To change or delete something, call find_items first to get its id (unless you already have the id from a create you just did).`;
 
-type HistoryMsg = { role: "user" | "assistant"; text: string };
-
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
 
   let question = "";
-  let history: HistoryMsg[] = [];
+  let reqThreadId: string | null = null;
   try {
     const body = await req.json();
     question = String(body.question ?? "").trim();
-    if (Array.isArray(body.history)) {
-      history = body.history
-        .filter((m: unknown): m is HistoryMsg => !!m && typeof (m as HistoryMsg).text === "string")
-        .slice(-12)
-        .map((m: HistoryMsg) => ({ role: m.role === "assistant" ? "assistant" : "user", text: m.text }));
-    }
+    if (typeof body.threadId === "string" && body.threadId) reqThreadId = body.threadId;
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -665,13 +658,42 @@ export async function POST(req: Request) {
   const creatorName =
     user?.firstName || user?.username || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || null;
 
+  // Resolve (or create) the thread — personal to this user + project. An unknown
+  // threadId (e.g. someone else's) falls through to a fresh thread.
+  let threadId = reqThreadId;
+  let threadNew = false;
+  if (threadId) {
+    const [existing] = await db
+      .select({ id: chatThreads.id })
+      .from(chatThreads)
+      .where(and(eq(chatThreads.id, threadId), eq(chatThreads.creatorId, userId)))
+      .limit(1);
+    if (!existing) threadId = null;
+  }
+  if (!threadId) {
+    const [created] = await db
+      .insert(chatThreads)
+      .values({ projectId: PROJECT_ID, creatorId: userId, title: question.slice(0, 80) })
+      .returning();
+    threadId = created.id;
+    threadNew = true;
+  }
+
+  // Persist the user message, then load the whole thread as the model's history.
+  await db.insert(chatMessages).values({ threadId, role: "user", content: question });
+  const historyRows = await db
+    .select()
+    .from(chatMessages)
+    .where(eq(chatMessages.threadId, threadId))
+    .orderBy(asc(chatMessages.createdAt));
+
   const dynamicContext = await buildContext(userId);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const messages: any[] = [
-    ...history.map((m) => ({ role: m.role, content: m.text })),
-    { role: "user", content: question },
-  ];
+  const messages: any[] = historyRows.map((m) => ({
+    role: m.role === "assistant" ? "assistant" : "user",
+    content: m.content,
+  }));
 
   const allCards: Card[] = [];
   const anthropic = new Anthropic({ maxRetries: 3 });
@@ -715,7 +737,11 @@ export async function POST(req: Request) {
       messages.push({ role: "user", content: results });
     }
 
-    return Response.json({ answer: answer || "Done.", cards: allCards });
+    const finalAnswer = answer || "Done.";
+    // Persist the assistant's reply and bump the thread so it sorts to the top.
+    await db.insert(chatMessages).values({ threadId, role: "assistant", content: finalAnswer });
+    await db.update(chatThreads).set({ updatedAt: new Date() }).where(eq(chatThreads.id, threadId));
+    return Response.json({ answer: finalAnswer, cards: allCards, threadId, threadNew });
   } catch (e) {
     console.error("assistant error:", e);
     const overloaded =

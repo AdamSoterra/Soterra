@@ -44,7 +44,37 @@ export const tasks = pgTable(
   (t) => ({ byProject: index("tasks_project_idx").on(t.projectId) })
 );
 
+// ─── Assistant chat threads (saved conversations) + their messages. Threads are
+//     PERSONAL (scoped to the Clerk user) within a project — your own chat
+//     history, shown in the assistant sidebar. ───
+export const chatThreads = pgTable(
+  "chat_threads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: text("project_id").notNull(),
+    creatorId: text("creator_id").notNull(), // Clerk user id
+    title: text("title"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({ byUser: index("chat_threads_user_idx").on(t.creatorId) })
+);
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    threadId: uuid("thread_id").notNull(),
+    role: text("role").notNull(), // user | assistant
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({ byThread: index("chat_messages_thread_idx").on(t.threadId) })
+);
+
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
+export type ChatThread = typeof chatThreads.$inferSelect;
+export type ChatMessage = typeof chatMessages.$inferSelect;

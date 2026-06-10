@@ -172,6 +172,12 @@ export default function Page() {
   const [sheet, setSheet] = useState<Cite | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // ─── saved conversations (threads) ───
+  const [threads, setThreads] = useState<{ id: string; title: string | null; updatedAt: string }[]>([]);
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [threadsLoaded, setThreadsLoaded] = useState(false);
+  const [railOpen, setRailOpen] = useState(false); // mobile drawer
+
   // ─── live Calendar + Tasks state ───
   const now = useMemo(() => new Date(), []);
   const [events, setEvents] = useState<CalEvent[]>([]);
@@ -205,6 +211,46 @@ export default function Page() {
       /* leave list as-is on failure */
     } finally {
       setTaskLoaded(true);
+    }
+  };
+
+  const loadThreads = async () => {
+    try {
+      const res = await fetch("/api/threads");
+      const data = await res.json();
+      if (Array.isArray(data.threads)) setThreads(data.threads);
+    } catch {
+      /* ignore */
+    } finally {
+      setThreadsLoaded(true);
+    }
+  };
+
+  // Start a fresh conversation (clears the chat; next send creates a new thread).
+  const newChat = () => {
+    setMessages([]);
+    setThreadId(null);
+    setRailOpen(false);
+    setTab("assistant");
+  };
+
+  // Open a saved conversation from the sidebar.
+  const loadThread = async (id: string) => {
+    setRailOpen(false);
+    setTab("assistant");
+    try {
+      const res = await fetch(`/api/threads?id=${encodeURIComponent(id)}`);
+      const data = await res.json();
+      if (Array.isArray(data.messages)) {
+        setMessages(
+          data.messages.map((m: { role: string; content: string }) =>
+            m.role === "assistant" ? assistantMsg(m.content) : ({ role: "u", text: m.content } as Msg)
+          )
+        );
+        setThreadId(id);
+      }
+    } catch {
+      /* ignore */
     }
   };
 
@@ -376,15 +422,14 @@ export default function Page() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
+  // Load the saved-conversations list once signed in.
+  useEffect(() => {
+    if (isSignedIn && !threadsLoaded) loadThreads();
+  }, [isSignedIn, threadsLoaded]);
+
   const send = async (text?: string) => {
     const t = (text ?? input).trim();
     if (!t || busy) return;
-    // Recent turns as plain-text history so the assistant has conversational
-    // context (e.g. "actually make it 2pm" after a booking).
-    const history = messages
-      .filter((m) => !(m.role === "a" && m.pending))
-      .map((m) => (m.role === "u" ? { role: "user", text: m.text } : { role: "assistant", text: m.raw ?? stripTags(m.text) }))
-      .slice(-12);
     setInput("");
     if (taRef.current) taRef.current.style.height = "auto";
     setBusy(true);
@@ -394,18 +439,15 @@ export default function Page() {
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: t, history }),
+        body: JSON.stringify({ question: t, threadId }),
       });
       const data = await res.json();
       const ans = String(data.answer || data.error || "Sorry, something went wrong.");
       const cards: AsstCard[] = Array.isArray(data.cards) ? data.cards : [];
-      const sm = ans.match(/\n*\s*Source:\s*([^\n]+)\s*$/i);
-      const body = sm ? ans.slice(0, sm.index).trim() : ans;
-      const cite = sm ? makeCite(sm[1].trim(), body) : undefined;
-      setMessages((prev) => [
-        ...prev.slice(0, -1),
-        { role: "a", src: cite ? "📐 FROM YOUR PLANS" : undefined, text: fmt(body), raw: body, cite, cards: cards.length ? cards : undefined },
-      ]);
+      setMessages((prev) => [...prev.slice(0, -1), assistantMsg(ans, cards)]);
+      if (data.threadId) setThreadId(data.threadId);
+      // Refresh the sidebar (new thread appears, or title/order updates).
+      loadThreads();
       // If the assistant changed the calendar/tasks, refresh so the other tabs
       // (and the agenda/day views) reflect it immediately.
       if (cards.length) { loadEvents(); loadTasks(); }
@@ -602,6 +644,28 @@ export default function Page() {
       <div className="content">
         {/* ─── ASSISTANT ─── */}
         {tab === "assistant" && (
+          <div className="asst-layout">
+            {railOpen && <div className="rail-scrim" onClick={() => setRailOpen(false)} />}
+            <aside className={"chat-rail" + (railOpen ? " open" : "")}>
+              <button className="newchat" onClick={newChat}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                New chat
+              </button>
+              {threads.length > 0 && <div className="rail-k">Recent</div>}
+              <ul className="rail-list">
+                {threads.map((th) => (
+                  <li
+                    key={th.id}
+                    className={"rail-item" + (th.id === threadId ? " act" : "")}
+                    onClick={() => loadThread(th.id)}
+                    title={th.title || "Conversation"}
+                  >
+                    {th.title || "Conversation"}
+                  </li>
+                ))}
+              </ul>
+            </aside>
+            <button className="chat-fab" onClick={() => setRailOpen(true)} aria-label="Past conversations">☰ Chats</button>
           <div className="assistant">
             {messages.length === 0 ? (
               <div className="hero-full">
@@ -663,6 +727,7 @@ export default function Page() {
                 <div className="composer-wrap"><div className="composer">{cbox}</div></div>
               </>
             )}
+          </div>
           </div>
         )}
 
@@ -966,8 +1031,21 @@ function fmt(str: string): string {
     .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
     .replace(/\n+/g, "<br/>");
 }
-function stripTags(s: string): string {
-  return s.replace(/<br\s*\/?>(?=)/gi, "\n").replace(/<[^>]+>/g, "");
+// Turn a stored/streamed assistant reply into a renderable message: pull a
+// trailing "Source: …" line into a citation card, format the rest. Shared by
+// live sends and reloading a saved conversation.
+function assistantMsg(content: string, cards?: AsstCard[]): Msg {
+  const sm = content.match(/\n*\s*Source:\s*([^\n]+)\s*$/i);
+  const body = sm ? content.slice(0, sm.index).trim() : content;
+  const cite = sm ? makeCite(sm[1].trim(), body) : undefined;
+  return {
+    role: "a",
+    src: cite ? "📐 FROM YOUR PLANS" : undefined,
+    text: fmt(body),
+    raw: body,
+    cite,
+    cards: cards && cards.length ? cards : undefined,
+  };
 }
 function daySummary(ev: number, tk: number): string {
   const parts = [];
