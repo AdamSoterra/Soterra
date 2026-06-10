@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { and, asc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { events, tasks, chatThreads, chatMessages, usageCounters } from "@/lib/schema";
+import { events, tasks, chatThreads, chatMessages, usageCounters, planPages } from "@/lib/schema";
 import {
   PROJECT_TZ,
   zonedWallClockToUtc,
@@ -54,23 +54,19 @@ function expand(q: string): string[] {
   for (const t of terms) for (const s of SYN[t] || []) out.add(s);
   return [...out];
 }
-let DF: Map<string, number> | null = null;
-function getDf(index: Page[]): Map<string, number> {
-  if (!DF) {
-    DF = new Map();
-    for (const p of index) {
-      const seen = new Set(p.text.toLowerCase().match(/[a-z0-9-]{2,}/g) || []);
-      for (const t of seen) DF.set(t, (DF.get(t) || 0) + 1);
-    }
+function computeDf(pages: Page[]): Map<string, number> {
+  const df = new Map<string, number>();
+  for (const p of pages) {
+    const seen = new Set(p.text.toLowerCase().match(/[a-z0-9-]{2,}/g) || []);
+    for (const t of seen) df.set(t, (df.get(t) || 0) + 1);
   }
-  return DF;
+  return df;
 }
-function retrieve(index: Page[], q: string, k = 6): Page[] {
+function retrieve(pages: Page[], df: Map<string, number>, q: string, k = 6): Page[] {
   const terms = expand(q);
-  const df = getDf(index);
-  const N = index.length;
+  const N = pages.length || 1;
   const idf = (t: string) => Math.log((N + 1) / ((df.get(t) || 0) + 1)) + 1;
-  const scored = index
+  const scored = pages
     .map((p) => {
       const low = p.text.toLowerCase();
       let s = 0;
@@ -83,6 +79,25 @@ function retrieve(index: Page[], q: string, k = 6): Page[] {
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s);
   return scored.slice(0, k).map((x) => x.p);
+}
+
+// The project's plan index: pages uploaded via the Upload tab (Neon plan_pages)
+// plus the bundled demo set for the demo project so it stays whole. Loaded per
+// call so a fresh upload shows up immediately (N is small; demo is in-memory).
+async function getProjectIndex(projectId: string): Promise<{ pages: Page[]; df: Map<string, number> }> {
+  const rows = await db
+    .select({
+      doc: planPages.doc, file: planPages.file, page: planPages.page, npages: planPages.npages,
+      code: planPages.code, title: planPages.title, disc: planPages.disc, text: planPages.text,
+    })
+    .from(planPages)
+    .where(eq(planPages.projectId, projectId));
+  let pages: Page[] = rows.map((r) => ({
+    doc: r.doc, disc: r.disc ?? "", file: r.file ?? "", page: r.page, npages: r.npages,
+    code: r.code ?? "", title: r.title ?? "", text: r.text,
+  }));
+  if (projectId === PROJECT_ID) pages = [...INDEX, ...pages]; // demo keeps its bundled set
+  return { pages, df: computeDf(pages) };
 }
 function pageLabel(p: Page): string {
   const bits = [p.doc];
@@ -501,7 +516,8 @@ async function executeTool(
       case "search_plans": {
         const q = s(input.query) ?? "";
         if (!q) return { content: JSON.stringify({ error: "query required" }), cards: [] };
-        const top = retrieve(INDEX, q, 6);
+        const { pages, df } = await getProjectIndex(PROJECT_ID);
+        const top = retrieve(pages, df, q, 6);
         if (top.length === 0) {
           return { content: JSON.stringify({ pages: [], note: "Nothing matched in this project's uploaded plans." }), cards: [] };
         }

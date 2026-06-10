@@ -190,6 +190,38 @@ export default function Page() {
   const recognitionRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ─── plan upload (Upload tab) ───
+  type Upload = { id: string; name: string; status: "uploading" | "indexing" | "done" | "error"; pages?: number; error?: string };
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const planFileRef = useRef<HTMLInputElement>(null);
+
+  const onPlansPicked = async (files: FileList | null) => {
+    const list = files ? Array.from(files).filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name)) : [];
+    if (planFileRef.current) planFileRef.current.value = "";
+    if (!list.length) return;
+    const entries: Upload[] = list.map((f, i) => ({ id: `${Date.now()}-${i}-${f.name}`, name: f.name, status: "uploading" }));
+    setUploads((u) => [...entries, ...u]); // newest on top
+    const { upload } = await import("@vercel/blob/client");
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      const file = list[i];
+      try {
+        const blob = await upload(file.name, file, { access: "public", handleUploadUrl: "/api/upload/token" });
+        setUploads((u) => u.map((x) => (x.id === e.id ? { ...x, status: "indexing" } : x)));
+        const res = await fetch("/api/upload/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ blobUrl: blob.url, filename: file.name }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Indexing failed");
+        setUploads((u) => u.map((x) => (x.id === e.id ? { ...x, status: "done", pages: data.indexed } : x)));
+      } catch (err) {
+        setUploads((u) => u.map((x) => (x.id === e.id ? { ...x, status: "error", error: err instanceof Error ? err.message : "Failed" } : x)));
+      }
+    }
+  };
+
   // ─── live Calendar + Tasks state ───
   const now = useMemo(() => new Date(), []);
   const [events, setEvents] = useState<CalEvent[]>([]);
@@ -995,13 +1027,36 @@ export default function Page() {
         {tab === "upload" && (
           <div className="page"><div className="page-inner">
             <div className="page-h">Upload plans</div>
-            <div className="page-sub">Add drawings &amp; specs to this project</div>
-            <div className="drop">
+            <div className="page-sub">Add drawings &amp; specs to this project — drop the whole set at once</div>
+            <div
+              className="drop"
+              role="button"
+              tabIndex={0}
+              onClick={() => planFileRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); onPlansPicked(e.dataTransfer.files); }}
+            >
               <div className="ic">⬆️</div>
-              <b>Drop PDFs here</b>
-              <p>Architectural, structural, services, specs — Soterra reads &amp; indexes the lot so your crew can ask it anything.</p>
-              <span className="soon">Wiring up next</span>
+              <b>Drop PDFs here, or click to choose</b>
+              <p>Architectural, structural, services, specs — Soterra reads &amp; indexes every page so your crew can ask it anything. Big drawing sets are fine.</p>
+              <input ref={planFileRef} type="file" accept="application/pdf" multiple style={{ display: "none" }} onChange={(e) => onPlansPicked(e.target.files)} />
             </div>
+            {uploads.length > 0 && (
+              <div className="up-list">
+                {uploads.map((u) => (
+                  <div className={"up-row " + u.status} key={u.id}>
+                    <span className="up-ic">{u.status === "done" ? "✅" : u.status === "error" ? "⚠️" : "📄"}</span>
+                    <div className="up-name">
+                      <b>{u.name}</b>
+                      <small>
+                        {u.status === "uploading" ? "Uploading…" : u.status === "indexing" ? "Reading & indexing…" : u.status === "done" ? `Indexed ${u.pages} pages` : u.error}
+                      </small>
+                    </div>
+                    {(u.status === "uploading" || u.status === "indexing") && <span className="up-spin" />}
+                  </div>
+                ))}
+              </div>
+            )}
           </div></div>
         )}
       </div>

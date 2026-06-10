@@ -86,6 +86,27 @@ export const usageCounters = pgTable(
   (t) => ({ byProjectDay: uniqueIndex("usage_counters_project_day_idx").on(t.projectId, t.day) })
 );
 
+// ─── Extracted plan/spec pages — the per-project searchable index built from
+//     uploaded PDFs (the files live in Vercel Blob; only the text + metadata
+//     land here). One row per page; the assistant's search_plans runs over these. ───
+export const planPages = pgTable(
+  "plan_pages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: text("project_id").notNull(),
+    doc: text("doc").notNull(), // document display name (e.g. the filename)
+    file: text("file"), // Blob URL of the source PDF
+    page: integer("page").notNull(),
+    npages: integer("npages").notNull(),
+    code: text("code"), // sheet code, best-effort (nullable)
+    title: text("title"), // sheet title, best-effort (nullable)
+    disc: text("disc"), // discipline, best-effort (nullable)
+    text: text("text").notNull(), // extracted page text
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({ byProject: index("plan_pages_project_idx").on(t.projectId) })
+);
+
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;
 export type Task = typeof tasks.$inferSelect;
