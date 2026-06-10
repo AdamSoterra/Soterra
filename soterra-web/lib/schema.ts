@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, uuid, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, uuid, index, integer, uniqueIndex } from "drizzle-orm/pg-core";
 
 // ─── Calendar events: the shared site schedule (inspections, deliveries, pours)
 //     and personal ones. Scoped to a project; owned by a creator; visible to the
@@ -70,6 +70,20 @@ export const chatMessages = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({ byThread: index("chat_messages_thread_idx").on(t.threadId) })
+);
+
+// ─── Per-project daily assistant usage counter — a race-safe runaway-cost cap.
+//     One row per (project, day); incremented atomically before each model run. ───
+export const usageCounters = pgTable(
+  "usage_counters",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: text("project_id").notNull(),
+    day: text("day").notNull(), // YYYY-MM-DD in the project timezone
+    count: integer("count").default(0).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({ byProjectDay: uniqueIndex("usage_counters_project_day_idx").on(t.projectId, t.day) })
 );
 
 export type Event = typeof events.$inferSelect;

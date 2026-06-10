@@ -102,7 +102,7 @@ button,input,textarea{font-family:var(--font)}
 .cite .ca{color:var(--brand);font-size:20px;flex-shrink:0}
 .evcard{margin-top:12px;border:1px solid var(--line);background:#fff;border-radius:13px;padding:12px 14px;display:flex;align-items:center;gap:12px}
 .evcard .bar{width:4px;align-self:stretch;border-radius:3px;background:var(--grad)}
-.evcard .et{flex:1}.evcard .et b{display:block;font-size:13.5px;color:var(--navy)}.evcard .et small{font-size:12px;color:var(--slate)}
+.evcard .et{flex:1;min-width:0}.evcard .et b{display:block;font-size:13.5px;color:var(--navy);overflow-wrap:anywhere}.evcard .et small{font-size:12px;color:var(--slate)}
 .evcard .ec{font-size:19px}
 .typing{display:inline-flex;gap:5px;align-items:center;padding:3px 0}
 .typing i{width:7px;height:7px;border-radius:50%;background:var(--c1);animation:bounce 1.2s infinite}

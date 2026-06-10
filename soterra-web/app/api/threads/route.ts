@@ -19,7 +19,7 @@ export async function GET(req: Request) {
     const [thread] = await db
       .select()
       .from(chatThreads)
-      .where(and(eq(chatThreads.id, id), eq(chatThreads.creatorId, userId)))
+      .where(and(eq(chatThreads.id, id), eq(chatThreads.creatorId, userId), eq(chatThreads.projectId, PROJECT_ID)))
       .limit(1);
     if (!thread) return Response.json({ error: "Thread not found" }, { status: 404 });
 

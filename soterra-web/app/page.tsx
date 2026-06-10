@@ -508,7 +508,7 @@ export default function Page() {
     try {
       const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
       if (isPdf) {
-        if (file.size > 3 * 1024 * 1024) throw new Error("PDF too big here (max 3 MB) — use the Upload tab for full plan sets.");
+        if (file.size > 2.5 * 1024 * 1024) throw new Error("PDF too big here (max 2.5 MB) — use the Upload tab for full plan sets.");
         const data = await fileToBase64(file);
         setAttachment({ kind: "pdf", mediaType: "application/pdf", data, name: file.name });
       } else if (file.type.startsWith("image/")) {
@@ -542,6 +542,10 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, threadId, attachment: att }),
       });
+      if (res.status === 413) {
+        setMessages((prev) => [...prev.slice(0, -1), { role: "a", text: "That attachment's too big to send here — try a smaller file, or add full plan sets via the Upload tab." }]);
+        return;
+      }
       const data = await res.json();
       const ans = String(data.answer || data.error || "Sorry, something went wrong.");
       const cards: AsstCard[] = Array.isArray(data.cards) ? data.cards : [];
@@ -618,21 +622,21 @@ export default function Page() {
   // Agenda / Napirend: every upcoming event + due-dated task from the start of
   // today onward, grouped by day and time-sorted within each day.
   const agenda = useMemo(() => {
-    const cutoff = new Date(`${todayKey()}T00:00:00`).getTime() - 12 * 3600 * 1000;
+    // Include anything from today (project tz) onward. Compare YYYY-MM-DD day
+    // keys (lexicographic = chronological) — tz-correct, no fragile ms math.
+    const tk0 = todayKey();
     type Item = { t: number; ev?: CalEvent; tk?: CalTask };
     const byDay = new Map<string, Item[]>();
     for (const e of events) {
-      const t = new Date(e.startsAt).getTime();
-      if (t < cutoff) continue;
       const k = dayKey(new Date(e.startsAt));
-      (byDay.get(k) ?? byDay.set(k, []).get(k)!).push({ t, ev: e });
+      if (k < tk0) continue;
+      (byDay.get(k) ?? byDay.set(k, []).get(k)!).push({ t: new Date(e.startsAt).getTime(), ev: e });
     }
     for (const tk of tasks) {
       if (!tk.dueAt) continue;
-      const t = new Date(tk.dueAt).getTime();
-      if (t < cutoff) continue;
       const k = dayKey(new Date(tk.dueAt));
-      (byDay.get(k) ?? byDay.set(k, []).get(k)!).push({ t, tk });
+      if (k < tk0) continue;
+      (byDay.get(k) ?? byDay.set(k, []).get(k)!).push({ t: new Date(tk.dueAt).getTime(), tk });
     }
     return [...byDay.entries()]
       .sort((a, b) => (a[0] < b[0] ? -1 : 1))

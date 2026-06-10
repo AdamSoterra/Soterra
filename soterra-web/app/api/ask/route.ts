@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { and, asc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { events, tasks, chatThreads, chatMessages } from "@/lib/schema";
+import { events, tasks, chatThreads, chatMessages, usageCounters } from "@/lib/schema";
 import {
   PROJECT_TZ,
   zonedWallClockToUtc,
@@ -18,6 +18,9 @@ export const maxDuration = 60;
 const PROJECT_ID = "1-arthur-road";
 const PROJECT_NAME = "1 Arthur Road";
 const MODEL = "claude-sonnet-4-6";
+// Generous per-project daily assistant cap — invisible in normal site use, a
+// backstop against a runaway/abusive/compromised account racking up Claude cost.
+const DAILY_LIMIT = 300;
 const KINDS = ["inspection", "delivery", "pour", "meeting", "reminder", "other"] as const;
 type Kind = (typeof KINDS)[number];
 
@@ -792,11 +795,15 @@ Open tasks:
 ${tkList}`;
 }
 
-const STATIC_PROMPT = `You are Soterra's site assistant for the construction project "${PROJECT_NAME}". You help the whole crew two ways:
-1) PLAN-READER — answer questions about the project's drawings & specifications. For ANY such question (materials, dimensions, fire ratings, schedules, finishes, "what does the spec say…") you MUST call search_plans, then answer ONLY from the page text it returns, finishing with a line: "Source: <the exact page label>". Never invent codes, ratings, products or numbers. If the answer isn't in the pages, say what's missing and which drawing set might have it.
-2) CALENDAR & TASKS — create, find, change and delete events and to-dos using the tools.
+const STATIC_PROMPT = `You are Soterra's site assistant for the construction project "${PROJECT_NAME}" — a sharp, experienced construction professional. You help the crew three ways:
+1) PLAN-READER — answer questions about THIS project's drawings & specifications. For any question about the uploaded plans/specs (this project's materials, dimensions, fire ratings, schedules, finishes, "what does our spec say…") you MUST call search_plans, then answer ONLY from the page text it returns, finishing with a line: "Source: <the exact page label>". Never invent codes, ratings, products or numbers from the plans. If the answer isn't in the pages, say what's missing and which drawing set might have it.
+2) CONSTRUCTION EXPERT — answer general construction questions from your own knowledge: methods, sequencing, materials, detailing, terminology, building-code awareness, health & safety, and best practice. This is general expertise, NOT from the user's plans, so do NOT add a "Source:" line for it. When current or specific detail matters (a specific code clause, the latest standard, a product spec, manufacturer data), use web_search to get it right rather than answering from memory.
+   GUARDRAIL: when you give general or code-related guidance, make clear it's general advice; for code clauses or safety-critical numbers, tell them to confirm against the current standard or their engineer, and don't state a specific code number as fact unless web_search backs it up. Soterra's whole value is that it never bluffs.
+3) CALENDAR & TASKS — create, find, change and delete events and to-dos using the tools.
 
-If the user attaches a photo or PDF, read it and answer about it — and if it relates to the project's drawings or specs, you can still call search_plans to cross-check details.
+If the user attaches a photo or PDF, read it and answer about it — and if it relates to this project's drawings or specs, you can still call search_plans to cross-check.
+
+STAY ON CONSTRUCTION: cover anything construction/site/building-related broadly and generously. Politely decline genuinely unrelated topics (sport, politics, celebrities, general trivia) and steer back to the project.
 
 Talk like a sharp, helpful site engineer: warm, concise (1–4 sentences), plain English. State resolved dates explicitly ("Tuesday 16 June"), not just "Tuesday".
 
@@ -841,12 +848,33 @@ export async function POST(req: Request) {
       const kind = a.kind === "pdf" ? "pdf" : a.kind === "image" ? "image" : null;
       const data = typeof a.data === "string" ? a.data : "";
       const mediaType = typeof a.mediaType === "string" ? a.mediaType : "";
-      if (kind && data && mediaType) attachment = { kind, mediaType, data };
+      // Only forward media types Claude accepts — never pass untrusted strings through.
+      const IMG = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+      const okType = kind === "pdf" ? mediaType === "application/pdf" : IMG.includes(mediaType);
+      if (kind && data && okType) attachment = { kind, mediaType, data };
     }
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
   if (!question) return Response.json({ error: "Empty question" }, { status: 400 });
+
+  // Runaway-cost cap: atomically bump today's per-project counter (one statement,
+  // race-safe) and reject once it exceeds the daily limit. Day = project tz.
+  const today = zonedDayKey(new Date());
+  const [usage] = await db
+    .insert(usageCounters)
+    .values({ projectId: PROJECT_ID, day: today, count: 1 })
+    .onConflictDoUpdate({
+      target: [usageCounters.projectId, usageCounters.day],
+      set: { count: sql`${usageCounters.count} + 1`, updatedAt: new Date() },
+    })
+    .returning({ count: usageCounters.count });
+  if (usage && usage.count > DAILY_LIMIT) {
+    return Response.json(
+      { error: `You've reached today's assistant limit (${DAILY_LIMIT} messages on this project). It resets tomorrow.`, dailyLimited: true },
+      { status: 429 }
+    );
+  }
 
   const user = await currentUser();
   const creatorName =
@@ -881,10 +909,17 @@ export async function POST(req: Request) {
     .where(eq(chatMessages.threadId, threadId))
     .orderBy(asc(chatMessages.createdAt));
 
+  // Cap how much history we replay to the model so a long thread doesn't balloon
+  // input tokens every turn. Keep the most recent N, and make sure the window
+  // starts on a user turn (the current question is always the last row).
+  const MODEL_HISTORY = 24;
+  let recent = historyRows.slice(-MODEL_HISTORY);
+  while (recent.length && recent[0].role === "assistant") recent = recent.slice(1);
+
   const dynamicContext = await buildContext(userId);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const messages: any[] = historyRows.map((m) => ({
+  const messages: any[] = recent.map((m) => ({
     role: m.role === "assistant" ? "assistant" : "user",
     content: m.content,
   }));
@@ -919,7 +954,12 @@ export async function POST(req: Request) {
           { type: "text", text: dynamicContext },
         ] as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        tools: TOOLS.map((t, i) => (i === TOOLS.length - 1 ? { ...t, cache_control: { type: "ephemeral" as const } } : t)) as any,
+        tools: [
+          ...TOOLS.map((t, i) => (i === TOOLS.length - 1 ? { ...t, cache_control: { type: "ephemeral" as const } } : t)),
+          // Anthropic server-side web search → the assistant can pull current
+          // info (latest codes, product specs, standards) past its training cutoff.
+          { type: "web_search_20260209", name: "web_search", max_uses: 5 },
+        ] as any,
         messages,
       });
 
@@ -932,6 +972,9 @@ export async function POST(req: Request) {
         .trim();
       if (text) answer = text;
 
+      // Server-side web_search hit its internal iteration limit mid-turn —
+      // re-send (assistant content already appended) so the server resumes.
+      if (resp.stop_reason === "pause_turn") continue;
       if (resp.stop_reason !== "tool_use") break;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -955,9 +998,17 @@ export async function POST(req: Request) {
     const overloaded =
       e instanceof Anthropic.APIConnectionError ||
       (e instanceof Anthropic.APIError && (e.status === 429 || e.status === 529 || (e.status ?? 0) >= 500));
-    return Response.json(
-      { error: overloaded ? "The assistant is busy — give it a moment and try again." : "Something went wrong — try again." },
-      { status: 503 }
-    );
+    const msg = overloaded
+      ? "The assistant is busy — give it a moment and try again."
+      : "Something went wrong on that one — give it another go.";
+    // Persist a placeholder reply so reopening the thread doesn't show a hanging
+    // question, and the next turn doesn't replay an orphaned user message.
+    try {
+      await db.insert(chatMessages).values({ threadId, role: "assistant", content: msg });
+      await db.update(chatThreads).set({ updatedAt: new Date() }).where(eq(chatThreads.id, threadId));
+    } catch {
+      /* best-effort — don't mask the original error */
+    }
+    return Response.json({ error: msg }, { status: 503 });
   }
 }
