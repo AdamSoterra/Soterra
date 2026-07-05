@@ -888,8 +888,10 @@ export default function Page() {
   const activeCode = siteCode || curProject?.code || "";
 
   /* ─── First run (or explicit switch): create / join a site ─── */
+  // Also stay open while `createdCode` is set — that's the "here's your invite
+  // code" screen shown right after creating (projectId is already set by then).
   const mustSetUp = !projectId;
-  if (mustSetUp || setupOpen) {
+  if (mustSetUp || setupOpen || createdCode) {
     return (
       <SiteSetup
         mandatory={mustSetUp}
