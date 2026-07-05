@@ -24,8 +24,9 @@ export const projectMembers = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     projectId: text("project_id").notNull(),
     userId: text("user_id").notNull(), // Clerk userId
-    name: text("name"), // display name at join time
-    role: text("role").default("member").notNull(), // admin | member
+    name: text("name"), // the person's name, entered when they set up / join the site
+    title: text("title"), // their job title, e.g. "Site Manager" — used for assigning by role
+    role: text("role").default("member").notNull(), // admin | member (permission, not job title)
     colorIndex: integer("color_index").default(0).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

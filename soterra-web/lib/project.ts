@@ -38,6 +38,7 @@ export async function listMembers(projectId: string) {
     .select({
       userId: projectMembers.userId,
       name: projectMembers.name,
+      title: projectMembers.title,
       role: projectMembers.role,
       colorIndex: projectMembers.colorIndex,
     })

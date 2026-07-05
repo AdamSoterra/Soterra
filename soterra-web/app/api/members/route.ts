@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     members: members.map((m) => ({
       userId: m.userId,
       name: m.name || "Crew member",
+      title: m.title || null,
       role: m.role,
       colorIndex: m.colorIndex,
       isMe: m.userId === userId,

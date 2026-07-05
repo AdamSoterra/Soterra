@@ -22,7 +22,7 @@ const DAILY_LIMIT = 300;
 const KINDS = ["inspection", "delivery", "pour", "meeting", "reminder", "other"] as const;
 type Kind = (typeof KINDS)[number];
 
-type Member = { userId: string; name: string | null };
+type Member = { userId: string; name: string | null; title: string | null };
 
 // ── Retrieval index shapes. Both plan pages and code pages carry `.text`, so the
 //    TF-IDF retrieval below is generic over anything with text. ──
@@ -156,15 +156,18 @@ function visLabel(v: string): string {
   return v === "team" ? "whole crew" : "just you";
 }
 
-// Resolve a plain-English assignee name to a crew member. Exact → prefix → contains.
+// Resolve a plain-English assignee to a crew member — by NAME ("Jon") or by
+// TITLE ("the site manager"). Exact → prefix → contains, name then title.
 function resolveAssignee(input: Record<string, unknown>, members: Member[]): { assigneeId: string | null; assigneeName: string | null } {
-  const name = s(input.assignee);
-  if (!name) return { assigneeId: null, assigneeName: null };
-  const low = name.toLowerCase();
+  const q = s(input.assignee);
+  if (!q) return { assigneeId: null, assigneeName: null };
+  const low = q.toLowerCase();
+  const nm = (x: Member) => (x.name || "").toLowerCase();
+  const ti = (x: Member) => (x.title || "").toLowerCase();
   const m =
-    members.find((x) => (x.name || "").toLowerCase() === low) ||
-    members.find((x) => (x.name || "").toLowerCase().startsWith(low)) ||
-    members.find((x) => low.length >= 2 && (x.name || "").toLowerCase().includes(low));
+    members.find((x) => nm(x) === low || ti(x) === low) ||
+    members.find((x) => nm(x).startsWith(low) || ti(x).startsWith(low)) ||
+    members.find((x) => low.length >= 2 && (nm(x).includes(low) || ti(x).includes(low)));
   return m ? { assigneeId: m.userId, assigneeName: m.name } : { assigneeId: null, assigneeName: null };
 }
 
@@ -681,7 +684,9 @@ async function buildContext(userId: string, projectId: string, projectName: stri
     db.select().from(events).where(and(eq(events.projectId, projectId), visEv, gte(events.startsAt, new Date(now.getTime() - 12 * 3600 * 1000)), lt(events.startsAt, yearAhead))).orderBy(asc(events.startsAt)).limit(60),
     db.select().from(tasks).where(and(eq(tasks.projectId, projectId), visTk, eq(tasks.done, false))).orderBy(asc(tasks.dueAt)).limit(60),
   ]);
-  const crew = members.length ? members.map((m) => m.name || "Crew member").join(", ") : "(just you so far)";
+  const crew = members.length
+    ? members.map((m) => `${m.name || "Crew member"}${m.title ? ` (${m.title})` : ""}`).join(", ")
+    : "(just you so far)";
   const evList = upcoming.length
     ? upcoming.map((e) => `- ${eventWhen(e.startsAt, e.endsAt, e.allDay)} — ${e.title}${e.kind ? ` [${e.kind}]` : ""}${e.location ? ` @ ${e.location}` : ""}${e.assigneeName ? ` → ${e.assigneeName}` : ""} (${visLabel(e.visibility)})`).join("\n")
     : "(nothing booked)";
@@ -719,7 +724,7 @@ VISIBILITY — read the wording, don't assume from type. Always set visibility:
 - "the crew", "the team", "everyone", "site-wide", "tell everyone" → 'team'.
 - If neither is signalled AND it's not assigned to someone, default 'private'. Never broadcast to the crew unless asked; the user can share with one tap.
 
-ASSIGNING TO CREW: when the user books/creates something FOR a specific person ("book a delivery for the site manager", "get Jon to order the timber"), set the assignee to that crew member's NAME from the CREW list in the context. Assigning to someone shares it with them (defaults to team-visible so it lands on their calendar). If the named person isn't in the crew list, say they need to join the site with the invite code first, and add it unassigned for now.
+ASSIGNING TO CREW: when the user books/creates something FOR a specific person ("book a delivery for the site manager", "get Jon to order the timber"), set the assignee to that crew member — you can use their NAME or their TITLE (the CREW list shows each as "Name (Title)"), so "the site manager" matches whoever's title is Site Manager. Assigning to someone shares it with them (defaults to team-visible so it lands on their calendar). If nobody in the crew list matches, say they need to join the site with the invite code first (and set their name + title), and add it unassigned for now.
 
 TYPE is optional: set kind only when obvious. RELATIVE DATES: compute yourself, never show the arithmetic — only the final result.
 
@@ -776,7 +781,7 @@ export async function POST(req: Request) {
   const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, projectId)).limit(1);
   const projectName = proj?.name ?? "this site";
   const memberRows = await listMembers(projectId);
-  const members: Member[] = memberRows.map((m) => ({ userId: m.userId, name: m.name }));
+  const members: Member[] = memberRows.map((m) => ({ userId: m.userId, name: m.name, title: m.title }));
   const ctx: Ctx = { userId, creatorName, projectId, members };
 
   // Resolve (or create) the thread — personal to this user + this site.

@@ -35,6 +35,10 @@ export async function POST(req: Request) {
 
   const user = await currentUser();
   const name0 = displayName(user);
+  // The person's own name + job title (e.g. "Site Manager") — entered at setup /
+  // join. Title lets the assistant assign by role as well as by name.
+  const personName = String(body.personName ?? "").trim() || name0;
+  const title = String(body.title ?? "").trim() || null;
 
   // ─── Join by code ───
   if (body.action === "join") {
@@ -44,10 +48,11 @@ export async function POST(req: Request) {
     if (!proj) return Response.json({ error: "That code didn't match a site — check it and try again." }, { status: 404 });
 
     const members = await db.select({ id: projectMembers.id }).from(projectMembers).where(eq(projectMembers.projectId, proj.id));
+    // Upsert so re-entering the code lets someone correct their name/title.
     await db
       .insert(projectMembers)
-      .values({ projectId: proj.id, userId, name: name0, role: "member", colorIndex: members.length % 8 })
-      .onConflictDoNothing();
+      .values({ projectId: proj.id, userId, name: personName, title, role: "member", colorIndex: members.length % 8 })
+      .onConflictDoUpdate({ target: [projectMembers.projectId, projectMembers.userId], set: { name: personName, title } });
 
     return Response.json({
       project: { id: proj.id, name: proj.name, code: proj.code, role: "member", timezone: proj.timezone },
@@ -67,7 +72,7 @@ export async function POST(req: Request) {
   }
 
   await db.insert(projects).values({ id, name, code, creatorId: userId, timezone: "Pacific/Auckland" });
-  await db.insert(projectMembers).values({ projectId: id, userId, name: name0, role: "admin", colorIndex: 0 });
+  await db.insert(projectMembers).values({ projectId: id, userId, name: personName, title, role: "admin", colorIndex: 0 });
 
   return Response.json(
     { project: { id, name, code, role: "admin", timezone: "Pacific/Auckland" } },

@@ -24,7 +24,7 @@ type Attachment = { kind: "image" | "pdf"; mediaType: string; data: string; name
 
 // ─── Sites (projects) + crew ───
 type Project = { id: string; name: string; code: string; role: string; timezone?: string };
-type Member = { userId: string; name: string; role: string; colorIndex: number; isMe: boolean };
+type Member = { userId: string; name: string; title: string | null; role: string; colorIndex: number; isMe: boolean };
 type PlanDoc = { doc: string; npages: number; indexed: number; file: string | null; uploadedAt: string };
 
 // Soterra's project timezone. TODO: per-project tz once projects carry one.
@@ -201,6 +201,8 @@ export default function Page() {
   const [setupMode, setSetupMode] = useState<"create" | "join">("create");
   const [setupName, setSetupName] = useState("");
   const [setupCode, setSetupCode] = useState("");
+  const [setupPersonName, setSetupPersonName] = useState("");
+  const [setupTitle, setSetupTitle] = useState("");
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupErr, setSetupErr] = useState<string | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
@@ -226,10 +228,10 @@ export default function Page() {
   // ─── plan upload (Upload tab) + indexed docs (Plans tab) ───
   const [docs, setDocs] = useState<PlanDoc[]>([]);
   const [docsLoaded, setDocsLoaded] = useState(false);
-  const [upBusy, setUpBusy] = useState(false);
-  const [upMsg, setUpMsg] = useState<string | null>(null);
-  const [upErr, setUpErr] = useState<string | null>(null);
-  const [upPct, setUpPct] = useState(0);
+  // Bulk upload: a live "current file" progress + a log of finished ones, so a PM
+  // can drop the whole plan set (many PDFs) at once.
+  const [upCurrent, setUpCurrent] = useState<{ name: string; phase: string; pct: number } | null>(null);
+  const [upItems, setUpItems] = useState<{ name: string; ok: boolean; note: string }[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const planFileRef = useRef<HTMLInputElement>(null);
 
@@ -552,6 +554,11 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn, projectsLoaded]);
 
+  // Prefill the setup "your name" field with the Clerk first name (still editable).
+  useEffect(() => {
+    if (isSignedIn && user) setSetupPersonName((v) => v || user.firstName || "");
+  }, [isSignedIn, user]);
+
   // Restore the desktop sidebar collapse preference.
   useEffect(() => {
     try {
@@ -677,14 +684,14 @@ export default function Page() {
   };
 
   // ─── site create / join ───
-  const resetSetup = () => { setSetupName(""); setSetupCode(""); setSetupErr(null); setCreatedCode(null); setSetupMode("create"); };
+  const resetSetup = () => { setSetupName(""); setSetupCode(""); setSetupErr(null); setCreatedCode(null); setSetupMode("create"); setSetupPersonName(user?.firstName || ""); setSetupTitle(""); };
   const closeSetup = () => { setSetupOpen(false); resetSetup(); };
   const createSite = async () => {
     const name = setupName.trim();
     if (!name) { setSetupErr("Give your site a name."); return; }
     setSetupBusy(true); setSetupErr(null);
     try {
-      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name }) });
+      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name, personName: setupPersonName.trim() || null, title: setupTitle.trim() || null }) });
       const data = await res.json();
       if (!res.ok || !data.project) throw new Error(data.error || "Couldn't create the site.");
       setProjects((ps) => [...ps, data.project]);
@@ -701,7 +708,7 @@ export default function Page() {
     if (!code) { setSetupErr("Enter the join code."); return; }
     setSetupBusy(true); setSetupErr(null);
     try {
-      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "join", code }) });
+      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "join", code, personName: setupPersonName.trim() || null, title: setupTitle.trim() || null }) });
       const data = await res.json();
       if (!res.ok || !data.project) throw new Error(data.error || "That code didn't match a site.");
       setProjects((ps) => (ps.some((p) => p.id === data.project.id) ? ps : [...ps, data.project]));
@@ -719,40 +726,40 @@ export default function Page() {
     try { await navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1600); } catch { /* ignore */ }
   };
 
-  // ─── plan upload (private, per-site) ───
-  const onPlanFile = async (file: File) => {
+  // ─── plan upload (private, per-site) — handles a WHOLE set at once ───
+  const onPlanFiles = async (fileList: FileList | File[]) => {
     const pid = projRef.current;
-    if (!pid) return;
-    if (!(file.type === "application/pdf" || /\.pdf$/i.test(file.name))) { setUpErr("Only PDFs can be indexed here."); return; }
-    if (file.size > 100 * 1024 * 1024) { setUpErr("That file's over 100 MB — split the set and try again."); return; }
-    setUpBusy(true); setUpErr(null); setUpPct(0);
-    setUpMsg(`Uploading ${file.name}…`);
-    try {
-      const blob = await upload(`${pid}/${file.name}`, file, {
-        access: "private",
-        handleUploadUrl: "/api/upload/token",
-        clientPayload: JSON.stringify({ projectId: pid }),
-        contentType: "application/pdf",
-        onUploadProgress: (p) => setUpPct(Math.round(p.percentage)),
-      });
-      setUpPct(100);
-      setUpMsg(`Reading & indexing ${file.name}… (large sets take a moment)`);
-      const res = await apiFetch("/api/upload/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pathname: blob.pathname, filename: file.name }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Indexing failed.");
-      setUpMsg(`✓ Indexed ${data.indexed} page${data.indexed === 1 ? "" : "s"} from ${file.name}. Ask the assistant about it.`);
-      loadPlans();
-    } catch (e) {
-      setUpErr(e instanceof Error ? e.message : "Upload failed.");
-      setUpMsg(null);
-    } finally {
-      setUpBusy(false);
-      setUpPct(0);
+    if (!pid || upCurrent) return; // ignore drops while a batch is running
+    const all = Array.from(fileList);
+    const pdfs = all.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    const notPdf = all.length - pdfs.length;
+    if (notPdf > 0) setUpItems((prev) => [{ name: `${notPdf} skipped`, ok: false, note: "not a PDF" }, ...prev]);
+    for (const f of pdfs) {
+      if (f.size > 100 * 1024 * 1024) { setUpItems((prev) => [{ name: f.name, ok: false, note: "over 100 MB — split it" }, ...prev]); continue; }
+      setUpCurrent({ name: f.name, phase: "Uploading", pct: 0 });
+      try {
+        const blob = await upload(`${pid}/${f.name}`, f, {
+          access: "private",
+          handleUploadUrl: "/api/upload/token",
+          clientPayload: JSON.stringify({ projectId: pid }),
+          contentType: "application/pdf",
+          onUploadProgress: (p) => setUpCurrent({ name: f.name, phase: "Uploading", pct: Math.round(p.percentage) }),
+        });
+        setUpCurrent({ name: f.name, phase: "Reading & indexing", pct: 100 });
+        const res = await apiFetch("/api/upload/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pathname: blob.pathname, filename: f.name }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "indexing failed");
+        setUpItems((prev) => [{ name: f.name, ok: true, note: `${data.indexed} page${data.indexed === 1 ? "" : "s"} indexed` }, ...prev]);
+      } catch (e) {
+        setUpItems((prev) => [{ name: f.name, ok: false, note: e instanceof Error ? e.message : "upload failed" }, ...prev]);
+      }
     }
+    setUpCurrent(null);
+    loadPlans();
   };
   const deletePlan = async (doc: string) => {
     if (!window.confirm(`Remove "${doc}" from this site's index? The assistant will stop using it.`)) return;
@@ -901,6 +908,10 @@ export default function Page() {
         setName={setSetupName}
         code={setupCode}
         setCode={setSetupCode}
+        personName={setupPersonName}
+        setPersonName={setSetupPersonName}
+        title={setupTitle}
+        setTitle={setSetupTitle}
         busy={setupBusy}
         err={setupErr}
         createdCode={createdCode}
@@ -909,6 +920,7 @@ export default function Page() {
         onJoin={joinSite}
         onClose={mustSetUp ? undefined : closeSetup}
         onEnter={() => { closeSetup(); setTab("assistant"); }}
+        onUploadPlans={() => { closeSetup(); setTab("upload"); }}
         onCopy={() => copyCode(createdCode || "")}
         copied={copied}
         onSignOut={() => clerk.signOut()}
@@ -985,13 +997,7 @@ export default function Page() {
           <button className="avatar" onClick={() => setMenuOpen((o) => !o)}>{initials}</button>
           {menuOpen && (
             <div className="menu">
-              <div className="mrow"><span className="mi">🏗️</span><div><b>{projName}</b><br /><small>{curProject?.role === "admin" ? "You're the admin" : "Crew member"}</small></div></div>
-              {projects.filter((p) => p.id !== projectId).map((p) => (
-                <div className="mrow" key={p.id} onClick={() => { selectProject(p.id); setMenuOpen(false); setTab("assistant"); }}>
-                  <span className="mi">📍</span> {p.name}
-                </div>
-              ))}
-              <div className="mrow" onClick={() => { resetSetup(); setSetupOpen(true); setMenuOpen(false); }}><span className="mi">➕</span> Create / join a site</div>
+              <div className="mrow"><span className="mi">🏗️</span><div><b>{projName}</b><br /><small>{curProject?.role === "admin" ? "You're the admin" : (members.find((m) => m.isMe)?.title || "Crew member")}</small></div></div>
               <div className="mrow" onClick={() => { setCrewOpen(true); setMenuOpen(false); loadMembers(); }}><span className="mi">👥</span> Crew &amp; invite code</div>
               <div className="mrow sep" onClick={() => clerk.signOut()}><span className="mi">↩️</span> Sign out</div>
             </div>
@@ -1271,35 +1277,45 @@ export default function Page() {
         {tab === "upload" && (
           <div className="page"><div className="page-inner">
             <div className="page-h">Upload plans</div>
-            <div className="page-sub">Add drawings &amp; specs to {projName} — Soterra reads &amp; indexes every page (private to your site)</div>
-            <input ref={planFileRef} type="file" accept="application/pdf" style={{ display: "none" }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (planFileRef.current) planFileRef.current.value = ""; if (f) onPlanFile(f); }} />
+            <div className="page-sub">Add drawings &amp; specs to {projName} — drop the whole set at once. Soterra reads &amp; indexes every page (private to your site).</div>
+            <input ref={planFileRef} type="file" accept="application/pdf" multiple style={{ display: "none" }}
+              onChange={(e) => { const fs = e.target.files; if (planFileRef.current) planFileRef.current.value = ""; if (fs && fs.length) onPlanFiles(fs); }} />
             <div
               className="drop"
-              onClick={() => { if (!upBusy) planFileRef.current?.click(); }}
-              onDragOver={(e) => { e.preventDefault(); if (!upBusy) setDragOver(true); }}
+              onClick={() => { if (!upCurrent) planFileRef.current?.click(); }}
+              onDragOver={(e) => { e.preventDefault(); if (!upCurrent) setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => { e.preventDefault(); setDragOver(false); if (upBusy) return; const f = e.dataTransfer.files?.[0]; if (f) onPlanFile(f); }}
-              style={{ cursor: upBusy ? "default" : "pointer", outline: dragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
+              onDrop={(e) => { e.preventDefault(); setDragOver(false); if (upCurrent) return; const fs = e.dataTransfer.files; if (fs && fs.length) onPlanFiles(fs); }}
+              style={{ cursor: upCurrent ? "default" : "pointer", outline: dragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
             >
               <div className="ic">⬆️</div>
-              <b>{upBusy ? "Working…" : "Upload a PDF"}</b>
-              <p>{upBusy ? (upMsg || "") : "Drop a drawing set or spec here, or click to choose (PDF, up to 100 MB). Every page is read so your crew can ask the assistant anything."}</p>
-              {upBusy && (
+              <b>{upCurrent ? `${upCurrent.phase}…` : "Upload your plans"}</b>
+              <p>{upCurrent ? upCurrent.name : "Drop your whole drawing set & specs here, or click to choose. As many PDFs as you like — up to 100 MB each. This is the place for the big initial upload."}</p>
+              {upCurrent && (
                 <div style={{ width: "80%", maxWidth: 360, height: 6, borderRadius: 99, background: "rgba(148,166,190,.25)", overflow: "hidden", marginTop: 6 }}>
-                  <div style={{ width: `${upPct || 6}%`, height: "100%", background: "var(--brand)", transition: "width .2s" }} />
+                  <div style={{ width: `${upCurrent.phase === "Uploading" ? (upCurrent.pct || 4) : 100}%`, height: "100%", background: "var(--brand)", transition: "width .2s" }} />
                 </div>
               )}
-              {!upBusy && <span className="soon" style={{ cursor: "pointer" }}>Choose file</span>}
+              {!upCurrent && <span className="soon" style={{ cursor: "pointer" }}>Choose files</span>}
             </div>
-            {upErr && <div className="ev-err" style={{ marginTop: 12 }}>{upErr}</div>}
-            {upMsg && !upBusy && <div style={{ marginTop: 12, color: "var(--green)", fontWeight: 600 }}>{upMsg}</div>}
+
+            {upItems.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                {upItems.map((it, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", fontSize: 14, borderBottom: "1px solid rgba(148,166,190,.14)" }}>
+                    <span>{it.ok ? "✅" : "⚠️"}</span>
+                    <b style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</b>
+                    <small style={{ marginLeft: "auto", flex: "0 0 auto", color: it.ok ? "var(--green)" : "var(--red)" }}>{it.note}</small>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="pg-k" style={{ marginTop: 24 }}>Indexed for this site {docsLoaded && docs.length > 0 ? `(${docs.length})` : ""}</div>
             {!docsLoaded ? (
               <div className="page-sub">Loading…</div>
             ) : docs.length === 0 ? (
-              <div className="page-sub">{isDemo ? "This demo site already has 1 Arthur Road's plans loaded — try the assistant." : "Nothing indexed yet. Upload your first PDF above."}</div>
+              <div className="page-sub">{isDemo ? "This demo site already has 1 Arthur Road's plans loaded — try the assistant." : "Nothing indexed yet. Upload your plans above."}</div>
             ) : (
               <div className="docs">
                 {docs.map((d) => (
@@ -1357,6 +1373,7 @@ export default function Page() {
                   <div key={m.userId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid rgba(148,166,190,.15)" }}>
                     <span style={{ width: 12, height: 12, borderRadius: 99, background: crewColor(m.colorIndex), flex: "0 0 auto" }} />
                     <b style={{ fontSize: 15 }}>{m.name}{m.isMe ? " (you)" : ""}</b>
+                    {m.title && <small style={{ color: "var(--slate)" }}>· {m.title}</small>}
                     <small style={{ marginLeft: "auto", color: "var(--slate)" }}>{m.role === "admin" ? "Admin" : "Crew"}</small>
                   </div>
                 ))}
@@ -1438,7 +1455,7 @@ export default function Page() {
               <label className="ev-lbl">Assign to <span className="opt">· optional</span></label>
               <select className="ev-in" value={evAssignee} onChange={(e) => setEvAssignee(e.target.value)}>
                 <option value="">Nobody — just on the calendar</option>
-                {members.map((m) => <option key={m.userId} value={m.userId}>{m.name}{m.isMe ? " (me)" : ""}</option>)}
+                {members.map((m) => <option key={m.userId} value={m.userId}>{m.name}{m.title ? ` — ${m.title}` : ""}{m.isMe ? " (me)" : ""}</option>)}
               </select>
 
               <label className="ev-lbl">Visible to</label>
@@ -1501,7 +1518,7 @@ export default function Page() {
               <label className="ev-lbl">Assign to <span className="opt">· optional</span></label>
               <select className="ev-in" value={tkAssignee} onChange={(e) => setTkAssignee(e.target.value)}>
                 <option value="">Nobody — just a to-do</option>
-                {members.map((m) => <option key={m.userId} value={m.userId}>{m.name}{m.isMe ? " (me)" : ""}</option>)}
+                {members.map((m) => <option key={m.userId} value={m.userId}>{m.name}{m.title ? ` — ${m.title}` : ""}{m.isMe ? " (me)" : ""}</option>)}
               </select>
 
               <label className="ev-lbl">Visible to</label>
@@ -1535,17 +1552,35 @@ function SiteSetup(props: {
   setMode: (m: "create" | "join") => void;
   name: string; setName: (v: string) => void;
   code: string; setCode: (v: string) => void;
+  personName: string; setPersonName: (v: string) => void;
+  title: string; setTitle: (v: string) => void;
   busy: boolean; err: string | null;
   createdCode: string | null; createdName: string;
   onCreate: () => void; onJoin: () => void;
-  onClose?: () => void; onEnter: () => void;
+  onClose?: () => void; onEnter: () => void; onUploadPlans: () => void;
   onCopy: () => void; copied: boolean;
   onSignOut: () => void;
 }) {
   const p = props;
+  // Your name + job title — collected on BOTH create and join so assigning by
+  // name ("Jon") or by title ("the site manager") both work.
+  const who = (submit: () => void, titlePlaceholder: string) => (
+    <div className="ev-grid" style={{ marginTop: 10 }}>
+      <div>
+        <label className="ev-lbl">Your name</label>
+        <input className="ev-in" value={p.personName} onChange={(e) => p.setPersonName(e.target.value)} placeholder="e.g. Jon Smith"
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
+      </div>
+      <div>
+        <label className="ev-lbl">Your title</label>
+        <input className="ev-in" value={p.title} onChange={(e) => p.setTitle(e.target.value)} placeholder={titlePlaceholder}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
+      </div>
+    </div>
+  );
   return (
     <div className="scrim" onClick={() => p.onClose?.()} style={{ background: p.mandatory ? "var(--bg, #F4F7FB)" : undefined }}>
-      <div className="sheet" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
         {p.createdCode ? (
           <>
             <div className="sh-top"><div className="ti"><b>Your site is live 🎉</b><small>{p.createdName}</small></div></div>
@@ -1555,15 +1590,19 @@ function SiteSetup(props: {
                 <div style={{ flex: 1, fontFamily: "ui-monospace, monospace", fontSize: 26, fontWeight: 700, letterSpacing: 3, padding: "16px", borderRadius: 12, background: "rgba(14,116,189,.08)", color: "var(--navy)", textAlign: "center" }}>{p.createdCode}</div>
                 <button className="lg-btn" style={{ height: 56, margin: 0, width: "auto", padding: "0 18px" }} onClick={p.onCopy}>{p.copied ? "Copied ✓" : "Copy"}</button>
               </div>
-              <div className="form-actions" style={{ marginTop: 20 }}>
-                <button className="lg-btn primary" style={{ height: 48, margin: 0, flex: 1 }} onClick={p.onEnter}>Enter {p.createdName} →</button>
+              <p className="page-sub" style={{ margin: "18px 0 8px" }}>Next: load this site&apos;s plans. Drop the whole drawing set &amp; specs — Soterra reads every page so you and the crew can ask it anything.</p>
+              <div className="form-actions" style={{ marginTop: 6 }}>
+                <button className="lg-btn primary" style={{ height: 48, margin: 0, flex: 1 }} onClick={p.onUploadPlans}>⬆ Upload site plans</button>
+              </div>
+              <div style={{ textAlign: "center", marginTop: 12 }}>
+                <button onClick={p.onEnter} style={{ background: "none", border: "none", color: "var(--slate)", fontSize: 14, cursor: "pointer", textDecoration: "underline" }}>Skip for now — enter {p.createdName}</button>
               </div>
             </div>
           </>
         ) : (
           <>
             <div className="sh-top">
-              <div className="ti"><b>{p.mandatory ? "Welcome to Soterra" : "Create or join a site"}</b><small>{p.mandatory ? "Set up your first site to get going" : "Start a new site or join your crew's"}</small></div>
+              <div className="ti"><b>{p.mandatory ? "Welcome to Soterra" : "Create or join a site"}</b><small>{p.mandatory ? "Set up your site to get going" : "Start a new site or join your crew's"}</small></div>
               {p.onClose && <button className="sh-x" onClick={p.onClose}>✕</button>}
             </div>
             <div className="form-body">
@@ -1577,7 +1616,8 @@ function SiteSetup(props: {
                   <label className="ev-lbl">Site name</label>
                   <input className="ev-in" value={p.name} autoFocus onChange={(e) => p.setName(e.target.value)} placeholder="e.g. 12 Beach Road — Townhouses"
                     onKeyDown={(e) => { if (e.key === "Enter") p.onCreate(); }} />
-                  <p className="page-sub" style={{ margin: "8px 0 0" }}>You&apos;ll be the site admin and get an invite code to bring your crew on.</p>
+                  {who(p.onCreate, "e.g. Project Manager")}
+                  <p className="page-sub" style={{ margin: "10px 0 0" }}>You&apos;ll be the site admin and get an invite code to bring your crew on.</p>
                   {p.err && <div className="ev-err">{p.err}</div>}
                   <div className="form-actions" style={{ marginTop: 18 }}>
                     <button className="lg-btn primary" style={{ height: 48, margin: 0, flex: 1 }} disabled={p.busy} onClick={p.onCreate}>{p.busy ? "Creating…" : "Create site"}</button>
@@ -1589,7 +1629,8 @@ function SiteSetup(props: {
                   <input className="ev-in" value={p.code} autoFocus onChange={(e) => p.setCode(e.target.value.toUpperCase())} placeholder="XXXX-XXXX"
                     style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
                     onKeyDown={(e) => { if (e.key === "Enter") p.onJoin(); }} />
-                  <p className="page-sub" style={{ margin: "8px 0 0" }}>Enter the code your site manager shared to join their site.</p>
+                  {who(p.onJoin, "e.g. Site Manager")}
+                  <p className="page-sub" style={{ margin: "10px 0 0" }}>Enter the code your site manager shared, plus your name &amp; title, to join the site.</p>
                   {p.err && <div className="ev-err">{p.err}</div>}
                   <div className="form-actions" style={{ marginTop: 18 }}>
                     <button className="lg-btn primary" style={{ height: 48, margin: 0, flex: 1 }} disabled={p.busy} onClick={p.onJoin}>{p.busy ? "Joining…" : "Join site"}</button>
