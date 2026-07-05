@@ -1,8 +1,44 @@
 import { pgTable, text, timestamp, boolean, uuid, index, integer, uniqueIndex } from "drizzle-orm/pg-core";
 
+// ─── Sites (projects): the top-level container. A PM signs up, creates a site,
+//     gets a join code; crew enter the code to join. Everything else (events,
+//     tasks, threads, plans, usage) is scoped to a projectId. ───
+export const projects = pgTable(
+  "projects",
+  {
+    id: text("id").primaryKey(), // app-generated (uuid); the demo keeps "1-arthur-road"
+    name: text("name").notNull(),
+    code: text("code").notNull(), // invite/join code (XXXX-XXXX)
+    creatorId: text("creator_id").notNull(), // Clerk userId of the admin/PM
+    timezone: text("timezone").default("Pacific/Auckland").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({ byCode: uniqueIndex("projects_code_idx").on(t.code) })
+);
+
+// ─── Site crew: one row per (site, user). Joining via code adds a member; the
+//     creator is an admin. colorIndex drives colour-by-crew across the calendar. ───
+export const projectMembers = pgTable(
+  "project_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: text("project_id").notNull(),
+    userId: text("user_id").notNull(), // Clerk userId
+    name: text("name"), // display name at join time
+    role: text("role").default("member").notNull(), // admin | member
+    colorIndex: integer("color_index").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byProject: index("project_members_project_idx").on(t.projectId),
+    byUser: index("project_members_user_idx").on(t.userId),
+    uniq: uniqueIndex("project_members_project_user_idx").on(t.projectId, t.userId),
+  })
+);
+
 // ─── Calendar events: the shared site schedule (inspections, deliveries, pours)
 //     and personal ones. Scoped to a project; owned by a creator; visible to the
-//     whole team or just the creator. Ported/adapted from the Montázs calendar. ───
+//     whole team or just the creator; optionally assigned to a crew member. ───
 export const events = pgTable(
   "events",
   {
@@ -15,18 +51,19 @@ export const events = pgTable(
     endsAt: timestamp("ends_at", { withTimezone: true }), // optional end date/time
     allDay: boolean("all_day").default(false).notNull(),
     location: text("location"),
-    // Optional event type — null = untyped (no tag shown). When set, one of:
-    // inspection | delivery | pour | meeting | reminder | other. Nullable so the
-    // type can be left blank (Adam: "make it optional"); kept as free text so new
-    // types can be added without a migration.
+    // Optional event type — null = untyped. inspection|delivery|pour|meeting|reminder|other.
     kind: text("kind"),
     visibility: text("visibility").default("team").notNull(), // team | private
+    // Optional assignee — the crew member responsible. Null = unassigned.
+    assigneeId: text("assignee_id"), // Clerk user id of the assignee
+    assigneeName: text("assignee_name"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({ byProject: index("events_project_idx").on(t.projectId) })
 );
 
-// ─── Tasks / to-dos (Teendők): personal by default, shareable to the team. ───
+// ─── Tasks / to-dos (Teendők): personal by default, shareable to the team,
+//     assignable to a crew member. ───
 export const tasks = pgTable(
   "tasks",
   {
@@ -39,14 +76,15 @@ export const tasks = pgTable(
     endsAt: timestamp("ends_at", { withTimezone: true }), // optional finish-by date+time
     done: boolean("done").default(false).notNull(),
     visibility: text("visibility").default("private").notNull(), // private | team
+    assigneeId: text("assignee_id"), // Clerk user id of the assignee (null = unassigned)
+    assigneeName: text("assignee_name"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({ byProject: index("tasks_project_idx").on(t.projectId) })
 );
 
 // ─── Assistant chat threads (saved conversations) + their messages. Threads are
-//     PERSONAL (scoped to the Clerk user) within a project — your own chat
-//     history, shown in the assistant sidebar. ───
+//     PERSONAL (scoped to the Clerk user) within a project. ───
 export const chatThreads = pgTable(
   "chat_threads",
   {
@@ -72,8 +110,7 @@ export const chatMessages = pgTable(
   (t) => ({ byThread: index("chat_messages_thread_idx").on(t.threadId) })
 );
 
-// ─── Per-project daily assistant usage counter — a race-safe runaway-cost cap.
-//     One row per (project, day); incremented atomically before each model run. ───
+// ─── Per-project daily assistant usage counter — a race-safe runaway-cost cap. ───
 export const usageCounters = pgTable(
   "usage_counters",
   {
@@ -87,8 +124,7 @@ export const usageCounters = pgTable(
 );
 
 // ─── Extracted plan/spec pages — the per-project searchable index built from
-//     uploaded PDFs (the files live in Vercel Blob; only the text + metadata
-//     land here). One row per page; the assistant's search_plans runs over these. ───
+//     uploaded PDFs (files live in Vercel Blob; only text + metadata land here). ───
 export const planPages = pgTable(
   "plan_pages",
   {
@@ -107,9 +143,29 @@ export const planPages = pgTable(
   (t) => ({ byProject: index("plan_pages_project_idx").on(t.projectId) })
 );
 
+// ─── Building Code corpus — the SHARED (universal, not per-project) knowledge
+//     base: extracted text from the free MBIE Acceptable Solutions / Verification
+//     Methods / Handbook / guidance. The assistant's search_code runs over this. ───
+export const codePages = pgTable(
+  "code_pages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    doc: text("doc").notNull(), // readable title (e.g. "E2 External Moisture — AS1")
+    file: text("file").notNull(), // source pdf filename
+    page: integer("page").notNull(),
+    npages: integer("npages").notNull(),
+    title: text("title"),
+    text: text("text").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  }
+);
+
+export type Project = typeof projects.$inferSelect;
+export type ProjectMember = typeof projectMembers.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
 export type ChatThread = typeof chatThreads.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
+export type CodePage = typeof codePages.$inferSelect;

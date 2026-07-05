@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
+import { upload } from "@vercel/blob/client";
+import Landing from "./landing";
 
 type Tab = "assistant" | "calendar" | "tasks" | "plans" | "upload";
 type Cite = { code: string; title: string; sub: string; ans: string; hlTag: string };
@@ -13,16 +15,26 @@ type AsstCard = {
   sub: string;
   kind: string | null;
   visibility: "team" | "private";
+  assigneeName?: string | null;
 };
 type Msg =
   | { role: "u"; text: string; att?: string }
   | { role: "a"; src?: string; text: string; raw?: string; cite?: Cite; cards?: AsstCard[]; pending?: boolean };
 type Attachment = { kind: "image" | "pdf"; mediaType: string; data: string; name: string };
 
-// ─── Calendar + Tasks ─── (ported/adapted from the Montázs naptar/teendők)
-const PROJECT_ID = "1-arthur-road";
+// ─── Sites (projects) + crew ───
+type Project = { id: string; name: string; code: string; role: string; timezone?: string };
+type Member = { userId: string; name: string; role: string; colorIndex: number; isMe: boolean };
+type PlanDoc = { doc: string; npages: number; indexed: number; file: string | null; uploadedAt: string };
+
 // Soterra's project timezone. TODO: per-project tz once projects carry one.
 const TZ = "Pacific/Auckland";
+const DEMO_ID = "1-arthur-road";
+
+// Crew colour palette (matches colorIndex 0–7). Used to colour events by whoever
+// they're assigned to, plus the crew legend + invite panel.
+const CREW_COLORS = ["#0E74BD", "#10B981", "#8B5CF6", "#F59E0B", "#EF4444", "#06B6D4", "#EC4899", "#0A2540"];
+const crewColor = (i: number) => CREW_COLORS[(((i ?? 0) % 8) + 8) % 8];
 
 type EventKind = "inspection" | "delivery" | "pour" | "meeting" | "reminder" | "other";
 type CalEvent = {
@@ -35,6 +47,8 @@ type CalEvent = {
   kind: EventKind | null; // null = untyped (no tag)
   visibility: "team" | "private";
   creatorName: string | null;
+  assigneeId: string | null;
+  assigneeName: string | null;
 };
 type CalTask = {
   id: string;
@@ -44,6 +58,8 @@ type CalTask = {
   done: boolean;
   visibility: "team" | "private";
   creatorName: string | null;
+  assigneeId: string | null;
+  assigneeName: string | null;
 };
 
 // Event types for the dropdown. Empty value = no type (optional).
@@ -56,8 +72,8 @@ const EVENT_KINDS: { value: EventKind; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-// TODO: colour by crew member once a crew table exists. For now we colour by
-// event kind, reusing the dot/bar classes + CSS vars. null kind → neutral slate.
+// Event colours: an event assigned to a crew member takes THAT member's colour
+// (colour-by-crew); otherwise it falls back to a colour for its type.
 const KIND_DOT: Record<EventKind, string> = {
   inspection: "bl", delivery: "gr", pour: "nv", meeting: "pu", reminder: "am", other: "sl",
 };
@@ -173,10 +189,27 @@ export default function Page() {
   const [sheet, setSheet] = useState<Cite | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // ─── sites (projects) + crew ───
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [siteCode, setSiteCode] = useState<string | null>(null);
+  const projRef = useRef<string | null>(null); // always-current site id for fetch headers
+  // site create/join overlay + crew panel
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupMode, setSetupMode] = useState<"create" | "join">("create");
+  const [setupName, setSetupName] = useState("");
+  const [setupCode, setSetupCode] = useState("");
+  const [setupBusy, setSetupBusy] = useState(false);
+  const [setupErr, setSetupErr] = useState<string | null>(null);
+  const [createdCode, setCreatedCode] = useState<string | null>(null);
+  const [crewOpen, setCrewOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   // ─── saved conversations (threads) ───
   const [threads, setThreads] = useState<{ id: string; title: string | null; updatedAt: string }[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
-  const [threadsLoaded, setThreadsLoaded] = useState(false);
   const [railOpen, setRailOpen] = useState(false); // mobile drawer
   const [railCollapsed, setRailCollapsed] = useState(false); // desktop collapse
 
@@ -190,9 +223,15 @@ export default function Page() {
   const recognitionRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ─── plan upload (Upload tab) ─── parked: the working uploader is built + the
-  // backend routes are deployed, but the UI is held to a placeholder until we do
-  // the private + multi-project pass together (so it never ships half-wired).
+  // ─── plan upload (Upload tab) + indexed docs (Plans tab) ───
+  const [docs, setDocs] = useState<PlanDoc[]>([]);
+  const [docsLoaded, setDocsLoaded] = useState(false);
+  const [upBusy, setUpBusy] = useState(false);
+  const [upMsg, setUpMsg] = useState<string | null>(null);
+  const [upErr, setUpErr] = useState<string | null>(null);
+  const [upPct, setUpPct] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  const planFileRef = useRef<HTMLInputElement>(null);
 
   // ─── live Calendar + Tasks state ───
   const now = useMemo(() => new Date(), []);
@@ -207,9 +246,18 @@ export default function Page() {
   const [showEventForm, setShowEventForm] = useState(false);
   const [showTaskForm, setShowTaskForm] = useState(false);
 
+  // fetch() wrapper that tags every request with the current site so the server
+  // can scope + authorise it. All per-site routes go through this.
+  const apiFetch = (path: string, init: RequestInit = {}) => {
+    const headers = new Headers(init.headers || {});
+    const pid = projRef.current;
+    if (pid) headers.set("x-soterra-project", pid);
+    return fetch(path, { ...init, headers });
+  };
+
   const loadEvents = async () => {
     try {
-      const res = await fetch("/api/events");
+      const res = await apiFetch("/api/events");
       const data = await res.json();
       if (Array.isArray(data.events)) setEvents(data.events);
     } catch {
@@ -220,7 +268,7 @@ export default function Page() {
   };
   const loadTasks = async () => {
     try {
-      const res = await fetch("/api/tasks");
+      const res = await apiFetch("/api/tasks");
       const data = await res.json();
       if (Array.isArray(data.tasks)) setTasks(data.tasks);
     } catch {
@@ -229,16 +277,65 @@ export default function Page() {
       setTaskLoaded(true);
     }
   };
-
   const loadThreads = async () => {
     try {
-      const res = await fetch("/api/threads");
+      const res = await apiFetch("/api/threads");
       const data = await res.json();
       if (Array.isArray(data.threads)) setThreads(data.threads);
     } catch {
       /* ignore */
+    }
+  };
+  const loadMembers = async () => {
+    try {
+      const res = await apiFetch("/api/members");
+      const data = await res.json();
+      if (Array.isArray(data.members)) setMembers(data.members);
+      if (data.code) setSiteCode(data.code);
+    } catch {
+      /* ignore */
+    }
+  };
+  const loadPlans = async () => {
+    try {
+      const res = await apiFetch("/api/plans");
+      const data = await res.json();
+      if (Array.isArray(data.docs)) setDocs(data.docs);
+    } catch {
+      /* ignore */
     } finally {
-      setThreadsLoaded(true);
+      setDocsLoaded(true);
+    }
+  };
+
+  // Switch to a site: point the fetch header at it, reset per-site data, reload.
+  const selectProject = (id: string) => {
+    projRef.current = id;
+    setProjectId(id);
+    try { window.localStorage.setItem("soterra:project", id); } catch { /* ignore */ }
+    setEvents([]); setTasks([]); setThreads([]); setMessages([]); setThreadId(null); setDocs([]);
+    setEvLoaded(false); setTaskLoaded(false); setDocsLoaded(false);
+    setMembers([]); setSiteCode(null);
+    loadThreads();
+    loadMembers();
+  };
+
+  const loadProjects = async () => {
+    try {
+      const res = await fetch("/api/projects");
+      const data = await res.json();
+      const list: Project[] = Array.isArray(data.projects) ? data.projects : [];
+      setProjects(list);
+      if (list.length) {
+        let saved: string | null = null;
+        try { saved = window.localStorage.getItem("soterra:project"); } catch { /* ignore */ }
+        const pick = list.find((p) => p.id === saved) || list[0];
+        selectProject(pick.id);
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setProjectsLoaded(true);
     }
   };
 
@@ -255,7 +352,7 @@ export default function Page() {
     setRailOpen(false);
     setTab("assistant");
     try {
-      const res = await fetch(`/api/threads?id=${encodeURIComponent(id)}`);
+      const res = await apiFetch(`/api/threads?id=${encodeURIComponent(id)}`);
       const data = await res.json();
       if (Array.isArray(data.messages)) {
         setMessages(
@@ -270,17 +367,20 @@ export default function Page() {
     }
   };
 
-  // Lazy-load each tab's data the first time it's opened.
+  // Lazy-load each tab's data the first time it's opened (after a site is picked).
   useEffect(() => {
+    if (!projectId) return;
     if (tab === "calendar" && !evLoaded) loadEvents();
     if (tab === "tasks" && !taskLoaded) loadTasks();
-  }, [tab, evLoaded, taskLoaded]);
+    if ((tab === "plans" || tab === "upload") && !docsLoaded) loadPlans();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, evLoaded, taskLoaded, docsLoaded, projectId]);
 
   const toggleTask = async (t: CalTask) => {
     const next = !t.done;
     setTasks((ts) => ts.map((x) => (x.id === t.id ? { ...x, done: next } : x))); // optimistic
     try {
-      const res = await fetch("/api/tasks", {
+      const res = await apiFetch("/api/tasks", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: t.id, done: next }),
@@ -312,7 +412,7 @@ export default function Page() {
     setVis(next); // optimistic
     try {
       const url = card.itemType === "event" ? "/api/events" : "/api/tasks";
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: card.id, visibility: next }),
@@ -325,7 +425,7 @@ export default function Page() {
     }
   };
 
-  // ─── Create-event form ─── (the full add-form: type dropdown + end date/time)
+  // ─── Create-event form ─── (the full add-form: type dropdown + assignee + end date/time)
   const [evTitle, setEvTitle] = useState("");
   const [evDate, setEvDate] = useState(todayKey());
   const [evTime, setEvTime] = useState("");
@@ -333,13 +433,14 @@ export default function Page() {
   const [evEndTime, setEvEndTime] = useState("");
   const [evKind, setEvKind] = useState<EventKind | "">(""); // "" = no type
   const [evLocation, setEvLocation] = useState("");
+  const [evAssignee, setEvAssignee] = useState(""); // "" = nobody
   const [evVis, setEvVis] = useState<"team" | "private">("team");
   const [evSaving, setEvSaving] = useState(false);
   const [evError, setEvError] = useState<string | null>(null);
 
   const resetEventForm = () => {
     setEvTitle(""); setEvDate(todayKey()); setEvTime(""); setEvEndDate(""); setEvEndTime("");
-    setEvKind(""); setEvLocation(""); setEvVis("team"); setEvError(null);
+    setEvKind(""); setEvLocation(""); setEvAssignee(""); setEvVis("team"); setEvError(null);
   };
   const openEventForm = (date?: string) => {
     resetEventForm();
@@ -355,13 +456,16 @@ export default function Page() {
     setEvSaving(true);
     setEvError(null);
     try {
-      const res = await fetch("/api/events", {
+      const res = await apiFetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title, date: evDate, time: evTime || null,
           endDate: evEndDate || null, endTime: evEndTime || null,
-          kind: evKind || null, location: evLocation.trim() || null, visibility: evVis,
+          kind: evKind || null, location: evLocation.trim() || null,
+          assigneeId: evAssignee || null,
+          assigneeName: evAssignee ? (members.find((m) => m.userId === evAssignee)?.name ?? null) : null,
+          visibility: evAssignee ? "team" : evVis,
         }),
       });
       const data = await res.json();
@@ -386,13 +490,14 @@ export default function Page() {
   const [tkTime, setTkTime] = useState("");
   const [tkEndDate, setTkEndDate] = useState("");
   const [tkEndTime, setTkEndTime] = useState("");
+  const [tkAssignee, setTkAssignee] = useState("");
   const [tkVis, setTkVis] = useState<"team" | "private">("private");
   const [tkSaving, setTkSaving] = useState(false);
   const [tkError, setTkError] = useState<string | null>(null);
 
   const resetTaskForm = () => {
     setTkTitle(""); setTkDue(""); setTkTime(""); setTkEndDate(""); setTkEndTime("");
-    setTkVis("private"); setTkError(null);
+    setTkAssignee(""); setTkVis("private"); setTkError(null);
   };
   const openTaskForm = (date?: string) => {
     resetTaskForm();
@@ -408,12 +513,15 @@ export default function Page() {
     setTkSaving(true);
     setTkError(null);
     try {
-      const res = await fetch("/api/tasks", {
+      const res = await apiFetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title, dueDate: tkDue || null, dueTime: tkTime || null,
-          endDate: tkEndDate || null, endTime: tkEndTime || null, visibility: tkVis,
+          endDate: tkEndDate || null, endTime: tkEndTime || null,
+          assigneeId: tkAssignee || null,
+          assigneeName: tkAssignee ? (members.find((m) => m.userId === tkAssignee)?.name ?? null) : null,
+          visibility: tkAssignee ? "team" : tkVis,
         }),
       });
       const data = await res.json();
@@ -438,10 +546,11 @@ export default function Page() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
-  // Load the saved-conversations list once signed in.
+  // Load the user's sites once signed in.
   useEffect(() => {
-    if (isSignedIn && !threadsLoaded) loadThreads();
-  }, [isSignedIn, threadsLoaded]);
+    if (isSignedIn && !projectsLoaded) loadProjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSignedIn, projectsLoaded]);
 
   // Restore the desktop sidebar collapse preference.
   useEffect(() => {
@@ -541,7 +650,7 @@ export default function Page() {
     setTab("assistant");
     setMessages((m) => [...m, { role: "u", text: t, att: att?.name }, { role: "a", text: "…", pending: true }]);
     try {
-      const res = await fetch("/api/ask", {
+      const res = await apiFetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, threadId, attachment: att }),
@@ -564,6 +673,94 @@ export default function Page() {
       setMessages((prev) => [...prev.slice(0, -1), { role: "a", text: "Sorry — couldn't reach the assistant just now. Try again." }]);
     } finally {
       setBusy(false);
+    }
+  };
+
+  // ─── site create / join ───
+  const resetSetup = () => { setSetupName(""); setSetupCode(""); setSetupErr(null); setCreatedCode(null); setSetupMode("create"); };
+  const closeSetup = () => { setSetupOpen(false); resetSetup(); };
+  const createSite = async () => {
+    const name = setupName.trim();
+    if (!name) { setSetupErr("Give your site a name."); return; }
+    setSetupBusy(true); setSetupErr(null);
+    try {
+      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name }) });
+      const data = await res.json();
+      if (!res.ok || !data.project) throw new Error(data.error || "Couldn't create the site.");
+      setProjects((ps) => [...ps, data.project]);
+      selectProject(data.project.id);
+      setCreatedCode(data.project.code); // keep overlay open to show the code
+    } catch (e) {
+      setSetupErr(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setSetupBusy(false);
+    }
+  };
+  const joinSite = async () => {
+    const code = setupCode.trim().toUpperCase();
+    if (!code) { setSetupErr("Enter the join code."); return; }
+    setSetupBusy(true); setSetupErr(null);
+    try {
+      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "join", code }) });
+      const data = await res.json();
+      if (!res.ok || !data.project) throw new Error(data.error || "That code didn't match a site.");
+      setProjects((ps) => (ps.some((p) => p.id === data.project.id) ? ps : [...ps, data.project]));
+      selectProject(data.project.id);
+      closeSetup();
+      setTab("assistant");
+    } catch (e) {
+      setSetupErr(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setSetupBusy(false);
+    }
+  };
+  const copyCode = async (code: string) => {
+    if (!code) return;
+    try { await navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1600); } catch { /* ignore */ }
+  };
+
+  // ─── plan upload (private, per-site) ───
+  const onPlanFile = async (file: File) => {
+    const pid = projRef.current;
+    if (!pid) return;
+    if (!(file.type === "application/pdf" || /\.pdf$/i.test(file.name))) { setUpErr("Only PDFs can be indexed here."); return; }
+    if (file.size > 100 * 1024 * 1024) { setUpErr("That file's over 100 MB — split the set and try again."); return; }
+    setUpBusy(true); setUpErr(null); setUpPct(0);
+    setUpMsg(`Uploading ${file.name}…`);
+    try {
+      const blob = await upload(`${pid}/${file.name}`, file, {
+        access: "private",
+        handleUploadUrl: "/api/upload/token",
+        clientPayload: JSON.stringify({ projectId: pid }),
+        contentType: "application/pdf",
+        onUploadProgress: (p) => setUpPct(Math.round(p.percentage)),
+      });
+      setUpPct(100);
+      setUpMsg(`Reading & indexing ${file.name}… (large sets take a moment)`);
+      const res = await apiFetch("/api/upload/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pathname: blob.pathname, filename: file.name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Indexing failed.");
+      setUpMsg(`✓ Indexed ${data.indexed} page${data.indexed === 1 ? "" : "s"} from ${file.name}. Ask the assistant about it.`);
+      loadPlans();
+    } catch (e) {
+      setUpErr(e instanceof Error ? e.message : "Upload failed.");
+      setUpMsg(null);
+    } finally {
+      setUpBusy(false);
+      setUpPct(0);
+    }
+  };
+  const deletePlan = async (doc: string) => {
+    if (!window.confirm(`Remove "${doc}" from this site's index? The assistant will stop using it.`)) return;
+    setDocs((ds) => ds.filter((d) => d.doc !== doc)); // optimistic
+    try {
+      await apiFetch("/api/plans", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ doc }) });
+    } catch {
+      loadPlans(); // resync on failure
     }
   };
 
@@ -593,23 +790,36 @@ export default function Page() {
     return map;
   }, [tasks]);
 
+  // Crew colour lookup for colour-by-crew across rows + the grid.
+  const memberById = useMemo(() => new Map(members.map((m) => [m.userId, m])), [members]);
+  const colorFor = (id: string | null): string | null => {
+    if (!id) return null;
+    const m = memberById.get(id);
+    return m ? crewColor(m.colorIndex) : null;
+  };
+
   // Month grid cells: day number, today flag, out-of-month, and the distinct
-  // kind-dots present that day (+ a slate dot if any tasks are due).
+  // dots present that day — crew colour when an event is assigned, else its type.
   const calCells = useMemo(() => {
     const grid = buildMonthGrid(calYear, calMonth);
     const tk = todayKey();
     return grid.map((d) => {
       const k = dayKey(d);
       const dayEvents = eventsByDay.get(k) ?? [];
-      const dots: string[] = [];
+      const dots: { cls?: string; color?: string }[] = [];
+      const seen = new Set<string>();
       for (const e of dayEvents) {
-        const dot = dotClass(e.kind);
-        if (!dots.includes(dot)) dots.push(dot);
+        const crew = e.assigneeId ? colorFor(e.assigneeId) : null;
+        const key = crew ? `c:${crew}` : `k:${dotClass(e.kind)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        dots.push(crew ? { color: crew } : { cls: dotClass(e.kind) });
       }
-      if ((tasksByDay.get(k)?.length ?? 0) > 0 && !dots.includes("sl")) dots.push("sl");
+      if ((tasksByDay.get(k)?.length ?? 0) > 0 && !seen.has("k:sl")) { seen.add("k:sl"); dots.push({ cls: "sl" }); }
       return { k, n: d.getDate(), today: k === tk, dots: dots.slice(0, 4), mut: d.getMonth() !== calMonth };
     });
-  }, [calYear, calMonth, eventsByDay, tasksByDay]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calYear, calMonth, eventsByDay, tasksByDay, memberById]);
 
   // "This week": events from today through the next 7 days, in the project tz.
   const weekEvents = useMemo(() => {
@@ -626,8 +836,6 @@ export default function Page() {
   // Agenda / Napirend: every upcoming event + due-dated task from the start of
   // today onward, grouped by day and time-sorted within each day.
   const agenda = useMemo(() => {
-    // Include anything from today (project tz) onward. Compare YYYY-MM-DD day
-    // keys (lexicographic = chronological) — tz-correct, no fragile ms math.
     const tk0 = todayKey();
     type Item = { t: number; ev?: CalEvent; tk?: CalTask };
     const byDay = new Map<string, Item[]>();
@@ -667,34 +875,45 @@ export default function Page() {
 
   /* ─── Signed out: login ─── */
   if (!isSignedIn) {
-    return (
-      <div className="login">
-        <div className="login-card">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="lg-logo" src="/logo-mark.png" alt="Soterra" />
-          <div className="lg-pill">Ask your plans</div>
-          <h1 className="lg-h">The answer&apos;s in the plans.<br /><b className="grad">Just ask.</b></h1>
-          <p className="lg-sub">
-            Your whole crew can ask any question about the project&apos;s drawings and specs — and get the answer in
-            seconds, with the exact sheet to back it up.
-          </p>
-          <button className="lg-btn" onClick={() => clerk.openSignIn()}>
-            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" /><path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38z" /></svg>
-            Continue with Google
-          </button>
-          <button className="lg-btn primary" onClick={() => clerk.openSignIn()}>Continue with email</button>
-          <div className="lg-alt">
-            New company? <a onClick={() => clerk.openSignUp()}>Set up your project →</a><br />
-            Joining your team? <a onClick={() => clerk.openSignUp()}>Enter an invite code →</a>
-          </div>
-        </div>
-      </div>
-    );
+    return <Landing onLogin={() => clerk.openSignIn()} onGetStarted={() => clerk.openSignUp()} />;
   }
+  if (!projectsLoaded) return <div className="boot" />;
 
   const firstName =
     user?.firstName || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || user?.username || "there";
   const initials = (firstName[0] || "S").toUpperCase();
+  const curProject = projects.find((p) => p.id === projectId) || null;
+  const projName = curProject?.name || "Your site";
+  const isDemo = projectId === DEMO_ID;
+  const activeCode = siteCode || curProject?.code || "";
+
+  /* ─── First run (or explicit switch): create / join a site ─── */
+  const mustSetUp = !projectId;
+  if (mustSetUp || setupOpen) {
+    return (
+      <SiteSetup
+        mandatory={mustSetUp}
+        mode={setupMode}
+        setMode={setSetupMode}
+        name={setupName}
+        setName={setSetupName}
+        code={setupCode}
+        setCode={setSetupCode}
+        busy={setupBusy}
+        err={setupErr}
+        createdCode={createdCode}
+        createdName={projName}
+        onCreate={createSite}
+        onJoin={joinSite}
+        onClose={mustSetUp ? undefined : closeSetup}
+        onEnter={() => { closeSetup(); setTab("assistant"); }}
+        onCopy={() => copyCode(createdCode || "")}
+        copied={copied}
+        onSignOut={() => clerk.signOut()}
+      />
+    );
+  }
+
   // Collapse only applies on desktop; the mobile drawer (railOpen) always shows full.
   const showCollapsed = railCollapsed && !railOpen;
 
@@ -711,7 +930,7 @@ export default function Page() {
         ref={taRef}
         rows={1}
         value={input}
-        placeholder="Ask your plans, or book something on site…"
+        placeholder="Ask about your plans, the building code, or organise your site calendar…"
         onChange={(e) => {
           setInput(e.target.value);
           e.target.style.height = "auto";
@@ -757,13 +976,21 @@ export default function Page() {
           ))}
         </nav>
         <div className="navright">
-          <div className="proj-chip"><span className="dot" /> 1 Arthur Road <small>· 6 docs</small></div>
+          <div className="proj-chip" onClick={() => setMenuOpen((o) => !o)} style={{ cursor: "pointer" }}>
+            <span className="dot" /> {projName}
+            {isDemo && <small>· demo</small>}
+          </div>
           <button className="avatar" onClick={() => setMenuOpen((o) => !o)}>{initials}</button>
           {menuOpen && (
             <div className="menu">
-              <div className="mrow"><span className="mi">🏗️</span><div><b>1 Arthur Road</b><br /><small>Multi-unit housing</small></div></div>
-              <div className="mrow"><span className="mi">➕</span> Switch / add project</div>
-              <div className="mrow"><span className="mi">👥</span> Crew &amp; invite code</div>
+              <div className="mrow"><span className="mi">🏗️</span><div><b>{projName}</b><br /><small>{curProject?.role === "admin" ? "You're the admin" : "Crew member"}</small></div></div>
+              {projects.filter((p) => p.id !== projectId).map((p) => (
+                <div className="mrow" key={p.id} onClick={() => { selectProject(p.id); setMenuOpen(false); setTab("assistant"); }}>
+                  <span className="mi">📍</span> {p.name}
+                </div>
+              ))}
+              <div className="mrow" onClick={() => { resetSetup(); setSetupOpen(true); setMenuOpen(false); }}><span className="mi">➕</span> Create / join a site</div>
+              <div className="mrow" onClick={() => { setCrewOpen(true); setMenuOpen(false); loadMembers(); }}><span className="mi">👥</span> Crew &amp; invite code</div>
               <div className="mrow sep" onClick={() => clerk.signOut()}><span className="mi">↩️</span> Sign out</div>
             </div>
           )}
@@ -882,7 +1109,17 @@ export default function Page() {
         {tab === "calendar" && (
           <div className="page"><div className="page-inner">
             <div className="page-h">Calendar</div>
-            <div className="page-sub">1 Arthur Road · site schedule (NZ time)</div>
+            <div className="page-sub">{projName} · site schedule (NZ time)</div>
+            {members.length > 1 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, margin: "0 0 16px" }}>
+                {members.map((m) => (
+                  <span key={m.userId} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)" }}>
+                    <i style={{ width: 10, height: 10, borderRadius: 99, background: crewColor(m.colorIndex), display: "inline-block" }} />
+                    {m.name}{m.isMe ? " (you)" : ""}
+                  </span>
+                ))}
+              </div>
+            )}
 
             <div className="cal-top">
               <div className="seg">
@@ -909,7 +1146,7 @@ export default function Page() {
                   <div className="cal-days">
                     {calCells.map((c, i) => (
                       <div className={"cd" + (c.today ? " today" : "") + (c.mut ? " mut" : "")} key={i} onClick={() => setOpenDay(c.k)}>
-                        {c.n}{c.dots.length > 0 && <div className="dots">{c.dots.map((d, j) => <span className={"d " + d} key={j} />)}</div>}
+                        {c.n}{c.dots.length > 0 && <div className="dots">{c.dots.map((d, j) => <span className={"d " + (d.cls || "")} style={d.color ? { background: d.color } : undefined} key={j} />)}</div>}
                       </div>
                     ))}
                   </div>
@@ -920,7 +1157,7 @@ export default function Page() {
                 ) : weekEvents.length === 0 ? (
                   <div className="page-sub" style={{ marginBottom: 0 }}>Nothing booked in the next 7 days. Add an event to get the crew on the same page.</div>
                 ) : (
-                  weekEvents.map((e) => <EventRow key={e.id} e={e} />)
+                  weekEvents.map((e) => <EventRow key={e.id} e={e} colorFor={colorFor} />)
                 )}
               </>
             ) : (
@@ -937,7 +1174,7 @@ export default function Page() {
                         {g.k === todayKey() ? "Today · " : ""}{fmtDayHeader(g.k)}
                       </div>
                       {g.items.map((it, j) =>
-                        it.ev ? <EventRow key={"e" + j} e={it.ev} /> : <TaskRow key={"t" + j} t={it.tk!} onToggle={toggleTask} />
+                        it.ev ? <EventRow key={"e" + j} e={it.ev} colorFor={colorFor} /> : <TaskRow key={"t" + j} t={it.tk!} onToggle={toggleTask} />
                       )}
                     </div>
                   ))}
@@ -953,7 +1190,7 @@ export default function Page() {
             <div className="cal-top">
               <div>
                 <div className="page-h">Tasks</div>
-                <div className="page-sub" style={{ marginBottom: 0 }}>1 Arthur Road · your to-dos and the crew&apos;s</div>
+                <div className="page-sub" style={{ marginBottom: 0 }}>{projName} · your to-dos and the crew&apos;s</div>
               </div>
               <button className="cal-new" onClick={() => openTaskForm()}>＋ New task</button>
             </div>
@@ -970,42 +1207,108 @@ export default function Page() {
 
         {/* ─── PLANS ─── */}
         {tab === "plans" && (
-          <div className="page"><div className="page-inner">
-            <div className="page-h">Plans &amp; specs</div>
-            <div className="page-sub">1 Arthur Road · every drawing &amp; spec, searchable in seconds</div>
-            <div className="idx">
-              <div><div className="big">571</div><small>pages indexed</small></div>
-              <div style={{ flex: 1 }}><small>Architectural, structural, services and specs — all read and searchable.</small><span className="grn">● Ready — last updated today</span></div>
-            </div>
-            <div className="pg-k">Architectural</div>
-            <div className="docs">
-              <Doc ic="arc" tag="A3" name="95% Detail Design" sub="85 sheets · plans, elevations" onClick={() => setSheet(DEMO_SHEET)} />
-              <Doc ic="arc" tag="A1" name="P25-152-FDS-08" sub="78 sheets · detailed design" onClick={() => setSheet(DEMO_SHEET)} />
-            </div>
-            <div className="pg-k" style={{ marginTop: 18 }}>Services</div>
-            <div className="docs">
-              <Doc ic="srv" tag="ELEC" name="8084-ELEC-ESET" sub="17 sheets · power, lighting, data" onClick={() => setSheet(DEMO_SHEET)} />
-              <Doc ic="srv" tag="MECH" name="8084-MECH-MSET" sub="7 sheets · HVAC, ventilation" onClick={() => setSheet(DEMO_SHEET)} />
-            </div>
-            <div className="pg-k" style={{ marginTop: 18 }}>Specifications</div>
-            <div className="docs">
-              <Doc ic="spc" tag="SPEC" name="95% Project Spec" sub="280 pages · materials, finishes" onClick={() => setSheet(DEMO_SHEET)} />
-              <Doc ic="spc" tag="STR" name="P25-152-SPC-01 — Structural" sub="104 pages" onClick={() => setSheet(DEMO_SHEET)} />
-            </div>
-          </div></div>
+          isDemo ? (
+            <div className="page"><div className="page-inner">
+              <div className="page-h">Plans &amp; specs</div>
+              <div className="page-sub">{projName} · every drawing &amp; spec, searchable in seconds</div>
+              <div className="idx">
+                <div><div className="big">571</div><small>pages indexed</small></div>
+                <div style={{ flex: 1 }}><small>Architectural, structural, services and specs — all read and searchable.</small><span className="grn">● Ready — last updated today</span></div>
+              </div>
+              <div className="pg-k">Architectural</div>
+              <div className="docs">
+                <Doc ic="arc" tag="A3" name="95% Detail Design" sub="85 sheets · plans, elevations" onClick={() => setSheet(DEMO_SHEET)} />
+                <Doc ic="arc" tag="A1" name="P25-152-FDS-08" sub="78 sheets · detailed design" onClick={() => setSheet(DEMO_SHEET)} />
+              </div>
+              <div className="pg-k" style={{ marginTop: 18 }}>Services</div>
+              <div className="docs">
+                <Doc ic="srv" tag="ELEC" name="8084-ELEC-ESET" sub="17 sheets · power, lighting, data" onClick={() => setSheet(DEMO_SHEET)} />
+                <Doc ic="srv" tag="MECH" name="8084-MECH-MSET" sub="7 sheets · HVAC, ventilation" onClick={() => setSheet(DEMO_SHEET)} />
+              </div>
+              <div className="pg-k" style={{ marginTop: 18 }}>Specifications</div>
+              <div className="docs">
+                <Doc ic="spc" tag="SPEC" name="95% Project Spec" sub="280 pages · materials, finishes" onClick={() => setSheet(DEMO_SHEET)} />
+                <Doc ic="spc" tag="STR" name="P25-152-SPC-01 — Structural" sub="104 pages" onClick={() => setSheet(DEMO_SHEET)} />
+              </div>
+            </div></div>
+          ) : (
+            <div className="page"><div className="page-inner">
+              <div className="page-h">Plans &amp; specs</div>
+              <div className="page-sub">{projName} · every drawing &amp; spec, searchable in seconds</div>
+              {!docsLoaded ? (
+                <div className="page-sub">Loading…</div>
+              ) : docs.length === 0 ? (
+                <div className="drop" onClick={() => setTab("upload")} style={{ cursor: "pointer" }}>
+                  <div className="ic">📄</div>
+                  <b>No plans yet</b>
+                  <p>Upload your drawing set and specs — Soterra reads every page so you can ask the assistant anything about this site.</p>
+                  <span className="soon">Go to Upload →</span>
+                </div>
+              ) : (
+                <>
+                  <div className="idx">
+                    <div><div className="big">{docs.reduce((n, d) => n + d.indexed, 0)}</div><small>pages indexed</small></div>
+                    <div style={{ flex: 1 }}><small>{docs.length} document{docs.length > 1 ? "s" : ""} read and searchable by the assistant.</small><span className="grn">● Ready</span></div>
+                  </div>
+                  <div className="docs" style={{ marginTop: 14 }}>
+                    {docs.map((d) => (
+                      <div className="doc" key={d.doc}>
+                        <div className="ic spc">PDF</div>
+                        <div className="dt"><b>{d.doc}</b><small>{d.indexed} page{d.indexed === 1 ? "" : "s"} indexed</small></div>
+                        <button className="sh-x" title="Remove from index" onClick={() => deletePlan(d.doc)} style={{ position: "static" }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div></div>
+          )
         )}
 
         {/* ─── UPLOAD ─── */}
         {tab === "upload" && (
           <div className="page"><div className="page-inner">
             <div className="page-h">Upload plans</div>
-            <div className="page-sub">Add drawings &amp; specs to this project</div>
-            <div className="drop">
+            <div className="page-sub">Add drawings &amp; specs to {projName} — Soterra reads &amp; indexes every page (private to your site)</div>
+            <input ref={planFileRef} type="file" accept="application/pdf" style={{ display: "none" }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (planFileRef.current) planFileRef.current.value = ""; if (f) onPlanFile(f); }} />
+            <div
+              className="drop"
+              onClick={() => { if (!upBusy) planFileRef.current?.click(); }}
+              onDragOver={(e) => { e.preventDefault(); if (!upBusy) setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => { e.preventDefault(); setDragOver(false); if (upBusy) return; const f = e.dataTransfer.files?.[0]; if (f) onPlanFile(f); }}
+              style={{ cursor: upBusy ? "default" : "pointer", outline: dragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
+            >
               <div className="ic">⬆️</div>
-              <b>Bulk plan upload</b>
-              <p>Drop your whole drawing set and Soterra reads &amp; indexes every page so your crew can ask it anything. The engine&apos;s built &amp; tested — we&apos;re wiring it to your project this weekend.</p>
-              <span className="soon">Live very soon</span>
+              <b>{upBusy ? "Working…" : "Upload a PDF"}</b>
+              <p>{upBusy ? (upMsg || "") : "Drop a drawing set or spec here, or click to choose (PDF, up to 100 MB). Every page is read so your crew can ask the assistant anything."}</p>
+              {upBusy && (
+                <div style={{ width: "80%", maxWidth: 360, height: 6, borderRadius: 99, background: "rgba(148,166,190,.25)", overflow: "hidden", marginTop: 6 }}>
+                  <div style={{ width: `${upPct || 6}%`, height: "100%", background: "var(--brand)", transition: "width .2s" }} />
+                </div>
+              )}
+              {!upBusy && <span className="soon" style={{ cursor: "pointer" }}>Choose file</span>}
             </div>
+            {upErr && <div className="ev-err" style={{ marginTop: 12 }}>{upErr}</div>}
+            {upMsg && !upBusy && <div style={{ marginTop: 12, color: "var(--green)", fontWeight: 600 }}>{upMsg}</div>}
+
+            <div className="pg-k" style={{ marginTop: 24 }}>Indexed for this site {docsLoaded && docs.length > 0 ? `(${docs.length})` : ""}</div>
+            {!docsLoaded ? (
+              <div className="page-sub">Loading…</div>
+            ) : docs.length === 0 ? (
+              <div className="page-sub">{isDemo ? "This demo site already has 1 Arthur Road's plans loaded — try the assistant." : "Nothing indexed yet. Upload your first PDF above."}</div>
+            ) : (
+              <div className="docs">
+                {docs.map((d) => (
+                  <div className="doc" key={d.doc}>
+                    <div className="ic spc">PDF</div>
+                    <div className="dt"><b>{d.doc}</b><small>{d.indexed} page{d.indexed === 1 ? "" : "s"} indexed</small></div>
+                    <button className="sh-x" title="Remove from index" onClick={() => deletePlan(d.doc)} style={{ position: "static" }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div></div>
         )}
       </div>
@@ -1029,6 +1332,38 @@ export default function Page() {
         </div>
       )}
 
+      {/* ─── crew & invite code ─── */}
+      {crewOpen && (
+        <div className="scrim" onClick={() => setCrewOpen(false)}>
+          <div className="sheet" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti"><b>Crew &amp; invite code</b><small>{projName}</small></div>
+              <button className="sh-x" onClick={() => setCrewOpen(false)}>✕</button>
+            </div>
+            <div className="form-body">
+              <label className="ev-lbl">Invite code</label>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ flex: 1, fontFamily: "ui-monospace, monospace", fontSize: 22, fontWeight: 700, letterSpacing: 2, padding: "12px 14px", borderRadius: 12, background: "rgba(14,116,189,.08)", color: "var(--navy)", textAlign: "center" }}>
+                  {activeCode || "—"}
+                </div>
+                <button className="lg-btn" style={{ height: 48, margin: 0, width: "auto", padding: "0 16px" }} onClick={() => copyCode(activeCode)}>{copied ? "Copied ✓" : "Copy"}</button>
+              </div>
+              <p className="page-sub" style={{ margin: "10px 0 18px" }}>Share this code — anyone who enters it joins <b>{projName}</b> and sees the shared calendar, tasks and plans. {curProject?.role === "admin" ? "" : "(Only the admin should hand this out.)"}</p>
+              <label className="ev-lbl">On this site ({members.length})</label>
+              <div>
+                {members.map((m) => (
+                  <div key={m.userId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid rgba(148,166,190,.15)" }}>
+                    <span style={{ width: 12, height: 12, borderRadius: 99, background: crewColor(m.colorIndex), flex: "0 0 auto" }} />
+                    <b style={{ fontSize: 15 }}>{m.name}{m.isMe ? " (you)" : ""}</b>
+                    <small style={{ marginLeft: "auto", color: "var(--slate)" }}>{m.role === "admin" ? "Admin" : "Crew"}</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── day-detail modal (clickable calendar day) ─── */}
       {openDay && (
         <div className="scrim" onClick={() => setOpenDay(null)}>
@@ -1044,7 +1379,7 @@ export default function Page() {
               {(eventsByDay.get(openDay)?.length ?? 0) === 0 && (tasksByDay.get(openDay)?.length ?? 0) === 0 && (
                 <div className="page-sub" style={{ marginBottom: 0 }}>Nothing on this day yet. Add an event or task below — or just ask the assistant.</div>
               )}
-              {(eventsByDay.get(openDay) ?? []).map((e) => <EventRow key={e.id} e={e} />)}
+              {(eventsByDay.get(openDay) ?? []).map((e) => <EventRow key={e.id} e={e} colorFor={colorFor} />)}
               {(tasksByDay.get(openDay) ?? []).map((t) => <TaskRow key={t.id} t={t} onToggle={toggleTask} />)}
             </div>
             <div className="dm-foot">
@@ -1060,7 +1395,7 @@ export default function Page() {
         <div className="scrim" onClick={() => { setShowEventForm(false); resetEventForm(); }}>
           <div className="sheet" style={{ maxWidth: 480, maxHeight: "88vh" }} onClick={(e) => e.stopPropagation()}>
             <div className="sh-top">
-              <div className="ti"><b>New event</b><small>1 Arthur Road · NZ time</small></div>
+              <div className="ti"><b>New event</b><small>{projName} · NZ time</small></div>
               <button className="sh-x" onClick={() => { setShowEventForm(false); resetEventForm(); }}>✕</button>
             </div>
             <div className="form-body">
@@ -1098,11 +1433,21 @@ export default function Page() {
               <label className="ev-lbl">Location <span className="opt">· optional</span></label>
               <input className="ev-in" value={evLocation} onChange={(e) => setEvLocation(e.target.value)} placeholder="e.g. Block C, Level 2" />
 
+              <label className="ev-lbl">Assign to <span className="opt">· optional</span></label>
+              <select className="ev-in" value={evAssignee} onChange={(e) => setEvAssignee(e.target.value)}>
+                <option value="">Nobody — just on the calendar</option>
+                {members.map((m) => <option key={m.userId} value={m.userId}>{m.name}{m.isMe ? " (me)" : ""}</option>)}
+              </select>
+
               <label className="ev-lbl">Visible to</label>
-              <div className="ev-kinds">
-                <button type="button" className={"ev-kind" + (evVis === "team" ? " act" : "")} onClick={() => setEvVis("team")}>Whole crew</button>
-                <button type="button" className={"ev-kind" + (evVis === "private" ? " act" : "")} onClick={() => setEvVis("private")}>Just me</button>
-              </div>
+              {evAssignee ? (
+                <div className="page-sub" style={{ margin: "2px 0 6px" }}>Assigned to <b>{members.find((m) => m.userId === evAssignee)?.name}</b> — visible to the whole crew.</div>
+              ) : (
+                <div className="ev-kinds">
+                  <button type="button" className={"ev-kind" + (evVis === "team" ? " act" : "")} onClick={() => setEvVis("team")}>Whole crew</button>
+                  <button type="button" className={"ev-kind" + (evVis === "private" ? " act" : "")} onClick={() => setEvVis("private")}>Just me</button>
+                </div>
+              )}
 
               {evError && <div className="ev-err">{evError}</div>}
 
@@ -1120,7 +1465,7 @@ export default function Page() {
         <div className="scrim" onClick={() => { setShowTaskForm(false); resetTaskForm(); }}>
           <div className="sheet" style={{ maxWidth: 480, maxHeight: "88vh" }} onClick={(e) => e.stopPropagation()}>
             <div className="sh-top">
-              <div className="ti"><b>New task</b><small>1 Arthur Road · a to-do</small></div>
+              <div className="ti"><b>New task</b><small>{projName} · a to-do</small></div>
               <button className="sh-x" onClick={() => { setShowTaskForm(false); resetTaskForm(); }}>✕</button>
             </div>
             <div className="form-body">
@@ -1151,11 +1496,21 @@ export default function Page() {
                 </div>
               )}
 
+              <label className="ev-lbl">Assign to <span className="opt">· optional</span></label>
+              <select className="ev-in" value={tkAssignee} onChange={(e) => setTkAssignee(e.target.value)}>
+                <option value="">Nobody — just a to-do</option>
+                {members.map((m) => <option key={m.userId} value={m.userId}>{m.name}{m.isMe ? " (me)" : ""}</option>)}
+              </select>
+
               <label className="ev-lbl">Visible to</label>
-              <div className="ev-kinds">
-                <button type="button" className={"ev-kind" + (tkVis === "private" ? " act" : "")} onClick={() => setTkVis("private")}>Just me</button>
-                <button type="button" className={"ev-kind" + (tkVis === "team" ? " act" : "")} onClick={() => setTkVis("team")}>Whole crew</button>
-              </div>
+              {tkAssignee ? (
+                <div className="page-sub" style={{ margin: "2px 0 6px" }}>Assigned to <b>{members.find((m) => m.userId === tkAssignee)?.name}</b> — visible to the whole crew.</div>
+              ) : (
+                <div className="ev-kinds">
+                  <button type="button" className={"ev-kind" + (tkVis === "private" ? " act" : "")} onClick={() => setTkVis("private")}>Just me</button>
+                  <button type="button" className={"ev-kind" + (tkVis === "team" ? " act" : "")} onClick={() => setTkVis("team")}>Whole crew</button>
+                </div>
+              )}
 
               {tkError && <div className="ev-err">{tkError}</div>}
 
@@ -1167,6 +1522,88 @@ export default function Page() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── site create / join screen (first-run mandatory, or switcher overlay) ── */
+function SiteSetup(props: {
+  mandatory: boolean;
+  mode: "create" | "join";
+  setMode: (m: "create" | "join") => void;
+  name: string; setName: (v: string) => void;
+  code: string; setCode: (v: string) => void;
+  busy: boolean; err: string | null;
+  createdCode: string | null; createdName: string;
+  onCreate: () => void; onJoin: () => void;
+  onClose?: () => void; onEnter: () => void;
+  onCopy: () => void; copied: boolean;
+  onSignOut: () => void;
+}) {
+  const p = props;
+  return (
+    <div className="scrim" onClick={() => p.onClose?.()} style={{ background: p.mandatory ? "var(--bg, #F4F7FB)" : undefined }}>
+      <div className="sheet" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+        {p.createdCode ? (
+          <>
+            <div className="sh-top"><div className="ti"><b>Your site is live 🎉</b><small>{p.createdName}</small></div></div>
+            <div className="form-body">
+              <p className="page-sub" style={{ marginTop: 0 }}>Share this join code with your crew — they enter it when they sign up and land straight on this site.</p>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ flex: 1, fontFamily: "ui-monospace, monospace", fontSize: 26, fontWeight: 700, letterSpacing: 3, padding: "16px", borderRadius: 12, background: "rgba(14,116,189,.08)", color: "var(--navy)", textAlign: "center" }}>{p.createdCode}</div>
+                <button className="lg-btn" style={{ height: 56, margin: 0, width: "auto", padding: "0 18px" }} onClick={p.onCopy}>{p.copied ? "Copied ✓" : "Copy"}</button>
+              </div>
+              <div className="form-actions" style={{ marginTop: 20 }}>
+                <button className="lg-btn primary" style={{ height: 48, margin: 0, flex: 1 }} onClick={p.onEnter}>Enter {p.createdName} →</button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="sh-top">
+              <div className="ti"><b>{p.mandatory ? "Welcome to Soterra" : "Create or join a site"}</b><small>{p.mandatory ? "Set up your first site to get going" : "Start a new site or join your crew's"}</small></div>
+              {p.onClose && <button className="sh-x" onClick={p.onClose}>✕</button>}
+            </div>
+            <div className="form-body">
+              <div className="ev-kinds" style={{ marginBottom: 16 }}>
+                <button type="button" className={"ev-kind" + (p.mode === "create" ? " act" : "")} onClick={() => p.setMode("create")}>Create a site</button>
+                <button type="button" className={"ev-kind" + (p.mode === "join" ? " act" : "")} onClick={() => p.setMode("join")}>Join with a code</button>
+              </div>
+
+              {p.mode === "create" ? (
+                <>
+                  <label className="ev-lbl">Site name</label>
+                  <input className="ev-in" value={p.name} autoFocus onChange={(e) => p.setName(e.target.value)} placeholder="e.g. 12 Beach Road — Townhouses"
+                    onKeyDown={(e) => { if (e.key === "Enter") p.onCreate(); }} />
+                  <p className="page-sub" style={{ margin: "8px 0 0" }}>You&apos;ll be the site admin and get an invite code to bring your crew on.</p>
+                  {p.err && <div className="ev-err">{p.err}</div>}
+                  <div className="form-actions" style={{ marginTop: 18 }}>
+                    <button className="lg-btn primary" style={{ height: 48, margin: 0, flex: 1 }} disabled={p.busy} onClick={p.onCreate}>{p.busy ? "Creating…" : "Create site"}</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <label className="ev-lbl">Join code</label>
+                  <input className="ev-in" value={p.code} autoFocus onChange={(e) => p.setCode(e.target.value.toUpperCase())} placeholder="XXXX-XXXX"
+                    style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                    onKeyDown={(e) => { if (e.key === "Enter") p.onJoin(); }} />
+                  <p className="page-sub" style={{ margin: "8px 0 0" }}>Enter the code your site manager shared to join their site.</p>
+                  {p.err && <div className="ev-err">{p.err}</div>}
+                  <div className="form-actions" style={{ marginTop: 18 }}>
+                    <button className="lg-btn primary" style={{ height: 48, margin: 0, flex: 1 }} disabled={p.busy} onClick={p.onJoin}>{p.busy ? "Joining…" : "Join site"}</button>
+                  </div>
+                </>
+              )}
+
+              {p.mandatory && (
+                <div style={{ textAlign: "center", marginTop: 16 }}>
+                  <button onClick={p.onSignOut} style={{ background: "none", border: "none", color: "var(--slate)", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>Sign out</button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1241,13 +1678,16 @@ function makeCite(sourceLine: string, body: string): Cite {
   return { code, title: rest || doc, sub: doc, ans: fmt(body), hlTag: code };
 }
 
-// One event row — used in the week strip, agenda, and day modal.
-function EventRow({ e }: { e: CalEvent }) {
+// One event row — used in the week strip, agenda, and day modal. Bar colour is
+// the assignee's crew colour when assigned, else the event type's colour.
+function EventRow({ e, colorFor }: { e: CalEvent; colorFor?: (id: string | null) => string | null }) {
   const tag = kindTag(e.kind);
-  const sub = [e.location, e.visibility === "team" ? "whole crew" : "just you", e.creatorName].filter(Boolean).join(" · ");
+  const crew = e.assigneeId ? colorFor?.(e.assigneeId) : null;
+  const bar = crew || barColor(e.kind);
+  const sub = [e.location, e.assigneeName ? `→ ${e.assigneeName}` : null, e.visibility === "team" ? "whole crew" : "just you", e.creatorName].filter(Boolean).join(" · ");
   return (
     <div className="ev">
-      <div className="bar" style={{ background: barColor(e.kind) }} />
+      <div className="bar" style={{ background: bar }} />
       <div className="when">{fmtAgendaDay(e.startsAt)}<br /><span className="when-t">{fmtEventRange(e)}</span></div>
       <div className="body"><b>{e.title}</b>{sub && <small>{sub}</small>}</div>
       {tag && <div className="tag" style={{ background: tag.bg, color: tag.fg }}>{tag.label}</div>}
@@ -1259,9 +1699,10 @@ function EventRow({ e }: { e: CalEvent }) {
 function TaskRow({ t, onToggle, full }: { t: CalTask; onToggle: (t: CalTask) => void; full?: boolean }) {
   const due = fmtDue(t.dueAt);
   const time = fmtTaskTime(t);
+  const assignee = t.assigneeName ? `→ ${t.assigneeName}` : null;
   const meta = full
-    ? [t.creatorName, t.done ? "done" : due ? `due ${due}${time ? ` · ${time}` : ""}` : null].filter(Boolean).join(" · ")
-    : [t.done ? "done" : time || (due ? `due ${due}` : null), t.creatorName].filter(Boolean).join(" · ");
+    ? [t.creatorName, assignee, t.done ? "done" : due ? `due ${due}${time ? ` · ${time}` : ""}` : null].filter(Boolean).join(" · ")
+    : [t.done ? "done" : time || (due ? `due ${due}` : null), assignee, t.creatorName].filter(Boolean).join(" · ");
   const vis = t.visibility === "team" ? "team" : "me";
   return (
     <div className={"task" + (t.done ? " done" : "")}>

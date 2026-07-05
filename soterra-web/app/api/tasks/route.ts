@@ -1,13 +1,20 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { and, asc, eq, or } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { tasks } from "@/lib/schema";
+import { tasks, projectMembers } from "@/lib/schema";
 import { zonedWallClockToUtc, resolveEndsAt } from "@/lib/date-tz";
+import { resolveProjectId } from "@/lib/project";
 
 export const runtime = "nodejs";
 
-// Hardcoded for now — multi-project comes later. Every query is scoped to this.
-const PROJECT_ID = "1-arthur-road";
+async function memberName(projectId: string, userId: string): Promise<string | null | undefined> {
+  const [m] = await db
+    .select({ name: projectMembers.name })
+    .from(projectMembers)
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)))
+    .limit(1);
+  return m ? m.name : undefined;
+}
 
 function serialize(t: typeof tasks.$inferSelect) {
   return {
@@ -18,23 +25,26 @@ function serialize(t: typeof tasks.$inferSelect) {
     done: t.done,
     visibility: t.visibility,
     creatorName: t.creatorName,
+    assigneeId: t.assigneeId,
+    assigneeName: t.assigneeName,
   };
 }
 
 // ─── GET /api/tasks ───
-// Team tasks for the project + the caller's own private ones. Open tasks first
-// (oldest due first), so the list reads like a to-do queue.
-export async function GET() {
+// Team tasks + the caller's own private ones + anything assigned to them.
+export async function GET(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
+  const projectId = await resolveProjectId(req, userId);
+  if (!projectId) return Response.json({ error: "No site selected" }, { status: 403 });
 
   const rows = await db
     .select()
     .from(tasks)
     .where(
       and(
-        eq(tasks.projectId, PROJECT_ID),
-        or(eq(tasks.visibility, "team"), eq(tasks.creatorId, userId))
+        eq(tasks.projectId, projectId),
+        or(eq(tasks.visibility, "team"), eq(tasks.creatorId, userId), eq(tasks.assigneeId, userId))
       )
     )
     .orderBy(asc(tasks.done), asc(tasks.dueAt), asc(tasks.createdAt));
@@ -42,12 +52,12 @@ export async function GET() {
   return Response.json({ tasks: rows.map(serialize) });
 }
 
-// ─── POST /api/tasks ───
-// Create a task. Tasks default to "private" (Just me) — personal by default,
-// shareable to the crew (mirrors the Montázs Teendők default).
+// ─── POST /api/tasks ───  (tasks default to "private" — personal by default)
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
+  const projectId = await resolveProjectId(req, userId);
+  if (!projectId) return Response.json({ error: "No site selected" }, { status: 403 });
 
   let body: Record<string, unknown>;
   try {
@@ -59,9 +69,6 @@ export async function POST(req: Request) {
   const title = String(body.title ?? "").trim();
   if (!title) return Response.json({ error: "Title is required" }, { status: 400 });
 
-  // Optional due date + time and an optional finish-by end date/time, all in the
-  // project wall-clock and converted server-side. A date with no time anchors at
-  // 00:00 (date-only "by this day"); the end fields populate tasks.endsAt.
   const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.dueDate ?? "")) ? String(body.dueDate) : null;
   const dueTime = /^\d{2}:\d{2}$/.test(String(body.dueTime ?? "")) ? String(body.dueTime) : null;
   const endDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.endDate ?? "")) ? String(body.endDate) : null;
@@ -70,37 +77,38 @@ export async function POST(req: Request) {
   const dueAt = dueDate ? zonedWallClockToUtc(dueDate, dueTime) : null;
   const endsAt = dueDate ? resolveEndsAt(dueDate, dueTime, endDate, endTime) : null;
 
-  const visibility = body.visibility === "team" ? "team" : "private";
+  // Assigning to someone implies at least the two of you see it — so an assigned
+  // task defaults to team-visible unless explicitly kept private by the creator.
+  let assigneeId: string | null = null;
+  let assigneeName: string | null = null;
+  if (body.assigneeId) {
+    const nm = await memberName(projectId, String(body.assigneeId));
+    if (nm !== undefined) {
+      assigneeId = String(body.assigneeId);
+      assigneeName = (body.assigneeName ? String(body.assigneeName) : nm) || null;
+    }
+  }
+  const visibility = body.visibility === "team" ? "team" : body.visibility === "private" ? "private" : assigneeId ? "team" : "private";
 
   const user = await currentUser();
   const creatorName =
-    user?.firstName ||
-    user?.username ||
-    user?.primaryEmailAddress?.emailAddress?.split("@")[0] ||
-    null;
+    user?.firstName || user?.username || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || null;
 
   const [row] = await db
     .insert(tasks)
-    .values({
-      projectId: PROJECT_ID,
-      creatorId: userId,
-      creatorName,
-      title,
-      dueAt,
-      endsAt,
-      visibility,
-    })
+    .values({ projectId, creatorId: userId, creatorName, title, dueAt, endsAt, visibility, assigneeId, assigneeName })
     .returning();
 
   return Response.json({ task: serialize(row) }, { status: 201 });
 }
 
 // ─── PATCH /api/tasks ───
-// Toggle (or set) a task's done state. Scoped to the project AND ownership:
-// you can only toggle a team task or your own. Body: { id, done }.
+// done-toggle (team task or your own) OR visibility/assignee change (creator only).
 export async function PATCH(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
+  const projectId = await resolveProjectId(req, userId);
+  if (!projectId) return Response.json({ error: "No site selected" }, { status: 403 });
 
   let body: Record<string, unknown>;
   try {
@@ -115,39 +123,40 @@ export async function PATCH(req: Request) {
   const [existing] = await db
     .select()
     .from(tasks)
-    .where(and(eq(tasks.id, id), eq(tasks.projectId, PROJECT_ID)))
+    .where(and(eq(tasks.id, id), eq(tasks.projectId, projectId)))
     .limit(1);
 
-  if (
-    !existing ||
-    (existing.visibility !== "team" && existing.creatorId !== userId)
-  ) {
+  // Visible to the caller? team, own, or assigned to them.
+  if (!existing || (existing.visibility !== "team" && existing.creatorId !== userId && existing.assigneeId !== userId)) {
     return Response.json({ error: "Task not found" }, { status: 404 });
   }
 
-  // Visibility change (the card tick-box) is creator-only — only the person who
-  // made the task can share it to the crew or pull it back to private.
-  if (body.visibility === "team" || body.visibility === "private") {
-    if (existing.creatorId !== userId) {
-      return Response.json({ error: "Task not found" }, { status: 404 });
+  // Visibility / assignee changes are creator-only.
+  const wantsMeta = body.visibility === "team" || body.visibility === "private" || "assigneeId" in body;
+  if (wantsMeta) {
+    if (existing.creatorId !== userId) return Response.json({ error: "Task not found" }, { status: 404 });
+    const patch: Partial<typeof tasks.$inferInsert> = {};
+    if (body.visibility === "team" || body.visibility === "private") patch.visibility = body.visibility;
+    if ("assigneeId" in body) {
+      if (!body.assigneeId) {
+        patch.assigneeId = null;
+        patch.assigneeName = null;
+      } else {
+        const nm = await memberName(projectId, String(body.assigneeId));
+        if (nm !== undefined) {
+          patch.assigneeId = String(body.assigneeId);
+          patch.assigneeName = (body.assigneeName ? String(body.assigneeName) : nm) || null;
+        }
+      }
     }
-    const [row] = await db
-      .update(tasks)
-      .set({ visibility: body.visibility })
-      .where(eq(tasks.id, id))
-      .returning();
-    return Response.json({ task: serialize(row) });
+    if (Object.keys(patch).length) {
+      const [row] = await db.update(tasks).set(patch).where(eq(tasks.id, id)).returning();
+      return Response.json({ task: serialize(row) });
+    }
   }
 
-  // Otherwise it's a done-toggle (allowed for a team task or your own).
-  // Explicit done if provided, otherwise flip.
+  // Otherwise it's a done-toggle.
   const done = typeof body.done === "boolean" ? body.done : !existing.done;
-
-  const [row] = await db
-    .update(tasks)
-    .set({ done })
-    .where(eq(tasks.id, id))
-    .returning();
-
+  const [row] = await db.update(tasks).set({ done }).where(eq(tasks.id, id)).returning();
   return Response.json({ task: serialize(row) });
 }
