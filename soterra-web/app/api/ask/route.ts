@@ -26,7 +26,7 @@ type Member = { userId: string; name: string | null; title: string | null };
 
 // ── Retrieval index shapes. Both plan pages and code pages carry `.text`, so the
 //    TF-IDF retrieval below is generic over anything with text. ──
-type Page = { doc: string; disc: string; file: string; page: number; npages: number; code: string; title: string; text: string };
+type Page = { doc: string; disc: string; file: string; page: number; npages: number; code: string; title: string; text: string; uploadedAt?: number };
 const INDEX = indexData as unknown as Page[];
 
 const SYN: Record<string, string[]> = {
@@ -83,21 +83,28 @@ async function getProjectIndex(projectId: string): Promise<{ pages: Page[]; df: 
     .select({
       doc: planPages.doc, file: planPages.file, page: planPages.page, npages: planPages.npages,
       code: planPages.code, title: planPages.title, disc: planPages.disc, text: planPages.text,
+      createdAt: planPages.createdAt,
     })
     .from(planPages)
     .where(eq(planPages.projectId, projectId));
   let pages: Page[] = rows.map((r) => ({
     doc: r.doc, disc: r.disc ?? "", file: r.file ?? "", page: r.page, npages: r.npages,
-    code: r.code ?? "", title: r.title ?? "", text: r.text,
+    code: r.code ?? "", title: r.title ?? "", text: r.text, uploadedAt: r.createdAt?.getTime() ?? 0,
   }));
-  if (projectId === DEMO_ID) pages = [...INDEX, ...pages];
+  if (projectId === DEMO_ID) pages = [...INDEX.map((p) => ({ ...p, uploadedAt: 0 })), ...pages];
+  // Newest-first so, when the same detail appears in more than one revision, the
+  // latest-uploaded page wins ties in retrieval (belt-and-braces with the label
+  // date + the "use the latest revision" rule in the prompt).
+  pages.sort((a, b) => (b.uploadedAt ?? 0) - (a.uploadedAt ?? 0));
   return { pages, df: computeDf(pages) };
 }
 function pageLabel(p: Page): string {
   const bits = [p.doc];
   if (p.code) bits.push(p.code);
   if (p.title) bits.push(p.title);
-  return bits.join(" · ") + ` · page ${p.page} of ${p.npages}`;
+  let label = bits.join(" · ") + ` · page ${p.page} of ${p.npages}`;
+  if (p.uploadedAt) label += ` · uploaded ${ymdFmt.format(new Date(p.uploadedAt))}`;
+  return label;
 }
 
 // ── The shared Building Code corpus (universal, same for every site). Loaded
@@ -501,9 +508,11 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         const q = s(input.query) ?? "";
         if (!q) return { content: JSON.stringify({ error: "query required" }), cards: [] };
         const { pages, df } = await getProjectIndex(projectId);
-        const top = retrieve(pages, df, q, 6);
+        // Pull a few extra so older + newer revisions of the same detail both
+        // surface — the model then answers from the latest (label carries the date).
+        const top = retrieve(pages, df, q, 8);
         if (top.length === 0) return { content: JSON.stringify({ pages: [], note: "Nothing matched in this site's uploaded plans." }), cards: [] };
-        return { content: JSON.stringify({ pages: top.map((p) => ({ label: pageLabel(p), text: p.text.slice(0, 2800) })) }), cards: [] };
+        return { content: JSON.stringify({ note: "If the same detail differs between pages, the one with the LATEST 'uploaded' date is the current revision — use it.", pages: top.map((p) => ({ label: pageLabel(p), text: p.text.slice(0, 2800) })) }), cards: [] };
       }
 
       case "search_code": {
@@ -706,7 +715,7 @@ ${tkList}`;
 }
 
 const STATIC_PROMPT = `You are Soterra's site assistant — a sharp, experienced construction professional helping the crew on a specific construction SITE. You help four ways:
-1) PLAN-READER — answer questions about THIS site's uploaded drawings & specifications. For any question about this project's plans/specs (materials, dimensions, fire ratings, schedules, finishes, "what does our spec say…") you MUST call search_plans, then answer ONLY from the page text it returns, finishing with a line: "Source: <the exact page label>". Never invent codes, ratings, products or numbers. If the answer isn't in the pages, say what's missing and which drawing set might have it.
+1) PLAN-READER — answer questions about THIS site's uploaded drawings & specifications. For any question about this project's plans/specs (materials, dimensions, fire ratings, schedules, finishes, "what does our spec say…") you MUST call search_plans, then answer ONLY from the page text it returns, finishing with a line: "Source: <the exact page label>". Never invent codes, ratings, products or numbers. If the answer isn't in the pages, say what's missing and which drawing set might have it. REVISIONS — the plans may hold more than one revision of the same sheet; each page label carries an "uploaded" date. The most recently uploaded page is the CURRENT revision. If two pages give different values for the same thing (e.g. a fire rating that was 30 min in an older upload and 60 min in a newer one), ALWAYS use the value from the latest-uploaded page, cite that page as the Source, and note that it supersedes the older figure. Never present a superseded value as current, and never average them.
 2) BUILDING-CODE — answer what the NZ Building Code REQUIRES by calling search_code (the free MBIE Acceptable Solutions, Verification Methods, Handbook, guidance). Use this for "what does the code require for…", clause requirements, acceptable solutions, minimum figures, weathertightness, egress, etc. Answer from the returned pages, make clear it's general Building-Code guidance (not this project's plans), finish with "Source: <page label>", and remind them to confirm against the current official document / their designer for anything safety-critical. Never invent a clause or number. (search_plans = THIS project's drawings; search_code = the universal Code. Pick the right one; for "does our design meet the code?" you may use both.)
 3) CONSTRUCTION EXPERT — general construction knowledge (methods, sequencing, materials, detailing, terminology, H&S, best practice) from your own expertise — no "Source:" line. Use web_search for current/specific external detail (latest product specs, standards) rather than guessing.
 4) CALENDAR & TASKS — create, find, change, delete events and to-dos using the tools.

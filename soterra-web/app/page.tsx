@@ -893,6 +893,9 @@ export default function Page() {
   const projName = curProject?.name || "Your site";
   const isDemo = projectId === DEMO_ID;
   const activeCode = siteCode || curProject?.code || "";
+  // Once a site has plans, the Upload tab is for UPDATES (small, revised sheets)
+  // rather than the big one-time set — the big bulk load belongs at site setup.
+  const hasPlans = docsLoaded && docs.length > 0;
 
   /* ─── First run (or explicit switch): create / join a site ─── */
   // Also stay open while `createdCode` is set — that's the "here's your invite
@@ -1276,8 +1279,12 @@ export default function Page() {
         {/* ─── UPLOAD ─── */}
         {tab === "upload" && (
           <div className="page"><div className="page-inner">
-            <div className="page-h">Upload plans</div>
-            <div className="page-sub">Add drawings &amp; specs to {projName} — drop the whole set at once. Soterra reads &amp; indexes every page (private to your site).</div>
+            <div className="page-h">{hasPlans ? "Update plans" : "Upload plans"}</div>
+            <div className="page-sub">
+              {hasPlans
+                ? `Add or update a sheet on ${projName} — drop the revised version and the assistant answers from the latest, treating the old one as superseded.`
+                : `Load ${projName}'s plans — drop the whole set at once. Soterra reads & indexes every page (private to your site).`}
+            </div>
             <input ref={planFileRef} type="file" accept="application/pdf" multiple style={{ display: "none" }}
               onChange={(e) => { const fs = e.target.files; if (planFileRef.current) planFileRef.current.value = ""; if (fs && fs.length) onPlanFiles(fs); }} />
             <div
@@ -1289,8 +1296,8 @@ export default function Page() {
               style={{ cursor: upCurrent ? "default" : "pointer", outline: dragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
             >
               <div className="ic">⬆️</div>
-              <b>{upCurrent ? `${upCurrent.phase}…` : "Upload your plans"}</b>
-              <p>{upCurrent ? upCurrent.name : "Drop your whole drawing set & specs here, or click to choose. As many PDFs as you like — up to 100 MB each. This is the place for the big initial upload."}</p>
+              <b>{upCurrent ? `${upCurrent.phase}…` : hasPlans ? "Add or update a sheet" : "Upload your full plan set"}</b>
+              <p>{upCurrent ? upCurrent.name : hasPlans ? "Drop a revised or new sheet (PDF). It becomes the current version — the assistant uses the latest and treats the old as superseded. Keep the whole-set load to site setup." : "Drop your whole drawing set & specs here, or click to choose. As many PDFs as you like — up to 100 MB each. This is the big one-time upload."}</p>
               {upCurrent && (
                 <div style={{ width: "80%", maxWidth: 360, height: 6, borderRadius: 99, background: "rgba(148,166,190,.25)", overflow: "hidden", marginTop: 6 }}>
                   <div style={{ width: `${upCurrent.phase === "Uploading" ? (upCurrent.pct || 4) : 100}%`, height: "100%", background: "var(--brand)", transition: "width .2s" }} />
