@@ -259,7 +259,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
       {/* ─── LAYER 1 — what it does today ─── */}
       <section className="layer" id="now">
         <div className="lhead rv">
-          <div className="lbadge"><span>Layer 1</span> The project assistant</div>
+          <div className="lbadge pa"><span>Layer 1</span> The project assistant</div>
           <h2>Run your projects with <span className="g">Soterra.</span></h2>
         </div>
 
@@ -302,7 +302,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
       {/* ─── LAYER 2 — the learning engine (the vision) ─── */}
       <section className="vision" id="vision">
         <div className="vhead rv">
-          <div className="lbadge dark"><span>Layer 2</span> The learning engine</div>
+          <div className="lbadge pb"><span>Layer 2</span> The learning engine</div>
           <h2>It learns your history to predict and prevent mistakes <span className="g">before they happen.</span></h2>
           <p>Soterra learns from your previous projects, using the project data you already have, reliable council and consultant QA, to prevent rework and delays before they repeat.</p>
         </div>
@@ -413,6 +413,13 @@ const CSS = `
 .lp .lbadge{display:inline-flex;align-items:center;gap:14px;font-size:24px;font-weight:700;color:var(--navy);margin-bottom:20px;letter-spacing:-.015em}
 .lp .lbadge span{font-size:16px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--grad);padding:10px 19px;border-radius:24px;box-shadow:0 9px 22px rgba(10,141,237,.32)}
 .lp .lbadge.dark span{background:var(--navy);box-shadow:0 9px 22px rgba(12,42,71,.34)}
+/* Pill option A (trialling on Layer 1) — the whole line is one blue chip, label included */
+.lp .lbadge.pa{background:var(--grad);color:#fff;border-radius:32px;padding:11px 22px;gap:10px;font-size:16px;font-weight:600;letter-spacing:0;box-shadow:0 9px 22px rgba(10,141,237,.3)}
+.lp .lbadge.pa span{background:transparent;box-shadow:none;padding:0;font-size:16px;font-weight:800;letter-spacing:.07em;color:#fff}
+.lp .lbadge.pa span::after{content:"·";margin-left:10px;opacity:.55;font-weight:400}
+/* Pill option B (trialling on Layer 2) — one chip, dark inset for the layer number */
+.lp .lbadge.pb{background:rgba(14,143,230,.1);border:1px solid rgba(14,143,230,.2);color:var(--brand-d);border-radius:32px;padding:6px 20px 6px 6px;gap:11px;font-size:16px;font-weight:600;letter-spacing:0}
+.lp .lbadge.pb span{background:var(--navy);color:#fff;font-size:13px;padding:8px 14px;border-radius:24px;box-shadow:none}
 .lp .vhead h2,.lp .safe h2{font-size:clamp(27px,3.6vw,42px);font-weight:600;letter-spacing:-.028em;line-height:1.13;margin-bottom:15px}
 .lp .lhead>p,.lp .vhead>p{font-size:17px;line-height:1.62;color:var(--slate)}
 .lp .frow{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;margin-bottom:56px}
