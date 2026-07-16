@@ -150,13 +150,12 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
       <section className="layer" id="now">
         <div className="lhead rv">
           <div className="lbadge"><span>Layer 1</span> The project assistant</div>
-          <h2>Everything it takes to run the project, in one place.</h2>
-          <p>Soterra understands your drawings, specifications, schedules and project documents, so your team can find answers, manage tasks, coordinate deliveries, write RFIs and keep the project moving from one intelligent workspace.</p>
+          <h2>Soterra understands your drawings, specifications, schedules and project documents, so your team can find answers, manage tasks, coordinate deliveries, write RFIs and keep the project moving from <span className="g">one intelligent workspace.</span></h2>
         </div>
 
         <div className="frow rv">
           <div className="ftext">
-            <div className="fk">Ask your plans</div>
+            <div className="fk">Answers from your plans</div>
             <h3>Any question about the drawings, answered on the spot.</h3>
             <p>Fire ratings, GIB specs, beam sizes, setouts, ask and get the answer in seconds, pointed at the exact sheet.</p>
           </div>
@@ -323,7 +322,8 @@ const CSS = `
 .lp .cis-txt{font-size:10.5px;line-height:1.35;color:#243B4A;text-align:left;font-weight:800;letter-spacing:.02em}
 /* layer sections */
 .lp .layer{max-width:1120px;margin:0 auto;padding:40px 7vw 20px}
-.lp .lhead{text-align:center;max-width:680px;margin:0 auto 48px}
+.lp .lhead{text-align:center;max-width:840px;margin:0 auto 48px}
+.lp .lhead h2{font-size:clamp(23px,3vw,34px);line-height:1.26;margin-bottom:0}
 .lp .lbadge{display:inline-flex;align-items:center;gap:14px;font-size:24px;font-weight:700;color:var(--navy);margin-bottom:20px;letter-spacing:-.015em}
 .lp .lbadge span{font-size:16px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--grad);padding:10px 19px;border-radius:24px;box-shadow:0 9px 22px rgba(10,141,237,.32)}
 .lp .lbadge.dark span{background:var(--navy);box-shadow:0 9px 22px rgba(12,42,71,.34)}
