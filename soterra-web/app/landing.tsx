@@ -23,7 +23,7 @@ function Cta({ kind, label, big, onAct }: { kind: "solid" | "ghost"; label: stri
 
 // Layer 1 capabilities — kept tight, no fluff (Adam's brief).
 const DO_NOW = [
-  "Reads and understands all your project documents — drawings, specs, schedules.",
+  "Reads and understands all your project documents: drawings, specs, schedules.",
   "Answers construction questions from your documents and the Building Code.",
   "Helps write and review RFIs.",
   "Checks plans for missing or conflicting information.",
@@ -43,7 +43,7 @@ const INSIGHTS = [
   },
   {
     tag: "3 years of records",
-    quote: "Before ceiling inspections, check these five items — they've caused 140 defects.",
+    quote: "Before ceiling inspections, check these five items: they've caused 140 defects.",
   },
 ];
 
@@ -133,7 +133,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
           <Cta kind="solid" big label="Get set up" onAct={onGetStarted} />
           <Cta kind="ghost" big label="Log in" onAct={onLogin} />
         </div>
-        <div className="trust rv in">✓ Every answer cited to your actual drawings — never guessed</div>
+        <div className="trust rv in">✓ Every answer cited to your actual drawings, never guessed</div>
       </section>
 
       {/* ─── PARTNERS ─── */}
@@ -151,14 +151,14 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         <div className="lhead rv">
           <div className="lbadge"><span>Layer 1</span> The project assistant</div>
           <h2>Everything it takes to run the project, in one place.</h2>
-          <p>It understands your project better than a normal AI chatbot, because it has all your project information — not just the internet.</p>
+          <p>Soterra understands your drawings, specifications, schedules and project documents, so your team can find answers, manage tasks, coordinate deliveries, write RFIs and keep the project moving from one intelligent workspace.</p>
         </div>
 
         <div className="frow rv">
           <div className="ftext">
             <div className="fk">Ask your plans</div>
             <h3>Any question about the drawings, answered on the spot.</h3>
-            <p>Fire ratings, GIB specs, beam sizes, setouts — ask in plain words and get the answer in seconds, pointed at the exact sheet. If it isn&apos;t in your plans, it tells you.</p>
+            <p>Fire ratings, GIB specs, beam sizes, setouts, ask and get the answer in seconds, pointed at the exact sheet.</p>
           </div>
           <div className="fvis">
             <div className="phone">
@@ -169,7 +169,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
                 <div className="dots"><i /><i /><i /></div>
                 <div className="a">
                   <div className="a-src">From your plans</div>
-                  <p><b>FRR 60</b> — fire-rated 60 minutes. Leaf 910 × 2240 × 48&nbsp;mm.</p>
+                  <p><b>FRR 60</b>, fire-rated 60 minutes. Leaf 910 × 2240 × 48&nbsp;mm.</p>
                   <div className="cite"><span className="ci">▦</span><span className="ct"><b>ED003 · Door Schedule</b><small>95% Detail Design · p60/85</small></span></div>
                 </div>
               </div>
@@ -180,8 +180,8 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         <div className="frow rev rv">
           <div className="ftext">
             <div className="fk">Run the site</div>
-            <h3>Inspections, deliveries and pours — booked from one chat.</h3>
-            <p>Just say it — &ldquo;pre-line inspection Tuesday 9am&rdquo; — and it&apos;s on the shared calendar with the crew notified. Nothing slips, nobody double-books.</p>
+            <h3>Inspections, deliveries and pours, booked from one chat.</h3>
+            <p>Just say it, &ldquo;pre-line inspection Tuesday 9am&rdquo;, and it&apos;s on the shared calendar with the crew notified. Nothing slips, nobody double-books.</p>
           </div>
           <div className="fvis">
             <div className="tablet cal">
@@ -207,7 +207,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         <div className="vhead rv">
           <div className="lbadge dark"><span>Layer 2</span> The learning engine</div>
           <h2>It gets smarter with every project you finish.</h2>
-          <p>Instead of only helping with today&apos;s job, Soterra learns from every project — inspections, QA records, RFIs, defects, delays and outcomes — and builds a knowledge base that belongs to your company.</p>
+          <p>Instead of only helping with today&apos;s job, Soterra learns from every project: inspections, QA records, RFIs, defects, delays and outcomes, and builds a knowledge base that belongs to your company.</p>
         </div>
 
         <div className="insights rv">
@@ -218,13 +218,13 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
             </div>
           ))}
         </div>
-        <p className="vnote rv">That&apos;s something ChatGPT or Copilot can&apos;t do — they don&apos;t know your company&apos;s history.</p>
+        <p className="vnote rv">That&apos;s something ChatGPT or Copilot can&apos;t do. They don&apos;t know your company&apos;s history.</p>
 
         <div className="bim rv">
           <div className="bim-copy">
             <div className="fk">The project, as a model you can ask</div>
             <h3>From the whole set of drawings to one connected project.</h3>
-            <p>Every page — architectural, structural, services, specs — held as one project your whole crew can question, feeding the knowledge that makes the next job go smoother.</p>
+            <p>Every page, architectural, structural, services and specs, held as one project your whole crew can question, feeding the knowledge that makes the next job go smoother.</p>
             <div className="rnd"><span className="rnd-dot" /> In active development with AUT&apos;s research centre · 2 masters theses in progress</div>
           </div>
           <div className="bim-vis">
@@ -324,9 +324,9 @@ const CSS = `
 /* layer sections */
 .lp .layer{max-width:1120px;margin:0 auto;padding:40px 7vw 20px}
 .lp .lhead{text-align:center;max-width:680px;margin:0 auto 48px}
-.lp .lbadge{display:inline-flex;align-items:center;gap:12px;font-size:19px;font-weight:600;color:var(--navy);margin-bottom:18px;letter-spacing:-.01em}
-.lp .lbadge span{font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--grad);padding:7px 14px;border-radius:20px;box-shadow:0 6px 16px rgba(10,141,237,.28)}
-.lp .lbadge.dark span{background:var(--navy);box-shadow:0 6px 16px rgba(12,42,71,.3)}
+.lp .lbadge{display:inline-flex;align-items:center;gap:14px;font-size:24px;font-weight:700;color:var(--navy);margin-bottom:20px;letter-spacing:-.015em}
+.lp .lbadge span{font-size:16px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--grad);padding:10px 19px;border-radius:24px;box-shadow:0 9px 22px rgba(10,141,237,.32)}
+.lp .lbadge.dark span{background:var(--navy);box-shadow:0 9px 22px rgba(12,42,71,.34)}
 .lp .lhead h2,.lp .vhead h2,.lp .safe h2{font-size:clamp(27px,3.6vw,42px);font-weight:600;letter-spacing:-.028em;line-height:1.13;margin-bottom:15px}
 .lp .lhead>p,.lp .vhead>p{font-size:17px;line-height:1.62;color:var(--slate)}
 .lp .frow{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;margin-bottom:56px}
