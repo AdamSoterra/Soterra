@@ -5,10 +5,12 @@ import type { CSSProperties } from "react";
 // Set CSS custom properties inline without fighting React's CSSProperties type.
 const cvar = (o: Record<string, string>): CSSProperties => o as unknown as CSSProperties;
 
-// Soterra public landing — clean/pro "company intelligence" direction (Adam, 2026-07-04).
-// Light, minimal, Soterra blue/navy; animated charts + phone/tablet app mockups + a
-// BIM-style building that assembles itself. Single source of truth: rendered as the
-// signed-out front page (app/page.tsx, with Clerk handlers) and at /preview/command.
+// Soterra public landing (Adam, 2026-07-16 rebuild).
+// Positioning: two layers. Layer 1 = the project assistant people use today.
+// Layer 2 = the company learning engine (the moat). Umbrella line = "Turning
+// construction data into company intelligence." Partner-backed (AUT). Same
+// blue/navy palette as the previous version. Rendered as the signed-out front
+// page (app/page.tsx, with Clerk handlers) and at /preview/command.
 
 function Cta({ kind, label, big, onAct }: { kind: "solid" | "ghost"; label: string; big?: boolean; onAct?: () => void }) {
   const cls = `${kind}${big ? " big" : ""}`;
@@ -18,6 +20,32 @@ function Cta({ kind, label, big, onAct }: { kind: "solid" | "ghost"; label: stri
     <a className={cls} href="/">{label}</a>
   );
 }
+
+// Layer 1 capabilities — kept tight, no fluff (Adam's brief).
+const DO_NOW = [
+  "Reads and understands all your project documents — drawings, specs, schedules.",
+  "Answers construction questions from your documents and the Building Code.",
+  "Helps write and review RFIs.",
+  "Checks plans for missing or conflicting information.",
+  "Runs project communication through a shared calendar.",
+  "Assigns tasks, deliveries and bookings.",
+];
+
+// Layer 2 — the kind of insight the learning engine surfaces over time.
+const INSIGHTS = [
+  {
+    tag: "62 apartment projects",
+    quote: "Waterproofing penetrations fail 28% more often than any other inspection.",
+  },
+  {
+    tag: "Projects over 8 storeys",
+    quote: "Mechanical penetrations become the highest rework item after Level 6.",
+  },
+  {
+    tag: "3 years of records",
+    quote: "Before ceiling inspections, check these five items — they've caused 140 defects.",
+  },
+];
 
 export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => void; onGetStarted?: () => void }) {
   useEffect(() => {
@@ -40,8 +68,8 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
           <span>Soterra</span>
         </div>
         <nav className="links">
-          <a href="#does">What it does</a>
-          <a href="#intel">Intelligence</a>
+          <a href="#now">What it does</a>
+          <a href="#vision">The vision</a>
           <a href="#safe">Why it&apos;s safe</a>
         </nav>
         <div className="navcta">
@@ -50,65 +78,59 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         </div>
       </header>
 
+      {/* ─── HERO — deliberately simple ─── */}
       <section className="hero">
-        <div className="hcopy rv in">
-          <div className="pill"><span className="dotlive" /> An intelligent partner for every site</div>
-          <h1>Turning construction data into <span className="g">company intelligence.</span></h1>
-          <p className="lead"><b>Your 24/7 site manager.</b> Knows your plans, runs your schedule, and keeps the whole crew in the loop.</p>
-          <div className="cta">
-            <Cta kind="solid" big label="Get set up" onAct={onGetStarted} />
-            <Cta kind="ghost" big label="Log in" onAct={onLogin} />
-          </div>
-          <div className="trust">✓ Every answer cited to your actual drawings — never guessed</div>
+        <div className="pill rv in"><span className="dotlive" /> AI project assistant + company learning engine</div>
+        <h1 className="rv in">Turning construction data into <span className="g">company intelligence.</span></h1>
+        <p className="lead rv in">
+          An AI assistant that knows your whole project today, and a learning engine that captures
+          knowledge from every project to reduce mistakes on the next one.
+        </p>
+        <div className="cta rv in">
+          <Cta kind="solid" big label="Get set up" onAct={onGetStarted} />
+          <Cta kind="ghost" big label="Log in" onAct={onLogin} />
         </div>
+        <div className="trust rv in">✓ Every answer cited to your actual drawings — never guessed</div>
+      </section>
 
-        <div className="hvis rv in">
-          <div className="phone">
-            <div className="ph-top"><span className="ph-cam" /></div>
-            <div className="ph-screen">
-              <div className="ph-bar"><img src="/logo-mark.png" alt="" />{/* eslint-disable-line @next/next/no-img-element */}<b>1 Arthur Road</b></div>
-              <div className="q">What&apos;s the fire rating on the exterior doors?</div>
-              <div className="dots"><i /><i /><i /></div>
-              <div className="a">
-                <div className="a-src">From your plans</div>
-                <p><b>FRR 60</b> — fire-rated 60 minutes. Leaf 910 × 2240 × 48&nbsp;mm.</p>
-                <div className="cite"><span className="ci">▦</span><span className="ct"><b>ED003 · Door Schedule</b><small>95% Detail Design · p60/85</small></span></div>
-              </div>
-            </div>
-          </div>
-          <div className="chip chart-chip">
-            <div className="cc-h">This week on site</div>
-            <div className="cc-bars">
-              {["42%", "68%", "90%", "55%", "74%"].map((h, i) => (
-                <span key={i} style={cvar({ "--h": h })} />
-              ))}
-            </div>
-          </div>
-          <div className="chip note-chip">
-            <span className="nc-dot" />
-            <div><b>Pre-line inspection booked</b><small>Tomorrow · 9:00 · crew notified</small></div>
-          </div>
+      {/* ─── PARTNERS ─── */}
+      <section className="partners rv">
+        <div className="pk">Built in partnership with</div>
+        <div className="prow">
+          {/* TODO: swap text plates for real logo images in /public/partners/ */}
+          <div className="plate"><b>AUT Ventures</b></div>
+          <div className="plate wide"><b>AUT Computer &amp; Information</b><small>Sciences Research Centre</small></div>
+          <div className="plate"><b>AUT</b><small>Auckland University of Technology</small></div>
         </div>
       </section>
 
-      <section className="logos rv">
-        <div className="stat"><b className="g">571</b><small>pages read on one project — answered in seconds</small></div>
-        <div className="stat"><b className="g">0</b><small>guesses — every answer cites the exact sheet</small></div>
-        <div className="stat"><b className="g">1</b><small>place for plans, schedule &amp; the whole crew</small></div>
-      </section>
+      {/* ─── LAYER 1 — what it does today ─── */}
+      <section className="layer" id="now">
+        <div className="lhead rv">
+          <div className="lbadge"><span>Layer 1</span> The project assistant</div>
+          <h2>Everything it takes to run the project, in one place.</h2>
+          <p>It understands your project better than a normal AI chatbot, because it has all your project information — not just the internet.</p>
+        </div>
 
-      <section className="does" id="does">
         <div className="frow rv">
           <div className="ftext">
             <div className="fk">Ask your plans</div>
-            <h2>Any question about the drawings, answered on the spot.</h2>
-            <p>Fire ratings, GIB specs, beam sizes, setouts — ask in plain words and get the answer in seconds, pointed at the exact sheet. It never guesses; if it isn&apos;t in your plans, it tells you.</p>
-            <div className="fchk"><span>Cited to the sheet</span><span>Never guessed</span><span>Whole crew, one login</span></div>
+            <h3>Any question about the drawings, answered on the spot.</h3>
+            <p>Fire ratings, GIB specs, beam sizes, setouts — ask in plain words and get the answer in seconds, pointed at the exact sheet. If it isn&apos;t in your plans, it tells you.</p>
           </div>
           <div className="fvis">
-            <div className="tablet">
-              <div className="tb-q">What R-value for the external walls?</div>
-              <div className="tb-a"><div className="a-src">From your plans</div><p><b>R 2.8</b> batts to all external timber-framed walls.</p><div className="cite sm"><span className="ci">▦</span><span className="ct"><b>SP-04 · Thermal &amp; Moisture</b><small>p2/14</small></span></div></div>
+            <div className="phone">
+              <div className="ph-top"><span className="ph-cam" /></div>
+              <div className="ph-screen">
+                <div className="ph-bar"><img src="/logo-mark.png" alt="" />{/* eslint-disable-line @next/next/no-img-element */}<b>1 Arthur Road</b></div>
+                <div className="q">What&apos;s the fire rating on the exterior doors?</div>
+                <div className="dots"><i /><i /><i /></div>
+                <div className="a">
+                  <div className="a-src">From your plans</div>
+                  <p><b>FRR 60</b> — fire-rated 60 minutes. Leaf 910 × 2240 × 48&nbsp;mm.</p>
+                  <div className="cite"><span className="ci">▦</span><span className="ct"><b>ED003 · Door Schedule</b><small>95% Detail Design · p60/85</small></span></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -116,9 +138,8 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         <div className="frow rev rv">
           <div className="ftext">
             <div className="fk">Run the site</div>
-            <h2>Inspections, deliveries and pours — booked from one chat.</h2>
-            <p>Just say it — &ldquo;pre-line inspection Tuesday 9am&rdquo; — and it&apos;s on the shared calendar, with the crew notified. Nothing slips, nobody double-books, the whole team stays in sync.</p>
-            <div className="fchk"><span>One shared calendar</span><span>Booked from chat</span><span>Crew notified</span></div>
+            <h3>Inspections, deliveries and pours — booked from one chat.</h3>
+            <p>Just say it — &ldquo;pre-line inspection Tuesday 9am&rdquo; — and it&apos;s on the shared calendar with the crew notified. Nothing slips, nobody double-books.</p>
           </div>
           <div className="fvis">
             <div className="tablet cal">
@@ -131,79 +152,74 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
             </div>
           </div>
         </div>
+
+        <ul className="bullets rv">
+          {DO_NOW.map((b, i) => (
+            <li key={i}><span className="bx">✓</span>{b}</li>
+          ))}
+        </ul>
       </section>
 
-      <section className="intel" id="intel">
-        <div className="intel-head rv">
-          <div className="fk center">Company intelligence</div>
-          <h2>Every project rolls up into one clear picture.</h2>
-          <p>Plans, inspections and progress across every site — turned into the numbers that actually run the business.</p>
+      {/* ─── LAYER 2 — the learning engine (the vision) ─── */}
+      <section className="vision" id="vision">
+        <div className="vhead rv">
+          <div className="lbadge dark"><span>Layer 2</span> The learning engine</div>
+          <h2>It gets smarter with every project you finish.</h2>
+          <p>Instead of only helping with today&apos;s job, Soterra learns from every project — inspections, QA records, RFIs, defects, delays and outcomes — and builds a knowledge base that belongs to your company.</p>
         </div>
-        <div className="dash rv">
-          <div className="d-card d-bars">
-            <div className="d-h">Site activity <span>last 6 weeks</span></div>
-            <div className="bars">
-              {[38, 55, 47, 72, 63, 88].map((h, i) => (
-                <span key={i} className="bar" style={cvar({ "--h": `${h}%`, "--d": `${i * 90}ms` })} />
-              ))}
+
+        <div className="insights rv">
+          {INSIGHTS.map((it, i) => (
+            <div key={i} className="ins" style={cvar({ "--d": `${i * 110}ms` })}>
+              <div className="ins-tag">{it.tag}</div>
+              <p className="ins-q">&ldquo;{it.quote}&rdquo;</p>
             </div>
-            <div className="d-x"><span>W1</span><span>W2</span><span>W3</span><span>W4</span><span>W5</span><span>W6</span></div>
+          ))}
+        </div>
+        <p className="vnote rv">That&apos;s something ChatGPT or Copilot can&apos;t do — they don&apos;t know your company&apos;s history.</p>
+
+        <div className="bim rv">
+          <div className="bim-copy">
+            <div className="fk">The project, as a model you can ask</div>
+            <h3>From the whole set of drawings to one connected project.</h3>
+            <p>Every page — architectural, structural, services, specs — held as one project your whole crew can question, feeding the knowledge that makes the next job go smoother.</p>
+            <div className="rnd"><span className="rnd-dot" /> In active development with AUT&apos;s research centre · 2 masters theses in progress</div>
           </div>
-          <div className="d-card d-ring">
-            <div className="d-h">Answered from plans</div>
-            <svg viewBox="0 0 120 120" className="ring">
-              <circle className="ring-bg" cx="60" cy="60" r="48" />
-              <circle className="ring-fg" cx="60" cy="60" r="48" />
+          <div className="bim-vis">
+            <div className="floor-shadow" aria-hidden="true" />
+            <svg className="iso" viewBox="0 0 460 360" aria-hidden="true">
+              <g className="bld">
+                <path className="face fr" d="M230 170 L350 110 L350 262 L230 322 Z" />
+                <path className="face fl" d="M110 110 L230 170 L230 322 L110 262 Z" />
+                <path className="face ft" d="M110 110 L230 50 L350 110 L230 170 Z" />
+                <line className="fln f1" x1="110" y1="149" x2="230" y2="209" /><line className="fln f1" x1="230" y1="209" x2="350" y2="149" />
+                <line className="fln f2" x1="110" y1="188" x2="230" y2="248" /><line className="fln f2" x1="230" y1="248" x2="350" y2="188" />
+                <line className="fln f3" x1="110" y1="227" x2="230" y2="287" /><line className="fln f3" x1="230" y1="287" x2="350" y2="227" />
+                <line className="mul" x1="150" y1="130" x2="150" y2="282" /><line className="mul" x1="190" y1="150" x2="190" y2="302" />
+                <line className="mul" x1="270" y1="150" x2="270" y2="302" /><line className="mul" x1="310" y1="130" x2="310" y2="282" />
+              </g>
+              <g className="pin p1"><circle className="halo" cx="300" cy="150" r="12" /><circle className="dot" cx="300" cy="150" r="5" /></g>
+              <g className="pin p2"><circle className="halo" cx="168" cy="205" r="11" /><circle className="dot" cx="168" cy="205" r="4.5" /></g>
+              <g className="pin p3"><circle className="halo" cx="250" cy="262" r="11" /><circle className="dot" cx="250" cy="262" r="4.5" /></g>
             </svg>
-            <div className="ring-num"><b>98%</b><small>cited, zero guesses</small></div>
-          </div>
-          <div className="d-card d-metrics">
-            <div className="m"><b className="g">4</b><small>active sites</small></div>
-            <div className="m"><b className="g">1,240</b><small>plan pages indexed</small></div>
-            <div className="m"><b className="g">36</b><small>inspections on track</small></div>
-            <div className="m"><b className="g">0</b><small>missed this month</small></div>
+            <div className="bim-tip"><div className="a-src">From your plans</div><p>Exterior doors: <b>FRR 60</b></p><small>ED003 · Door Schedule</small></div>
           </div>
         </div>
       </section>
 
-      <section className="bim">
-        <div className="bim-copy rv">
-          <div className="fk">Your project, as a model you can ask</div>
-          <h2>From the whole set of drawings to one place that answers.</h2>
-          <p>Soterra reads every page — architectural, structural, services, specs — and holds it as one connected project your whole crew can question, anytime.</p>
-        </div>
-        <div className="bim-vis rv">
-          <div className="floor-shadow" aria-hidden="true" />
-          <svg className="iso" viewBox="0 0 460 360" aria-hidden="true">
-            <g className="bld">
-              <path className="face fr" d="M230 170 L350 110 L350 262 L230 322 Z" />
-              <path className="face fl" d="M110 110 L230 170 L230 322 L110 262 Z" />
-              <path className="face ft" d="M110 110 L230 50 L350 110 L230 170 Z" />
-              <line className="fln f1" x1="110" y1="149" x2="230" y2="209" /><line className="fln f1" x1="230" y1="209" x2="350" y2="149" />
-              <line className="fln f2" x1="110" y1="188" x2="230" y2="248" /><line className="fln f2" x1="230" y1="248" x2="350" y2="188" />
-              <line className="fln f3" x1="110" y1="227" x2="230" y2="287" /><line className="fln f3" x1="230" y1="287" x2="350" y2="227" />
-              <line className="mul" x1="150" y1="130" x2="150" y2="282" /><line className="mul" x1="190" y1="150" x2="190" y2="302" />
-              <line className="mul" x1="270" y1="150" x2="270" y2="302" /><line className="mul" x1="310" y1="130" x2="310" y2="282" />
-            </g>
-            <g className="pin p1"><circle className="halo" cx="300" cy="150" r="12" /><circle className="dot" cx="300" cy="150" r="5" /></g>
-            <g className="pin p2"><circle className="halo" cx="168" cy="205" r="11" /><circle className="dot" cx="168" cy="205" r="4.5" /></g>
-            <g className="pin p3"><circle className="halo" cx="250" cy="262" r="11" /><circle className="dot" cx="250" cy="262" r="4.5" /></g>
-          </svg>
-          <div className="bim-tip"><div className="a-src">From your plans</div><p>Exterior doors: <b>FRR 60</b></p><small>ED003 · Door Schedule</small></div>
-        </div>
-      </section>
-
+      {/* ─── SAFE ─── */}
       <section className="safe" id="safe">
         <div className="rv">
           <div className="fk center">Safe to use on site</div>
           <h2>It never invents a code, a rating, or a number.</h2>
-          <p>Soterra only answers from the drawings and specs you upload, and shows you the exact sheet every time. That&apos;s the line between a tool you can trust on site and one you can&apos;t.</p>
+          <p>Soterra only answers from the drawings and specs you give it, and shows you the exact sheet every time. That&apos;s the line between a tool you can trust on site and one you can&apos;t.</p>
         </div>
       </section>
 
+      {/* ─── FINAL ─── */}
       <section className="final rv">
         <h2>Put your whole project to work.</h2>
-        <p>Set up your site and get the crew asking in minutes.</p>
+        <p>Set up your company and get the crew asking in minutes.</p>
         <Cta kind="solid" big label="Get set up →" onAct={onGetStarted} />
       </section>
 
@@ -243,17 +259,39 @@ const CSS = `
 .lp .solid{background:var(--grad);color:#fff;font-size:14px;font-weight:600;padding:10px 18px;border-radius:11px;box-shadow:0 10px 26px rgba(10,141,237,.28)}
 .lp .solid:hover{filter:brightness(1.05)}
 .lp .big{padding:15px 28px;font-size:15px;border-radius:13px}
-/* hero */
-.lp .hero{display:grid;grid-template-columns:1.06fr .94fr;gap:50px;align-items:center;max-width:1240px;margin:0 auto;padding:64px 7vw 70px}
-.lp .pill{display:inline-flex;align-items:center;gap:9px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--brand-d);background:rgba(14,143,230,.07);border:1px solid rgba(14,143,230,.16);padding:8px 15px;border-radius:30px;margin-bottom:24px}
-.lp h1{font-size:clamp(36px,4.9vw,60px);line-height:1.05;letter-spacing:-.035em;font-weight:300;margin-bottom:22px}
+/* hero — simple, centered */
+.lp .hero{max-width:900px;margin:0 auto;padding:70px 7vw 40px;text-align:center;display:flex;flex-direction:column;align-items:center}
+.lp .pill{display:inline-flex;align-items:center;gap:9px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--brand-d);background:rgba(14,143,230,.07);border:1px solid rgba(14,143,230,.16);padding:8px 15px;border-radius:30px;margin-bottom:26px}
+.lp h1{font-size:clamp(38px,6vw,68px);line-height:1.04;letter-spacing:-.038em;font-weight:300;margin-bottom:24px;max-width:14ch}
 .lp h1 .g{font-weight:700}
-.lp .lead{font-size:18px;line-height:1.6;color:var(--slate);max-width:500px;margin-bottom:30px}
+.lp .lead{font-size:19px;line-height:1.6;color:var(--slate);max-width:620px;margin-bottom:32px}
 .lp .lead b{color:var(--navy);font-weight:600}
-.lp .cta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px}
+.lp .cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:20px}
 .lp .trust{font-size:13.5px;color:var(--mut);font-weight:500}
-/* hero visual */
-.lp .hvis{position:relative;display:flex;justify-content:center;min-height:440px}
+/* partners */
+.lp .partners{max-width:1000px;margin:0 auto;padding:24px 7vw 52px;text-align:center}
+.lp .pk{font-size:11.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-bottom:20px}
+.lp .prow{display:flex;gap:16px;justify-content:center;align-items:stretch;flex-wrap:wrap}
+.lp .plate{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 22px;min-width:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(12,42,71,.05)}
+.lp .plate.wide{min-width:210px}
+.lp .plate b{font-size:15px;font-weight:700;color:var(--navy);letter-spacing:-.01em;line-height:1.2}
+.lp .plate small{font-size:11px;color:var(--slate);margin-top:3px}
+/* layer sections */
+.lp .layer{max-width:1120px;margin:0 auto;padding:40px 7vw 20px}
+.lp .lhead{text-align:center;max-width:680px;margin:0 auto 48px}
+.lp .lbadge{display:inline-flex;align-items:center;gap:9px;font-size:13px;font-weight:600;color:var(--slate);margin-bottom:16px}
+.lp .lbadge span{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:var(--grad);padding:5px 10px;border-radius:20px}
+.lp .lbadge.dark span{background:var(--navy)}
+.lp .lhead h2,.lp .vhead h2,.lp .safe h2{font-size:clamp(27px,3.6vw,42px);font-weight:600;letter-spacing:-.028em;line-height:1.13;margin-bottom:15px}
+.lp .lhead>p,.lp .vhead>p{font-size:17px;line-height:1.62;color:var(--slate)}
+.lp .frow{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;margin-bottom:56px}
+.lp .frow.rev .ftext{order:2}
+.lp .fk{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brand-d);margin-bottom:14px}
+.lp .fk.center{text-align:center}
+.lp .ftext h3{font-size:clamp(22px,2.6vw,30px);font-weight:600;letter-spacing:-.022em;line-height:1.18;margin-bottom:14px}
+.lp .ftext>p{font-size:16px;line-height:1.64;color:var(--slate)}
+.lp .fvis{display:flex;justify-content:center}
+/* phone */
 .lp .phone{width:270px;background:#fff;border:1px solid var(--line);border-radius:34px;box-shadow:0 40px 80px rgba(12,42,71,.16),0 8px 22px rgba(12,42,71,.06);padding:12px 12px 20px;animation:lpfloat 6s ease-in-out infinite}
 .lp .ph-top{display:flex;justify-content:center;padding:4px 0 12px}
 .lp .ph-cam{width:52px;height:6px;border-radius:6px;background:#E4ECF6}
@@ -269,79 +307,44 @@ const CSS = `
 .lp .a-src{font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--brand-d);margin-bottom:7px}
 .lp .a p{font-size:12.5px;line-height:1.5;color:var(--slate)}.lp .a p b{color:var(--navy)}
 .lp .cite{margin-top:11px;display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:11px;padding:9px 10px;background:linear-gradient(180deg,rgba(65,195,255,.05),transparent)}
-.lp .cite.sm{margin-top:9px}
 .lp .cite .ci{width:30px;height:30px;border-radius:8px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--brand);font-size:14px;flex-shrink:0}
 .lp .cite .ct{min-width:0}.lp .cite .ct b{display:block;font-size:11.5px;color:var(--navy)}.lp .cite .ct small{font-size:10.5px;color:var(--mut)}
 @keyframes lpfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
-.lp .chip{position:absolute;background:#fff;border:1px solid var(--line);border-radius:15px;box-shadow:0 18px 44px rgba(12,42,71,.14);padding:13px 15px}
-.lp .chart-chip{right:2%;top:12%;width:150px;animation:lpfloat 5s ease-in-out .4s infinite}
-.lp .cc-h{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-bottom:11px}
-.lp .cc-bars{display:flex;align-items:flex-end;gap:7px;height:52px}
-.lp .cc-bars span{flex:1;height:var(--h);background:var(--grad);border-radius:4px;opacity:.9}
-.lp .note-chip{left:-2%;bottom:8%;display:flex;align-items:center;gap:11px;width:210px;animation:lpfloat 5.6s ease-in-out .8s infinite}
-.lp .nc-dot{width:34px;height:34px;border-radius:10px;background:rgba(16,185,129,.12);position:relative;flex-shrink:0}
-.lp .nc-dot::after{content:"";position:absolute;inset:0;margin:auto;width:9px;height:9px;border-radius:50%;background:var(--green)}
-.lp .note-chip b{font-size:12.5px;color:var(--navy);display:block}.lp .note-chip small{font-size:11px;color:var(--slate)}
-/* stat band */
-.lp .logos{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;max-width:980px;margin:0 auto;padding:20px 7vw 30px}
-.lp .stat{text-align:center}
-.lp .stat b{font-size:clamp(38px,5vw,58px);font-weight:700;line-height:1;display:block}
-.lp .stat small{display:block;font-size:13.5px;color:var(--slate);margin-top:10px;line-height:1.5;max-width:220px;margin-left:auto;margin-right:auto}
-/* feature rows */
-.lp .does{max-width:1120px;margin:0 auto;padding:50px 7vw;display:flex;flex-direction:column;gap:70px}
-.lp .frow{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
-.lp .frow.rev .ftext{order:2}
-.lp .fk{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brand-d);margin-bottom:14px}
-.lp .fk.center{text-align:center}
-.lp .ftext h2{font-size:clamp(24px,3vw,34px);font-weight:300;letter-spacing:-.025em;line-height:1.16;margin-bottom:15px}
-.lp .ftext h2{font-weight:600}
-.lp .ftext>p{font-size:16px;line-height:1.66;color:var(--slate)}
-.lp .fchk{display:flex;flex-wrap:wrap;gap:8px 10px;margin-top:20px}
-.lp .fchk span{font-size:12.5px;font-weight:600;color:var(--brand-d);background:rgba(14,143,230,.06);border:1px solid rgba(14,143,230,.14);padding:7px 12px;border-radius:9px}
-.lp .fvis{display:flex;justify-content:center}
+/* tablet / calendar */
 .lp .tablet{width:100%;max-width:400px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:0 30px 66px rgba(12,42,71,.1)}
-.lp .tb-q{margin-left:auto;width:fit-content;max-width:88%;background:var(--grad);color:#fff;font-size:13.5px;font-weight:500;padding:11px 15px;border-radius:15px 15px 4px 15px}
-.lp .tb-a{margin-top:13px;background:var(--bg);border:1px solid var(--line);border-radius:15px 15px 15px 4px;padding:14px 15px}
-.lp .tb-a p{font-size:13.5px;color:var(--slate)}.lp .tb-a p b{color:var(--navy)}
 .lp .tablet.cal{padding:20px 20px 8px}
 .lp .cal-h{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:14px}
 .lp .cal-row{display:flex;align-items:center;gap:14px;padding:7px 0}
 .lp .cal-d{font-size:11px;font-weight:700;color:var(--slate);width:32px;text-transform:uppercase}
 .lp .cal-ev{flex:1;min-height:34px;display:flex;align-items:center;padding:0 13px;font-size:13px;color:var(--navy);background:var(--bg);border:1px solid var(--line);border-radius:9px}
 .lp .cal-ev.b{border-left:3px solid var(--brand)}.lp .cal-ev.a{border-left:3px solid var(--amber)}.lp .cal-ev.g{border-left:3px solid var(--green)}.lp .cal-ev.p{border-left:3px solid var(--purple)}
-/* intelligence / charts */
-.lp .intel{max-width:1120px;margin:0 auto;padding:40px 7vw 60px}
-.lp .intel-head{text-align:center;max-width:640px;margin:0 auto 40px}
-.lp .intel-head h2{font-size:clamp(26px,3.4vw,40px);font-weight:600;letter-spacing:-.025em;margin-bottom:14px}
-.lp .intel-head p{font-size:17px;line-height:1.6;color:var(--slate)}
-.lp .dash{display:grid;grid-template-columns:1.4fr 1fr 1.1fr;gap:18px}
-.lp .d-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 12px 40px rgba(12,42,71,.07)}
-.lp .d-h{font-size:13px;font-weight:600;color:var(--navy);margin-bottom:18px}.lp .d-h span{color:var(--mut);font-weight:500;font-size:12px}
-.lp .bars{display:flex;align-items:flex-end;gap:12px;height:150px}
-.lp .bars .bar{flex:1;height:8px;background:var(--grad);border-radius:6px 6px 3px 3px;transform-origin:bottom;transform:scaleY(0)}
-.lp .rv.in .bars .bar{animation:lpbar .9s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:var(--d)}
-@keyframes lpbar{to{height:var(--h);transform:scaleY(1)}}
-.lp .d-x{display:flex;gap:12px;margin-top:10px}.lp .d-x span{flex:1;text-align:center;font-size:10.5px;color:var(--mut)}
-.lp .d-ring{display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
-.lp .ring{width:150px;height:150px;transform:rotate(-90deg)}
-.lp .ring-bg{fill:none;stroke:var(--line);stroke-width:12}
-.lp .ring-fg{fill:none;stroke:url(#lpgrad);stroke:#0A8DED;stroke-width:12;stroke-linecap:round;stroke-dasharray:301.6;stroke-dashoffset:301.6}
-.lp .rv.in .ring-fg{animation:lpring 1.4s cubic-bezier(.2,.7,.2,1) .2s forwards}
-@keyframes lpring{to{stroke-dashoffset:6}}
-.lp .ring-num{position:absolute;text-align:center}.lp .ring-num b{font-size:30px;font-weight:700;color:var(--navy);display:block}.lp .ring-num small{font-size:11px;color:var(--slate)}
-.lp .d-metrics{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-content:center}
-.lp .d-metrics .m b{font-size:30px;font-weight:700;line-height:1;display:block}
-.lp .d-metrics .m small{font-size:12px;color:var(--slate);display:block;margin-top:5px}
+/* bullets */
+.lp .bullets{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:14px 34px;max-width:900px;margin:8px auto 0;padding:0}
+.lp .bullets li{display:flex;gap:12px;font-size:15.5px;line-height:1.5;color:var(--navy);align-items:flex-start}
+.lp .bx{flex-shrink:0;width:22px;height:22px;border-radius:7px;background:rgba(14,143,230,.1);color:var(--brand-d);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
+/* vision / layer 2 */
+.lp .vision{max-width:1120px;margin:0 auto;padding:60px 7vw}
+.lp .vhead{text-align:center;max-width:700px;margin:0 auto 40px}
+.lp .insights{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:26px}
+.lp .ins{background:linear-gradient(180deg,#0C2A47,#0A2038);color:#fff;border-radius:18px;padding:24px 22px;box-shadow:0 20px 50px rgba(12,42,71,.22);opacity:0;transform:translateY(16px)}
+.lp .rv.in .ins{animation:lprise .7s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:var(--d)}
+.lp .ins-tag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5FD0FF;margin-bottom:14px}
+.lp .ins-q{font-size:16.5px;line-height:1.5;font-weight:500;color:#EAF4FF}
+.lp .vnote{text-align:center;font-size:16px;color:var(--slate);max-width:620px;margin:0 auto 20px}
+.lp .vnote{font-weight:500}
 /* bim */
-.lp .bim{display:grid;grid-template-columns:1fr 1fr;gap:50px;align-items:center;max-width:1120px;margin:0 auto;padding:50px 7vw}
-.lp .bim-copy h2{font-size:clamp(24px,3vw,34px);font-weight:600;letter-spacing:-.025em;line-height:1.16;margin-bottom:15px}
-.lp .bim-copy>p{font-size:16px;line-height:1.66;color:var(--slate)}
+.lp .bim{display:grid;grid-template-columns:1fr 1fr;gap:50px;align-items:center;margin-top:40px}
+.lp .bim-copy h3{font-size:clamp(22px,2.6vw,30px);font-weight:600;letter-spacing:-.022em;line-height:1.18;margin-bottom:14px}
+.lp .bim-copy>p{font-size:16px;line-height:1.64;color:var(--slate);margin-bottom:20px}
+.lp .rnd{display:inline-flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--brand-d);background:rgba(14,143,230,.06);border:1px solid rgba(14,143,230,.14);padding:9px 14px;border-radius:11px;line-height:1.4}
+.lp .rnd-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;box-shadow:0 0 0 0 rgba(16,185,129,.5);animation:lpp 2s infinite}
 .lp .bim-vis{position:relative}
 .lp .iso{display:block;width:100%;height:auto;overflow:visible}
 .lp .floor-shadow{position:absolute;left:50%;bottom:8%;width:60%;height:40px;transform:translateX(-50%);background:radial-gradient(ellipse,rgba(12,42,71,.14),transparent 70%);filter:blur(3px)}
 .lp .bld{opacity:0}
-.lp .rv.in .bld{animation:lprise 1s ease .15s forwards}
-@keyframes lprise{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+.lp .rv.in .bld{animation:lprise2 1s ease .15s forwards}
+@keyframes lprise{to{opacity:1;transform:none}}
+@keyframes lprise2{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
 .lp .face{stroke:#fff;stroke-width:1;stroke-linejoin:round}
 .lp .ft{fill:#BFE2FF}.lp .fl{fill:#1683DC}.lp .fr{fill:#3FA7F0}
 .lp .fln{stroke:rgba(255,255,255,.5);stroke-width:1;opacity:0}
@@ -360,15 +363,22 @@ const CSS = `
 .lp .bim-tip small{font-size:11.5px;color:var(--mut);font-family:ui-monospace,'SF Mono',Menlo,monospace}
 @keyframes lptip{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 /* safe */
-.lp .safe{max-width:760px;margin:0 auto;padding:60px 7vw;text-align:center}
-.lp .safe h2{font-size:clamp(25px,3.3vw,38px);font-weight:600;letter-spacing:-.025em;margin-bottom:16px;line-height:1.14}
+.lp .safe{max-width:760px;margin:0 auto;padding:40px 7vw 30px;text-align:center}
 .lp .safe p{font-size:17px;line-height:1.7;color:var(--slate);max-width:600px;margin:0 auto}
 /* final */
-.lp .final{text-align:center;max-width:720px;margin:0 auto;padding:40px 7vw 90px}
+.lp .final{text-align:center;max-width:720px;margin:0 auto;padding:50px 7vw 90px}
 .lp .final h2{font-size:clamp(28px,3.8vw,44px);font-weight:300;letter-spacing:-.03em;margin-bottom:14px}
 .lp .final p{font-size:17px;color:var(--slate);margin-bottom:28px}
 .lp .foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;max-width:1240px;margin:0 auto;padding:28px 7vw;border-top:1px solid var(--line)}
 .lp .foot .brand{font-size:16px}.lp .foot .brand img{height:22px}
 .lp .foot>span{font-size:13px;color:var(--mut)}
-@media(max-width:900px){.lp .hero{grid-template-columns:1fr;gap:44px;padding-top:44px}.lp .links{display:none}.lp .logos{grid-template-columns:1fr;gap:28px}.lp .frow,.lp .bim{grid-template-columns:1fr;gap:32px}.lp .frow.rev .ftext{order:0}.lp .dash{grid-template-columns:1fr}.lp .hvis{min-height:400px}}
+@media(max-width:900px){
+  .lp .links{display:none}
+  .lp .frow{grid-template-columns:1fr;gap:32px;margin-bottom:44px}
+  .lp .frow.rev .ftext{order:0}
+  .lp .bullets{grid-template-columns:1fr;gap:12px}
+  .lp .insights{grid-template-columns:1fr}
+  .lp .bim{grid-template-columns:1fr;gap:32px}
+  .lp .prow{gap:12px}
+}
 `;
