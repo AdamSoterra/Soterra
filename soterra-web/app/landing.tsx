@@ -1,6 +1,6 @@
 "use client";
-import { useEffect } from "react";
-import type { CSSProperties } from "react";
+import { useEffect, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 // Set CSS custom properties inline without fighting React's CSSProperties type.
 const cvar = (o: Record<string, string>): CSSProperties => o as unknown as CSSProperties;
@@ -39,7 +39,7 @@ const INSIGHTS = [
   },
   {
     tag: "Pre-line inspections",
-    quote: "1 in 5 fail first time on your jobs, almost always on missing blocking.",
+    quote: "3 in 5 fail first time on your jobs, almost always on missing back blocking.",
   },
   {
     tag: "3 years of records",
@@ -86,6 +86,67 @@ function LogoCIS() {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img className="cis-img" src="/partners/cisrc-globe.png" alt="" />
       <span className="cis-txt">AUT COMPUTER AND INFORMATION<br />SCIENCES RESEARCH CENTRE</span>
+    </div>
+  );
+}
+
+// ─── Layer 1 phone demo — a sped-up, looping construction conversation that
+// shows the two sources (plans + NZ Building Code) and a calendar action.
+// Facts signed off by Adam 2026-07-16. ───
+type DemoTurn = { q: string; src: string | null; ans: ReactNode; cite?: { code: string; sub: string }; tag?: string };
+const DEMO_TURNS: DemoTurn[] = [
+  {
+    q: "What's the fire rating on the exterior doors?",
+    src: "From your plans",
+    ans: <><b>FRR 60</b>, fire-rated 60 minutes. Leaf 910 × 2240 × 48&nbsp;mm.</>,
+    cite: { code: "ED003 · Door Schedule", sub: "95% Detail Design · p60/85" },
+  },
+  {
+    q: "Does the code need a cavity behind the weatherboards?",
+    src: "From the NZ Building Code",
+    ans: <><b>E2/AS1</b> calls for a drained cavity behind absorbent claddings like weatherboard. Confirm with your designer.</>,
+    cite: { code: "E2/AS1 · External Moisture", sub: "NZ Building Code" },
+  },
+  {
+    q: "Book the pre-line inspection for Tuesday 9am.",
+    src: null,
+    ans: <>Booked. <b>Pre-line inspection, Tue 9:00 AM.</b> Crew notified.</>,
+    tag: "✓ Added to the shared calendar",
+  },
+];
+
+function ChatDemo() {
+  // 3 frames per turn: 0 = question in, 1 = typing dots, 2 = answer.
+  const [f, setF] = useState(0);
+  useEffect(() => {
+    const delays = [1000, 1100, 2800, 1000, 1100, 2800, 1000, 1100, 2800];
+    const id = setTimeout(() => setF((x) => (x + 1) % delays.length), delays[f]);
+    return () => clearTimeout(id);
+  }, [f]);
+  const turn = Math.floor(f / 3);
+  const stage = f % 3;
+  const t = DEMO_TURNS[turn];
+  return (
+    <div className="phone">
+      <div className="ph-top"><span className="ph-cam" /></div>
+      <div className="ph-screen">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <div className="ph-bar"><img src="/logo-mark.png" alt="" /><b>1 Arthur Road</b></div>
+        <div className="chat">
+          <div className="q pop" key={`q${turn}`}>{t.q}</div>
+          {stage === 1 && <div className="dots pop"><i /><i /><i /></div>}
+          {stage === 2 && (
+            <div className="a pop" key={`a${turn}`}>
+              {t.src && <div className="a-src">{t.src}</div>}
+              <p>{t.ans}</p>
+              {t.cite && (
+                <div className="cite"><span className="ci">▦</span><span className="ct"><b>{t.cite.code}</b><small>{t.cite.sub}</small></span></div>
+              )}
+              {t.tag && <div className="cal-ok">{t.tag}</div>}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -160,19 +221,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
             <p>Fire ratings, GIB specs, beam sizes, setouts, ask and get the answer in seconds, pointed at the exact sheet.</p>
           </div>
           <div className="fvis">
-            <div className="phone">
-              <div className="ph-top"><span className="ph-cam" /></div>
-              <div className="ph-screen">
-                <div className="ph-bar"><img src="/logo-mark.png" alt="" />{/* eslint-disable-line @next/next/no-img-element */}<b>1 Arthur Road</b></div>
-                <div className="q">What&apos;s the fire rating on the exterior doors?</div>
-                <div className="dots"><i /><i /><i /></div>
-                <div className="a">
-                  <div className="a-src">From your plans</div>
-                  <p><b>FRR 60</b>, fire-rated 60 minutes. Leaf 910 × 2240 × 48&nbsp;mm.</p>
-                  <div className="cite"><span className="ci">▦</span><span className="ct"><b>ED003 · Door Schedule</b><small>95% Detail Design · p60/85</small></span></div>
-                </div>
-              </div>
-            </div>
+            <ChatDemo />
           </div>
         </div>
 
@@ -206,7 +255,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         <div className="vhead rv">
           <div className="lbadge dark"><span>Layer 2</span> The learning engine</div>
           <h2>It learns your history to predict and prevent mistakes <span className="g">before they happen.</span></h2>
-          <p>Instead of only helping with today&apos;s job, Soterra learns from every project: inspections, QA records, RFIs, defects, delays and outcomes, and builds a knowledge base that belongs to your company.</p>
+          <p>Soterra learns from your previous projects, using the project data you already have, reliable council and consultant QA, to prevent rework and delays before they repeat.</p>
         </div>
 
         <div className="insights rv">
@@ -218,41 +267,62 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
           ))}
         </div>
 
-        <div className="bim rv">
-          <div className="bim-copy">
-            <div className="fk">The project, as a model you can ask</div>
-            <h3>From the whole set of drawings to one connected project.</h3>
-            <p>Every page, architectural, structural, services and specs, held as one project your whole crew can question, feeding the knowledge that makes the next job go smoother.</p>
-            <div className="rnd"><span className="rnd-dot" /> In active development with AUT&apos;s research centre · 2 masters theses in progress</div>
-          </div>
-          <div className="bim-vis">
-            <div className="floor-shadow" aria-hidden="true" />
-            <svg className="iso" viewBox="0 0 460 360" aria-hidden="true">
-              <g className="bld">
-                <path className="face fr" d="M230 170 L350 110 L350 262 L230 322 Z" />
-                <path className="face fl" d="M110 110 L230 170 L230 322 L110 262 Z" />
-                <path className="face ft" d="M110 110 L230 50 L350 110 L230 170 Z" />
-                <line className="fln f1" x1="110" y1="149" x2="230" y2="209" /><line className="fln f1" x1="230" y1="209" x2="350" y2="149" />
-                <line className="fln f2" x1="110" y1="188" x2="230" y2="248" /><line className="fln f2" x1="230" y1="248" x2="350" y2="188" />
-                <line className="fln f3" x1="110" y1="227" x2="230" y2="287" /><line className="fln f3" x1="230" y1="287" x2="350" y2="227" />
-                <line className="mul" x1="150" y1="130" x2="150" y2="282" /><line className="mul" x1="190" y1="150" x2="190" y2="302" />
-                <line className="mul" x1="270" y1="150" x2="270" y2="302" /><line className="mul" x1="310" y1="130" x2="310" y2="282" />
+      </section>
+
+      {/* ─── LAYER 3 — plans + code + history in one model ─── */}
+      <section className="layer3" id="together">
+        <div className="l3-copy rv">
+          <div className="lbadge"><span>Layer 3</span> One connected model</div>
+          <h2>Your history, your live plans and the Building Code, <span className="g">together in one AI.</span></h2>
+          <p>This is where Soterra is heading: everything it knows becomes one model your whole crew can question. It answers from your live drawings, checks against the Building Code, and warns you with what every past project has taught it.</p>
+          <div className="rnd"><span className="rnd-dot" /> In active development with AUT&apos;s research centre · 2 masters theses in progress</div>
+        </div>
+        <div className="l3-vis rv">
+          <svg className="iso" viewBox="0 0 520 380" aria-hidden="true">
+            <defs>
+              <linearGradient id="fTop" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stopColor="#EAF5FF" /><stop offset="1" stopColor="#C6E4FF" /></linearGradient>
+              <linearGradient id="fLeft" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#0F72C8" /><stop offset="1" stopColor="#0A56A0" /></linearGradient>
+              <linearGradient id="fRight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#47ADF2" /><stop offset="1" stopColor="#2E8FDD" /></linearGradient>
+              <linearGradient id="fRoofT" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#F4FAFF" /><stop offset="1" stopColor="#DBEEFF" /></linearGradient>
+            </defs>
+            <ellipse cx="260" cy="348" rx="150" ry="24" fill="rgba(12,42,71,.12)" />
+            <g className="bld">
+              <path fill="url(#fLeft)" stroke="#fff" strokeWidth="1" d="M150 130 L260 190 L260 340 L150 280 Z" />
+              <path fill="url(#fRight)" stroke="#fff" strokeWidth="1" d="M260 190 L370 130 L370 280 L260 340 Z" />
+              <path fill="url(#fTop)" stroke="#fff" strokeWidth="1" d="M260 70 L370 130 L260 190 L150 130 Z" />
+              <g stroke="rgba(255,255,255,.42)" strokeWidth="1">
+                <line x1="150" y1="155" x2="260" y2="215" /><line x1="150" y1="180" x2="260" y2="240" /><line x1="150" y1="205" x2="260" y2="265" /><line x1="150" y1="230" x2="260" y2="290" /><line x1="150" y1="255" x2="260" y2="315" />
+                <line x1="260" y1="215" x2="370" y2="155" /><line x1="260" y1="240" x2="370" y2="180" /><line x1="260" y1="265" x2="370" y2="205" /><line x1="260" y1="290" x2="370" y2="230" /><line x1="260" y1="315" x2="370" y2="255" />
               </g>
-              <g className="pin p1"><circle className="halo" cx="300" cy="150" r="12" /><circle className="dot" cx="300" cy="150" r="5" /></g>
-              <g className="pin p2"><circle className="halo" cx="168" cy="205" r="11" /><circle className="dot" cx="168" cy="205" r="4.5" /></g>
-              <g className="pin p3"><circle className="halo" cx="250" cy="262" r="11" /><circle className="dot" cx="250" cy="262" r="4.5" /></g>
-            </svg>
-            <div className="bim-tip"><div className="a-src">From your plans</div><p>Exterior doors: <b>FRR 60</b></p><small>ED003 · Door Schedule</small></div>
-          </div>
+              <g stroke="rgba(255,255,255,.26)" strokeWidth="1">
+                <line x1="187" y1="150" x2="187" y2="300" /><line x1="223" y1="170" x2="223" y2="320" /><line x1="297" y1="170" x2="297" y2="320" /><line x1="333" y1="150" x2="333" y2="300" />
+              </g>
+              <path fill="url(#fLeft)" stroke="#fff" strokeWidth="1" d="M205 90 L260 120 L260 160 L205 130 Z" />
+              <path fill="url(#fRight)" stroke="#fff" strokeWidth="1" d="M260 120 L315 90 L315 130 L260 160 Z" />
+              <path fill="url(#fRoofT)" stroke="#fff" strokeWidth="1" d="M260 60 L315 90 L260 120 L205 90 Z" />
+            </g>
+            <g className="l3wire">
+              <line x1="392" y1="121" x2="360" y2="150" /><line x1="384" y1="207" x2="372" y2="216" /><line x1="150" y1="248" x2="132" y2="262" />
+            </g>
+            <g className="l3pindot"><circle cx="360" cy="150" r="4" /><circle cx="372" cy="216" r="4" /><circle cx="150" cy="248" r="4" /></g>
+            <g className="l3chip">
+              <rect x="388" y="104" width="120" height="34" rx="9" /><circle cx="405" cy="121" r="4" fill="#0E8FE6" /><text x="417" y="125">Live plans</text>
+              <rect x="384" y="190" width="130" height="34" rx="9" /><circle cx="401" cy="207" r="4" fill="#10B981" /><text x="413" y="211">Building Code</text>
+              <rect x="6" y="245" width="132" height="34" rx="9" /><circle cx="23" cy="262" r="4" fill="#8B5CF6" /><text x="35" y="266">Project history</text>
+            </g>
+          </svg>
         </div>
       </section>
 
       {/* ─── SAFE ─── */}
       <section className="safe" id="safe">
         <div className="rv">
+          <div className="safe-tick" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </div>
           <div className="fk center">Safe to use on site</div>
-          <h2>It never invents a code, a rating, or a number.</h2>
-          <p>Soterra only answers from the drawings and specs you give it, and shows you the exact sheet every time. That&apos;s the line between a tool you can trust on site and one you can&apos;t.</p>
+          <h2>Every answer is backed by your project.</h2>
+          <p>Soterra only answers using your drawings, specifications and approved references. Every response links back to the exact document, so you always know where the information came from.</p>
         </div>
       </section>
 
@@ -299,7 +369,7 @@ const CSS = `
 .lp .solid{background:var(--grad);color:#fff;font-size:14px;font-weight:600;padding:10px 18px;border-radius:11px;box-shadow:0 10px 26px rgba(10,141,237,.28)}
 .lp .solid:hover{filter:brightness(1.05)}
 .lp .big{padding:15px 28px;font-size:15px;border-radius:13px}
-/* hero — simple, centered */
+/* hero - simple, centered */
 .lp .hero{max-width:900px;margin:0 auto;padding:70px 7vw 40px;text-align:center;display:flex;flex-direction:column;align-items:center}
 .lp .pill{display:inline-flex;align-items:center;gap:9px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--brand-d);background:rgba(14,143,230,.07);border:1px solid rgba(14,143,230,.16);padding:8px 15px;border-radius:30px;margin-bottom:26px}
 .lp h1{font-size:clamp(38px,6vw,68px);line-height:1.04;letter-spacing:-.038em;font-weight:300;margin-bottom:24px;max-width:14ch}
@@ -322,7 +392,7 @@ const CSS = `
 /* layer sections */
 .lp .layer{max-width:1120px;margin:0 auto;padding:40px 7vw 20px}
 .lp .lhead{text-align:center;max-width:840px;margin:0 auto 48px}
-.lp .lhead h2{font-size:clamp(23px,3vw,34px);line-height:1.26;margin-bottom:0}
+.lp .lhead h2{font-size:clamp(22px,2.6vw,30px);line-height:1.26;margin-bottom:0}
 .lp .lbadge{display:inline-flex;align-items:center;gap:14px;font-size:24px;font-weight:700;color:var(--navy);margin-bottom:20px;letter-spacing:-.015em}
 .lp .lbadge span{font-size:16px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--grad);padding:10px 19px;border-radius:24px;box-shadow:0 9px 22px rgba(10,141,237,.32)}
 .lp .lbadge.dark span{background:var(--navy);box-shadow:0 9px 22px rgba(12,42,71,.34)}
@@ -354,6 +424,10 @@ const CSS = `
 .lp .cite .ci{width:30px;height:30px;border-radius:8px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--brand);font-size:14px;flex-shrink:0}
 .lp .cite .ct{min-width:0}.lp .cite .ct b{display:block;font-size:11.5px;color:var(--navy)}.lp .cite .ct small{font-size:10.5px;color:var(--mut)}
 @keyframes lpfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+.lp .chat{min-height:312px}
+.lp .pop{animation:lppop .38s cubic-bezier(.2,.7,.2,1)}
+@keyframes lppop{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+.lp .cal-ok{margin-top:11px;font-size:11.5px;font-weight:600;color:var(--green);background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.22);border-radius:10px;padding:8px 11px}
 /* tablet / calendar */
 .lp .tablet{width:100%;max-width:400px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:0 30px 66px rgba(12,42,71,.1)}
 .lp .tablet.cal{padding:20px 20px 8px}
@@ -406,8 +480,19 @@ const CSS = `
 .lp .bim-tip p{font-size:14px;color:var(--slate)}.lp .bim-tip p b{color:var(--navy);font-weight:700}
 .lp .bim-tip small{font-size:11.5px;color:var(--mut);font-family:ui-monospace,'SF Mono',Menlo,monospace}
 @keyframes lptip{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* layer 3 */
+.lp .layer3{display:grid;grid-template-columns:1fr 1.05fr;gap:50px;align-items:center;max-width:1120px;margin:0 auto;padding:20px 7vw 60px}
+.lp .l3-copy h2{font-size:clamp(24px,3vw,34px);font-weight:600;letter-spacing:-.025em;line-height:1.16;margin-bottom:15px}
+.lp .l3-copy>p{font-size:16px;line-height:1.64;color:var(--slate);margin-bottom:20px}
+.lp .l3-vis{position:relative}
+.lp .l3wire line{stroke:var(--mut);stroke-width:1.4;stroke-dasharray:3 3}
+.lp .l3pindot circle{fill:#fff;stroke:var(--brand);stroke-width:2}
+.lp .l3chip rect{fill:#fff;stroke:var(--line);stroke-width:1}
+.lp .l3chip text{font-size:13px;font-weight:600;fill:var(--navy);font-family:var(--font)}
 /* safe */
 .lp .safe{max-width:760px;margin:0 auto;padding:40px 7vw 30px;text-align:center}
+.lp .safe-tick{width:58px;height:58px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;margin:0 auto 22px;box-shadow:0 12px 30px rgba(10,141,237,.32)}
+.lp .safe-tick svg{width:30px;height:30px}
 .lp .safe p{font-size:17px;line-height:1.7;color:var(--slate);max-width:600px;margin:0 auto}
 /* final */
 .lp .final{text-align:center;max-width:720px;margin:0 auto;padding:50px 7vw 90px}
@@ -423,6 +508,7 @@ const CSS = `
   .lp .bullets{grid-template-columns:1fr;gap:12px}
   .lp .insights{grid-template-columns:1fr}
   .lp .bim{grid-template-columns:1fr;gap:32px}
+  .lp .layer3{grid-template-columns:1fr;gap:28px}
   .lp .prow{gap:12px}
 }
 `;
