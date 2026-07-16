@@ -254,26 +254,28 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
   },
   {
     name: "update_event",
-    description: "Change an existing event. find_items first for the id. Pass only changed fields. `assignee` sets the responsible crew member; empty string '' unassigns. '' clears end_time/location.",
+    description: "Change an existing event. find_items first for the id. Pass only changed fields. `assignee` sets the responsible crew member; empty string '' unassigns. '' clears end_time/location. `reminder` sets a phone reminder ('YYYY-MM-DD HH:MM', project local time) — it fires ONLY on the assignee's phone, so the event must be assigned to whoever should be reminded; '' clears it.",
     input_schema: {
       type: "object",
       properties: {
         id: { type: "string" }, title: { type: "string" }, date: { type: "string" }, time: { type: "string" },
         end_date: { type: "string" }, end_time: { type: "string" }, kind: { type: "string" }, location: { type: "string" },
         assignee: { type: "string" }, visibility: { type: "string", enum: ["team", "private"] },
+        reminder: { type: "string", description: "YYYY-MM-DD HH:MM in project local time; '' clears the reminder." },
       },
       required: ["id"],
     },
   },
   {
     name: "update_task",
-    description: "Change an existing task, tick it off (status:'done') / reopen (status:'open'), or reassign (`assignee`). find_items first for the id.",
+    description: "Change an existing task, tick it off (status:'done') / reopen (status:'open'), or reassign (`assignee`). find_items first for the id. `reminder` sets a phone reminder ('YYYY-MM-DD HH:MM', project local time) — it fires ONLY on the assignee's phone, so the task must be assigned to whoever should be reminded; '' clears it.",
     input_schema: {
       type: "object",
       properties: {
         id: { type: "string" }, title: { type: "string" }, due_date: { type: "string" }, due_time: { type: "string" },
         end_date: { type: "string" }, end_time: { type: "string" }, assignee: { type: "string" },
         visibility: { type: "string", enum: ["team", "private"] }, status: { type: "string", enum: ["open", "done"] },
+        reminder: { type: "string", description: "YYYY-MM-DD HH:MM in project local time; '' clears the reminder." },
       },
       required: ["id"],
     },
@@ -437,6 +439,18 @@ function taskInsertFromInput(input: Record<string, unknown>, ctx: Ctx) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// "YYYY-MM-DD HH:MM" (or with a T) in project-local wall clock → UTC instant.
+// Empty/missing clears the reminder. The assignee's phone turns this into a
+// native notification via /api/reminders/upcoming + ReminderSync.
+function parseReminder(raw: unknown): Date | null {
+  const v = s(raw);
+  if (!v) return null;
+  const [d, t] = v.replace("T", " ").trim().split(/\s+/);
+  if (!d) return null;
+  return zonedWallClockToUtc(d, t || "09:00");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function computeEventUpdateFields(existing: typeof events.$inferSelect, input: Record<string, unknown>, members: Member[]): Record<string, any> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fields: Record<string, any> = {};
@@ -448,6 +462,7 @@ function computeEventUpdateFields(existing: typeof events.$inferSelect, input: R
     if (!s(input.assignee)) { fields.assigneeId = null; fields.assigneeName = null; }
     else { const r = resolveAssignee(input, members); if (r.assigneeId) { fields.assigneeId = r.assigneeId; fields.assigneeName = r.assigneeName; } }
   }
+  if (input.reminder !== undefined) fields.reminderAt = parseReminder(input.reminder);
   const dateChanged = input.date !== undefined;
   const timeChanged = input.time !== undefined;
   const endChanged = input.end_date !== undefined || input.end_time !== undefined;
@@ -478,6 +493,7 @@ function computeTaskUpdateFields(existing: typeof tasks.$inferSelect, input: Rec
   }
   if (input.status === "done") fields.done = true;
   if (input.status === "open") fields.done = false;
+  if (input.reminder !== undefined) fields.reminderAt = parseReminder(input.reminder);
   const dateChanged = input.due_date !== undefined;
   const timeChanged = input.due_time !== undefined;
   const endChanged = input.end_date !== undefined || input.end_time !== undefined;
@@ -738,6 +754,8 @@ ASSIGNING TO CREW: when the user books/creates something FOR a specific person (
 TYPE is optional: set kind only when obvious. RELATIVE DATES: compute yourself, never show the arithmetic — only the final result.
 
 BULK / RECURRING — ONE call: 3+ items or a recurring pattern → work out every date and use create_events_bulk / create_tasks_bulk in a SINGLE call (never 20 separate calls). Changing/deleting many → find_items first for the ids, then update_*_bulk / delete_*_bulk in ONE call. Confirm with the COUNT.
+
+REMINDERS — the 'reminder' field on update_event / update_task sets a real notification on a phone. It fires ONLY on the ASSIGNEE's phone, so the item MUST be assigned to whoever should be reminded — an unassigned item reminds nobody. "remind me an hour before" → work out the absolute time yourself and pass 'YYYY-MM-DD HH:MM' in site local time. Created something and been asked to remind? create first, then update it with the reminder. When you set one, say so plainly and say WHOSE phone it'll ring on. '' clears it.
 
 ID MEMORY: after a create_*_bulk you already have every new id — reuse them for immediate tweaks/cancels, don't re-find.
 

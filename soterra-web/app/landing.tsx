@@ -115,33 +115,50 @@ const DEMO_TURNS: DemoTurn[] = [
   },
 ];
 
-// ─── Layer 3 model — an isometric structural-frame building (floor slabs +
-// columns), so it reads as an actual building model rather than a plain box. ───
-function FrameBuilding() {
-  const hd = 55, t = 7, gap = 34;
-  const cyOf = (k: number) => 135 + gap * k;
-  const cols: [number, number, number, number][] = [
-    [120, 135, 271, 6], [340, 135, 271, 6], [230, 190, 326, 6],
-    [175, 162.5, 298.5, 4], [285, 162.5, 298.5, 4],
-  ];
-  const floors = [4, 3, 2, 1, 0].map(cyOf); // draw bottom → top for correct overlap
+// ─── Layer 3 model — "Finished tower" (Adam picked Option 2, 2026-07-16).
+// Narrow footprint + tall mass so it reads as a building, not stacked trays:
+// full envelope, glazing grid, floor banding and a setback crown. ───
+function FinishedTower() {
+  const CX = 230, HW = 84, HD = 42;
+  const L = CX - HW, R = CX + HW;
+  const TOP = 104, GAP = 38, N = 6;
+  const BASE = TOP + GAP * (N - 1);
+  const cyOf = (k: number) => TOP + GAP * k;
   return (
-    <svg className="iso" viewBox="0 0 460 380" aria-hidden="true">
+    <svg className="iso" viewBox="0 0 460 420" aria-hidden="true">
       <defs>
-        <linearGradient id="fbTop" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stopColor="#EFF4FA" /><stop offset="1" stopColor="#DBE6F1" /></linearGradient>
+        <linearGradient id="ftRoof" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stopColor="#EDF4FB" /><stop offset="1" stopColor="#D3E3F2" /></linearGradient>
+        <linearGradient id="ftL" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2C82C9" /><stop offset="1" stopColor="#1B5F9B" /></linearGradient>
+        <linearGradient id="ftR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#54ACEE" /><stop offset="1" stopColor="#3388CE" /></linearGradient>
       </defs>
-      <ellipse cx="230" cy="340" rx="130" ry="19" fill="rgba(12,42,71,.12)" />
+      <ellipse cx={CX} cy={BASE + HD + 20} rx="106" ry="16" fill="rgba(12,42,71,.13)" />
       <g className="bld">
-        <g stroke="#8397AC" strokeLinecap="round" fill="none">
-          {cols.map(([x, y1, y2, w], i) => <line key={i} x1={x} y1={y1} x2={x} y2={y2} strokeWidth={w} />)}
+        {/* main mass */}
+        <path d={`M${L} ${TOP} L${CX} ${TOP + HD} L${CX} ${BASE + HD} L${L} ${BASE} Z`} fill="url(#ftL)" />
+        <path d={`M${CX} ${TOP + HD} L${R} ${TOP} L${R} ${BASE} L${CX} ${BASE + HD} Z`} fill="url(#ftR)" />
+        <polygon points={`${CX},${TOP - HD} ${R},${TOP} ${CX},${TOP + HD} ${L},${TOP}`} fill="url(#ftRoof)" stroke="#fff" strokeWidth="1" />
+        {/* floor banding */}
+        <g stroke="rgba(255,255,255,.45)" strokeWidth="1" fill="none">
+          {[1, 2, 3, 4, 5].map((k) => (
+            <g key={k}>
+              <line x1={L} y1={cyOf(k)} x2={CX} y2={cyOf(k) + HD} />
+              <line x1={CX} y1={cyOf(k) + HD} x2={R} y2={cyOf(k)} />
+            </g>
+          ))}
         </g>
-        {floors.map((cy, i) => (
-          <g key={i}>
-            <path d={`M120 ${cy} L230 ${cy + hd} L230 ${cy + hd + t} L120 ${cy + t} Z`} fill="#B4C2D3" />
-            <path d={`M230 ${cy + hd} L340 ${cy} L340 ${cy + t} L230 ${cy + hd + t} Z`} fill="#A2B2C6" />
-            <polygon points={`230,${cy - hd} 340,${cy} 230,${cy + hd} 120,${cy}`} fill="url(#fbTop)" stroke="#ffffff" strokeWidth="1" />
-          </g>
-        ))}
+        {/* glazing mullions */}
+        <g stroke="rgba(255,255,255,.24)" strokeWidth="1" fill="none">
+          {[0.25, 0.5, 0.75].map((f) => (
+            <g key={f}>
+              <line x1={L + (CX - L) * f} y1={TOP + HD * f} x2={L + (CX - L) * f} y2={TOP + HD * f + (BASE - TOP)} />
+              <line x1={CX + (R - CX) * f} y1={TOP + HD - HD * f} x2={CX + (R - CX) * f} y2={TOP + HD - HD * f + (BASE - TOP)} />
+            </g>
+          ))}
+        </g>
+        {/* setback crown */}
+        <path d={`M196 ${TOP - 20} L${CX} ${TOP - 3} L${CX} ${TOP + 13} L196 ${TOP - 4} Z`} fill="#2C82C9" />
+        <path d={`M${CX} ${TOP - 3} L264 ${TOP - 20} L264 ${TOP - 4} L${CX} ${TOP + 13} Z`} fill="#54ACEE" />
+        <polygon points={`${CX},${TOP - 37} 264,${TOP - 20} ${CX},${TOP - 3} 196,${TOP - 20}`} fill="url(#ftRoof)" stroke="#fff" strokeWidth="1" />
       </g>
     </svg>
   );
@@ -310,7 +327,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
           <div className="rnd"><span className="rnd-dot" /> In active development with AUT&apos;s research centre · 2 masters theses in progress</div>
         </div>
         <div className="l3-vis rv">
-          <FrameBuilding />
+          <FinishedTower />
         </div>
       </section>
 
@@ -510,5 +527,7 @@ const CSS = `
   .lp .bim{grid-template-columns:1fr;gap:32px}
   .lp .layer3{grid-template-columns:1fr;gap:28px}
   .lp .prow{gap:12px}
+  /* phone only: stop "LAYER 1" wrapping inside the pill and going tall+odd */
+  .lp .lbadge span{white-space:nowrap}
 }
 `;
