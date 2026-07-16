@@ -115,6 +115,38 @@ const DEMO_TURNS: DemoTurn[] = [
   },
 ];
 
+// ─── Layer 3 model — an isometric structural-frame building (floor slabs +
+// columns), so it reads as an actual building model rather than a plain box. ───
+function FrameBuilding() {
+  const hd = 55, t = 7, gap = 34;
+  const cyOf = (k: number) => 135 + gap * k;
+  const cols: [number, number, number, number][] = [
+    [120, 135, 271, 6], [340, 135, 271, 6], [230, 190, 326, 6],
+    [175, 162.5, 298.5, 4], [285, 162.5, 298.5, 4],
+  ];
+  const floors = [4, 3, 2, 1, 0].map(cyOf); // draw bottom → top for correct overlap
+  return (
+    <svg className="iso" viewBox="0 0 460 380" aria-hidden="true">
+      <defs>
+        <linearGradient id="fbTop" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stopColor="#EFF4FA" /><stop offset="1" stopColor="#DBE6F1" /></linearGradient>
+      </defs>
+      <ellipse cx="230" cy="340" rx="130" ry="19" fill="rgba(12,42,71,.12)" />
+      <g className="bld">
+        <g stroke="#8397AC" strokeLinecap="round" fill="none">
+          {cols.map(([x, y1, y2, w], i) => <line key={i} x1={x} y1={y1} x2={x} y2={y2} strokeWidth={w} />)}
+        </g>
+        {floors.map((cy, i) => (
+          <g key={i}>
+            <path d={`M120 ${cy} L230 ${cy + hd} L230 ${cy + hd + t} L120 ${cy + t} Z`} fill="#B4C2D3" />
+            <path d={`M230 ${cy + hd} L340 ${cy} L340 ${cy + t} L230 ${cy + hd + t} Z`} fill="#A2B2C6" />
+            <polygon points={`230,${cy - hd} 340,${cy} 230,${cy + hd} 120,${cy}`} fill="url(#fbTop)" stroke="#ffffff" strokeWidth="1" />
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
 function ChatDemo() {
   // 3 frames per turn: 0 = question in, 1 = typing dots, 2 = answer.
   const [f, setF] = useState(0);
@@ -211,7 +243,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
       <section className="layer" id="now">
         <div className="lhead rv">
           <div className="lbadge"><span>Layer 1</span> The project assistant</div>
-          <h2>Soterra understands your drawings, specifications, schedules and project documents, so your team can find answers, manage tasks, coordinate deliveries, write RFIs and keep the project moving from <span className="g">one intelligent workspace.</span></h2>
+          <h2>Run your projects with <span className="g">Soterra.</span></h2>
         </div>
 
         <div className="frow rv">
@@ -278,39 +310,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
           <div className="rnd"><span className="rnd-dot" /> In active development with AUT&apos;s research centre · 2 masters theses in progress</div>
         </div>
         <div className="l3-vis rv">
-          <svg className="iso" viewBox="0 0 520 380" aria-hidden="true">
-            <defs>
-              <linearGradient id="fTop" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stopColor="#EAF5FF" /><stop offset="1" stopColor="#C6E4FF" /></linearGradient>
-              <linearGradient id="fLeft" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#0F72C8" /><stop offset="1" stopColor="#0A56A0" /></linearGradient>
-              <linearGradient id="fRight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#47ADF2" /><stop offset="1" stopColor="#2E8FDD" /></linearGradient>
-              <linearGradient id="fRoofT" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#F4FAFF" /><stop offset="1" stopColor="#DBEEFF" /></linearGradient>
-            </defs>
-            <ellipse cx="260" cy="348" rx="150" ry="24" fill="rgba(12,42,71,.12)" />
-            <g className="bld">
-              <path fill="url(#fLeft)" stroke="#fff" strokeWidth="1" d="M150 130 L260 190 L260 340 L150 280 Z" />
-              <path fill="url(#fRight)" stroke="#fff" strokeWidth="1" d="M260 190 L370 130 L370 280 L260 340 Z" />
-              <path fill="url(#fTop)" stroke="#fff" strokeWidth="1" d="M260 70 L370 130 L260 190 L150 130 Z" />
-              <g stroke="rgba(255,255,255,.42)" strokeWidth="1">
-                <line x1="150" y1="155" x2="260" y2="215" /><line x1="150" y1="180" x2="260" y2="240" /><line x1="150" y1="205" x2="260" y2="265" /><line x1="150" y1="230" x2="260" y2="290" /><line x1="150" y1="255" x2="260" y2="315" />
-                <line x1="260" y1="215" x2="370" y2="155" /><line x1="260" y1="240" x2="370" y2="180" /><line x1="260" y1="265" x2="370" y2="205" /><line x1="260" y1="290" x2="370" y2="230" /><line x1="260" y1="315" x2="370" y2="255" />
-              </g>
-              <g stroke="rgba(255,255,255,.26)" strokeWidth="1">
-                <line x1="187" y1="150" x2="187" y2="300" /><line x1="223" y1="170" x2="223" y2="320" /><line x1="297" y1="170" x2="297" y2="320" /><line x1="333" y1="150" x2="333" y2="300" />
-              </g>
-              <path fill="url(#fLeft)" stroke="#fff" strokeWidth="1" d="M205 90 L260 120 L260 160 L205 130 Z" />
-              <path fill="url(#fRight)" stroke="#fff" strokeWidth="1" d="M260 120 L315 90 L315 130 L260 160 Z" />
-              <path fill="url(#fRoofT)" stroke="#fff" strokeWidth="1" d="M260 60 L315 90 L260 120 L205 90 Z" />
-            </g>
-            <g className="l3wire">
-              <line x1="392" y1="121" x2="360" y2="150" /><line x1="384" y1="207" x2="372" y2="216" /><line x1="150" y1="248" x2="132" y2="262" />
-            </g>
-            <g className="l3pindot"><circle cx="360" cy="150" r="4" /><circle cx="372" cy="216" r="4" /><circle cx="150" cy="248" r="4" /></g>
-            <g className="l3chip">
-              <rect x="388" y="104" width="120" height="34" rx="9" /><circle cx="405" cy="121" r="4" fill="#0E8FE6" /><text x="417" y="125">Live plans</text>
-              <rect x="384" y="190" width="130" height="34" rx="9" /><circle cx="401" cy="207" r="4" fill="#10B981" /><text x="413" y="211">Building Code</text>
-              <rect x="6" y="245" width="132" height="34" rx="9" /><circle cx="23" cy="262" r="4" fill="#8B5CF6" /><text x="35" y="266">Project history</text>
-            </g>
-          </svg>
+          <FrameBuilding />
         </div>
       </section>
 
@@ -392,7 +392,7 @@ const CSS = `
 /* layer sections */
 .lp .layer{max-width:1120px;margin:0 auto;padding:40px 7vw 20px}
 .lp .lhead{text-align:center;max-width:840px;margin:0 auto 48px}
-.lp .lhead h2{font-size:clamp(22px,2.6vw,30px);font-weight:600;letter-spacing:-.022em;line-height:1.3;margin-bottom:0}
+.lp .lhead h2{font-size:clamp(27px,3.6vw,42px);font-weight:600;letter-spacing:-.028em;line-height:1.14;margin-bottom:0}
 .lp .lbadge{display:inline-flex;align-items:center;gap:14px;font-size:24px;font-weight:700;color:var(--navy);margin-bottom:20px;letter-spacing:-.015em}
 .lp .lbadge span{font-size:16px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--grad);padding:10px 19px;border-radius:24px;box-shadow:0 9px 22px rgba(10,141,237,.32)}
 .lp .lbadge.dark span{background:var(--navy);box-shadow:0 9px 22px rgba(12,42,71,.34)}
