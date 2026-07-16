@@ -120,14 +120,14 @@ export default function ModelSamples() {
 
               {/* services zone: duct + pipes + tray, routed on the iso axes */}
               {/* main duct, L-shaped run */}
-              <Run d="M150 150 L235 192 L320 150" w="15" body="#E2A63C" hi="#F6D48A" />
+              <Run d="M150 150 L235 192 L320 150" w={15} body="#E2A63C" hi="#F6D48A" />
               {/* branch duct */}
-              <Run d="M235 192 L235 214 L292 186" w="9" body="#E2A63C" hi="#F6D48A" />
+              <Run d="M235 192 L235 214 L292 186" w={9} body="#E2A63C" hi="#F6D48A" />
               {/* cold + hot pipework */}
-              <Run d="M142 168 L232 213 L318 170" w="6.5" body="#2E8FDD" hi="#8FD0FF" />
-              <Run d="M142 178 L232 223 L318 180" w="6.5" body="#D8503F" hi="#FF9C8E" />
+              <Run d="M142 168 L232 213 L318 170" w={6.5} body="#2E8FDD" hi="#8FD0FF" />
+              <Run d="M142 178 L232 223 L318 180" w={6.5} body="#D8503F" hi="#FF9C8E" />
               {/* cable tray */}
-              <Run d="M160 136 L238 175 L312 138" w="5" body="#7B8C9E" hi="#C3CFDB" />
+              <Run d="M160 136 L238 175 L312 138" w={5} body="#7B8C9E" hi="#C3CFDB" />
               {/* vertical drops into the floor */}
               <g stroke="#9AA9BA" strokeWidth="3" strokeLinecap="round">
                 <line x1="188" y1="171" x2="188" y2="205" />
@@ -178,9 +178,9 @@ export default function ModelSamples() {
               </g>
 
               {/* exposed services on the middle floor */}
-              <Run d="M158 216 L232 253 L306 216" w="12" body="#E2A63C" hi="#F6D48A" />
-              <Run d="M152 230 L230 269 L310 229" w="5.5" body="#2E8FDD" hi="#8FD0FF" />
-              <Run d="M152 238 L230 277 L310 237" w="5.5" body="#D8503F" hi="#FF9C8E" />
+              <Run d="M158 216 L232 253 L306 216" w={12} body="#E2A63C" hi="#F6D48A" />
+              <Run d="M152 230 L230 269 L310 229" w={5.5} body="#2E8FDD" hi="#8FD0FF" />
+              <Run d="M152 238 L230 277 L310 237" w={5.5} body="#D8503F" hi="#FF9C8E" />
 
               <g>
                 <path d={`M${L} 237 L230 289 L230 300 L${L} 248 Z`} fill="#9FB0C4" />
