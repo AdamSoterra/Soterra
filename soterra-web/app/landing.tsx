@@ -47,21 +47,40 @@ const INSIGHTS = [
   },
 ];
 
-// ─── Partner logos — recreated marks. Swap for official brand files before wide
-// public use (institutions have brand kits; approximations shouldn't ship far). ───
+// ─── Partner logos — SVG recreations traced from the official brand images
+// (Adam, 2026-07-16): AUT Ventures peak mark, AUT outline wordmark, and the
+// CISRC red network-globe with its navy background removed (transparent vector,
+// text flipped dark so it reads on the light plates). ───
 function LogoVentures() {
   return (
     <div className="lg">
-      <span className="lg-aut" style={{ fontSize: 26 }}>AUT</span>
-      <span className="lg-vent">Ventures</span>
+      <svg className="av-mark" viewBox="0 0 100 88" aria-hidden="true">
+        <defs>
+          <linearGradient id="avgrad" x1="0" y1="0" x2="0.55" y2="1">
+            <stop offset="0" stopColor="#2E9ED2" />
+            <stop offset="1" stopColor="#14486B" />
+          </linearGradient>
+        </defs>
+        {/* light-blue upstroke → gradient downstroke → green upstroke */}
+        <polygon points="0,88 30,4 46,4 16,88" fill="#36B5E8" />
+        <polygon points="30,4 46,4 66,62 50,62" fill="url(#avgrad)" />
+        <polygon points="50,62 66,62 96,8 80,8" fill="#79BD44" />
+      </svg>
+      <span className="av-txt">AUT<br />VENTURES</span>
     </div>
   );
 }
 function LogoAUT() {
   return (
     <div className="lg">
-      <span className="lg-aut" style={{ fontSize: 32 }}>AUT</span>
-      <span className="lg-full">Auckland University<br />of Technology</span>
+      <svg className="aut-word" viewBox="0 0 132 56" aria-hidden="true">
+        <text
+          x="66" y="47" textAnchor="middle"
+          fontFamily="'Arial Black','Arial',sans-serif" fontWeight="900"
+          fontSize="46" letterSpacing="3"
+          fill="#FFFFFF" stroke="#161616" strokeWidth="2.4" paintOrder="stroke"
+        >AUT</text>
+      </svg>
     </div>
   );
 }
@@ -69,8 +88,8 @@ function LogoCIS() {
   return (
     <div className="lg">
       <svg className="cis-globe" viewBox="0 0 44 44" aria-hidden="true">
-        <circle cx="22" cy="22" r="21" fill="#D81E28" />
-        <g fill="none" stroke="#fff" strokeWidth="1.1" opacity="0.92">
+        <circle cx="22" cy="22" r="21" fill="#E13A1E" />
+        <g fill="none" stroke="#fff" strokeWidth="1.2" opacity="0.95">
           <ellipse cx="22" cy="22" rx="8" ry="21" />
           <ellipse cx="22" cy="22" rx="15.5" ry="21" />
           <line x1="1" y1="22" x2="43" y2="22" />
@@ -78,14 +97,14 @@ function LogoCIS() {
           <path d="M5.5 32 Q22 29 38.5 32" />
         </g>
         <g fill="#fff">
-          <circle cx="22" cy="1.6" r="1.8" /><circle cx="22" cy="42.4" r="1.8" />
-          <circle cx="1.8" cy="22" r="1.8" /><circle cx="42.2" cy="22" r="1.8" />
+          <circle cx="22" cy="1.6" r="1.9" /><circle cx="22" cy="42.4" r="1.9" />
+          <circle cx="1.8" cy="22" r="1.9" /><circle cx="42.2" cy="22" r="1.9" />
           <circle cx="6.5" cy="12" r="1.5" /><circle cx="37.5" cy="12" r="1.5" />
           <circle cx="6.5" cy="32" r="1.5" /><circle cx="37.5" cy="32" r="1.5" />
-          <circle cx="14" cy="22" r="1.4" /><circle cx="30" cy="22" r="1.4" />
+          <circle cx="14" cy="22" r="1.5" /><circle cx="30" cy="22" r="1.5" />
         </g>
       </svg>
-      <span className="cis-txt"><b>AUT</b> Computer and Information<br />Sciences Research Centre</span>
+      <span className="cis-txt">AUT COMPUTER AND INFORMATION<br />SCIENCES RESEARCH CENTRE</span>
     </div>
   );
 }
@@ -315,13 +334,12 @@ const CSS = `
 .lp .pk{font-size:11.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-bottom:20px}
 .lp .prow{display:flex;gap:16px;justify-content:center;align-items:stretch;flex-wrap:wrap}
 .lp .plate{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 24px;min-height:78px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(12,42,71,.05)}
-.lp .lg{display:flex;align-items:center;gap:11px}
-.lp .lg-aut{font-weight:800;color:var(--navy);letter-spacing:-.03em;line-height:1}
-.lp .lg-vent{font-size:23px;font-weight:400;color:var(--slate);letter-spacing:-.01em}
-.lp .lg-full{font-size:11px;line-height:1.24;color:var(--slate);text-align:left;font-weight:600}
-.lp .cis-globe{width:38px;height:38px;flex-shrink:0}
-.lp .cis-txt{font-size:11.5px;line-height:1.3;color:var(--navy);text-align:left;font-weight:700}
-.lp .cis-txt b{color:var(--brand-d)}
+.lp .lg{display:flex;align-items:center;gap:12px}
+.lp .av-mark{width:46px;height:40px;flex-shrink:0}
+.lp .av-txt{font-size:14px;line-height:1.16;font-weight:800;color:#4D5F6E;letter-spacing:.07em;text-align:left;align-self:flex-end;padding-bottom:2px}
+.lp .aut-word{width:88px;height:38px}
+.lp .cis-globe{width:40px;height:40px;flex-shrink:0}
+.lp .cis-txt{font-size:10.5px;line-height:1.35;color:#243B4A;text-align:left;font-weight:800;letter-spacing:.02em}
 /* layer sections */
 .lp .layer{max-width:1120px;margin:0 auto;padding:40px 7vw 20px}
 .lp .lhead{text-align:center;max-width:680px;margin:0 auto 48px}
