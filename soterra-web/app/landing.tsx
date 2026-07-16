@@ -392,11 +392,11 @@ const CSS = `
 /* layer sections */
 .lp .layer{max-width:1120px;margin:0 auto;padding:40px 7vw 20px}
 .lp .lhead{text-align:center;max-width:840px;margin:0 auto 48px}
-.lp .lhead h2{font-size:clamp(22px,2.6vw,30px);line-height:1.26;margin-bottom:0}
+.lp .lhead h2{font-size:clamp(22px,2.6vw,30px);font-weight:600;letter-spacing:-.022em;line-height:1.3;margin-bottom:0}
 .lp .lbadge{display:inline-flex;align-items:center;gap:14px;font-size:24px;font-weight:700;color:var(--navy);margin-bottom:20px;letter-spacing:-.015em}
 .lp .lbadge span{font-size:16px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--grad);padding:10px 19px;border-radius:24px;box-shadow:0 9px 22px rgba(10,141,237,.32)}
 .lp .lbadge.dark span{background:var(--navy);box-shadow:0 9px 22px rgba(12,42,71,.34)}
-.lp .lhead h2,.lp .vhead h2,.lp .safe h2{font-size:clamp(27px,3.6vw,42px);font-weight:600;letter-spacing:-.028em;line-height:1.13;margin-bottom:15px}
+.lp .vhead h2,.lp .safe h2{font-size:clamp(27px,3.6vw,42px);font-weight:600;letter-spacing:-.028em;line-height:1.13;margin-bottom:15px}
 .lp .lhead>p,.lp .vhead>p{font-size:17px;line-height:1.62;color:var(--slate)}
 .lp .frow{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;margin-bottom:56px}
 .lp .frow.rev .ftext{order:2}
