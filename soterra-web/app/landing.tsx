@@ -115,52 +115,37 @@ const DEMO_TURNS: DemoTurn[] = [
   },
 ];
 
-// ─── Layer 3 model — "Finished tower" (Adam picked Option 2, 2026-07-16).
-// Narrow footprint + tall mass so it reads as a building, not stacked trays:
-// full envelope, glazing grid, floor banding and a setback crown. ───
-function FinishedTower() {
-  const CX = 230, HW = 84, HD = 42;
-  const L = CX - HW, R = CX + HW;
-  const TOP = 104, GAP = 38, N = 6;
-  const BASE = TOP + GAP * (N - 1);
-  const cyOf = (k: number) => TOP + GAP * k;
+// ─── Layer 3 visual — the payoff answer, not an illustration of a building.
+// One question answered from all three sources at once (plans + Building Code +
+// company history), which is the whole Layer 3 claim and the one thing no
+// competitor can screenshot. Copy signed off by Adam 2026-07-16. ───
+function AnswerCard() {
   return (
-    <svg className="iso" viewBox="0 0 460 420" aria-hidden="true">
-      <defs>
-        <linearGradient id="ftRoof" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stopColor="#EDF4FB" /><stop offset="1" stopColor="#D3E3F2" /></linearGradient>
-        <linearGradient id="ftL" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2C82C9" /><stop offset="1" stopColor="#1B5F9B" /></linearGradient>
-        <linearGradient id="ftR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#54ACEE" /><stop offset="1" stopColor="#3388CE" /></linearGradient>
-      </defs>
-      <ellipse cx={CX} cy={BASE + HD + 20} rx="106" ry="16" fill="rgba(12,42,71,.13)" />
-      <g className="bld">
-        {/* main mass */}
-        <path d={`M${L} ${TOP} L${CX} ${TOP + HD} L${CX} ${BASE + HD} L${L} ${BASE} Z`} fill="url(#ftL)" />
-        <path d={`M${CX} ${TOP + HD} L${R} ${TOP} L${R} ${BASE} L${CX} ${BASE + HD} Z`} fill="url(#ftR)" />
-        <polygon points={`${CX},${TOP - HD} ${R},${TOP} ${CX},${TOP + HD} ${L},${TOP}`} fill="url(#ftRoof)" stroke="#fff" strokeWidth="1" />
-        {/* floor banding */}
-        <g stroke="rgba(255,255,255,.45)" strokeWidth="1" fill="none">
-          {[1, 2, 3, 4, 5].map((k) => (
-            <g key={k}>
-              <line x1={L} y1={cyOf(k)} x2={CX} y2={cyOf(k) + HD} />
-              <line x1={CX} y1={cyOf(k) + HD} x2={R} y2={cyOf(k)} />
-            </g>
-          ))}
-        </g>
-        {/* glazing mullions */}
-        <g stroke="rgba(255,255,255,.24)" strokeWidth="1" fill="none">
-          {[0.25, 0.5, 0.75].map((f) => (
-            <g key={f}>
-              <line x1={L + (CX - L) * f} y1={TOP + HD * f} x2={L + (CX - L) * f} y2={TOP + HD * f + (BASE - TOP)} />
-              <line x1={CX + (R - CX) * f} y1={TOP + HD - HD * f} x2={CX + (R - CX) * f} y2={TOP + HD - HD * f + (BASE - TOP)} />
-            </g>
-          ))}
-        </g>
-        {/* setback crown */}
-        <path d={`M196 ${TOP - 20} L${CX} ${TOP - 3} L${CX} ${TOP + 13} L196 ${TOP - 4} Z`} fill="#2C82C9" />
-        <path d={`M${CX} ${TOP - 3} L264 ${TOP - 20} L264 ${TOP - 4} L${CX} ${TOP + 13} Z`} fill="#54ACEE" />
-        <polygon points={`${CX},${TOP - 37} 264,${TOP - 20} ${CX},${TOP - 3} 196,${TOP - 20}`} fill="url(#ftRoof)" stroke="#fff" strokeWidth="1" />
-      </g>
-    </svg>
+    <div className="phone">
+      <div className="ph-top"><span className="ph-cam" /></div>
+      <div className="ph-screen">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <div className="ph-bar"><img src="/logo-mark.png" alt="" /><b>1 Arthur Road</b></div>
+        <div className="q">Anything I should watch before the Level 3 fire penetration inspection?</div>
+        <div className="a l3a">
+          <div className="srcb">
+            <div className="a-src">From your plans</div>
+            <p>18 services cross the <b>FRR 60</b> separation on Level 3.</p>
+            <small className="cref">A-402 · Fire Rating Plan</small>
+          </div>
+          <div className="srcb">
+            <div className="a-src grn">From the NZ Building Code</div>
+            <p>Penetrations must be fire-stopped to maintain the separation&apos;s FRR, using a system tested to AS 4072.1. Confirm the detail with your fire engineer.</p>
+            <small className="cref">C/AS2 · Protection from Fire</small>
+          </div>
+          <div className="srcb">
+            <div className="a-src pur">From your history</div>
+            <p>Fire penetrations are your <b>most-failed first inspection</b>: 41 defects across 62 projects, nearly all missing collars on PVC waste.</p>
+          </div>
+          <div className="l3act">Want me to add the check to Thursday&apos;s pre-inspection?</div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -231,9 +216,10 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         </div>
       </header>
 
-      {/* ─── HERO — deliberately simple ─── */}
+      {/* ─── HERO — deliberately simple. Headline sits straight under the nav
+           (the eyebrow pill was removed 2026-07-16) and the whole hero is tuned
+           to land on one phone screen, ending on the CTAs. ─── */}
       <section className="hero">
-        <div className="pill rv in"><span className="dotlive" /> AI project assistant + company learning engine</div>
         <h1 className="rv in">Turning construction data into <span className="g">company intelligence.</span></h1>
         <p className="lead rv in">
           An AI assistant that knows your whole project today, and a learning engine that captures
@@ -259,7 +245,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
       {/* ─── LAYER 1 — what it does today ─── */}
       <section className="layer" id="now">
         <div className="lhead rv">
-          <div className="lbadge pa"><span>Layer 1</span> The project assistant</div>
+          <div className="lbadge pb"><span>Layer 1</span> The project assistant</div>
           <h2>Run your projects with <span className="g">Soterra.</span></h2>
         </div>
 
@@ -321,13 +307,13 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
       {/* ─── LAYER 3 — plans + code + history in one model ─── */}
       <section className="layer3" id="together">
         <div className="l3-copy rv">
-          <div className="lbadge"><span>Layer 3</span> One connected model</div>
+          <div className="lbadge pb"><span>Layer 3</span> One connected model</div>
           <h2>Your history, your live plans and the Building Code, <span className="g">together in one AI.</span></h2>
           <p>This is where Soterra is heading: everything it knows becomes one model your whole crew can question. It answers from your live drawings, checks against the Building Code, and warns you with what every past project has taught it.</p>
           <div className="rnd"><span className="rnd-dot" /> In active development with AUT&apos;s research centre · 2 masters theses in progress</div>
         </div>
         <div className="l3-vis rv">
-          <FinishedTower />
+          <AnswerCard />
         </div>
       </section>
 
@@ -387,7 +373,7 @@ const CSS = `
 .lp .solid:hover{filter:brightness(1.05)}
 .lp .big{padding:15px 28px;font-size:15px;border-radius:13px}
 /* hero - simple, centered */
-.lp .hero{max-width:900px;margin:0 auto;padding:70px 7vw 40px;text-align:center;display:flex;flex-direction:column;align-items:center}
+.lp .hero{max-width:900px;margin:0 auto;padding:30px 7vw 34px;text-align:center;display:flex;flex-direction:column;align-items:center}
 .lp .pill{display:inline-flex;align-items:center;gap:9px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--brand-d);background:rgba(14,143,230,.07);border:1px solid rgba(14,143,230,.16);padding:8px 15px;border-radius:30px;margin-bottom:26px}
 .lp h1{font-size:clamp(38px,6vw,68px);line-height:1.04;letter-spacing:-.038em;font-weight:300;margin-bottom:24px;max-width:14ch}
 .lp h1 .g{font-weight:700}
@@ -505,6 +491,14 @@ const CSS = `
 .lp .bim-tip small{font-size:11.5px;color:var(--mut);font-family:ui-monospace,'SF Mono',Menlo,monospace}
 @keyframes lptip{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 /* layer 3 */
+.lp .l3a{padding:14px}
+.lp .srcb{padding:11px 0;border-top:1px solid var(--line2)}
+.lp .srcb:first-child{border-top:none;padding-top:2px}
+.lp .a-src.grn{color:var(--green)}
+.lp .a-src.pur{color:#7C3AED}
+.lp .cref{display:block;margin-top:6px;font-size:10.5px;color:var(--mut);font-family:ui-monospace,'SF Mono',Menlo,monospace}
+.lp .l3act{margin-top:12px;padding-top:11px;border-top:1px solid var(--line2);font-size:12.5px;font-style:italic;color:var(--brand-d)}
+.lp .l3-vis .phone{margin:0 auto}
 .lp .layer3{display:grid;grid-template-columns:1fr 1.05fr;gap:50px;align-items:center;max-width:1120px;margin:0 auto;padding:20px 7vw 60px}
 .lp .l3-copy h2{font-size:clamp(24px,3vw,34px);font-weight:600;letter-spacing:-.025em;line-height:1.16;margin-bottom:15px}
 .lp .l3-copy>p{font-size:16px;line-height:1.64;color:var(--slate);margin-bottom:20px}
