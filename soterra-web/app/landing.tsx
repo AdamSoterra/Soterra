@@ -47,6 +47,49 @@ const INSIGHTS = [
   },
 ];
 
+// ─── Partner logos — recreated marks. Swap for official brand files before wide
+// public use (institutions have brand kits; approximations shouldn't ship far). ───
+function LogoVentures() {
+  return (
+    <div className="lg">
+      <span className="lg-aut" style={{ fontSize: 26 }}>AUT</span>
+      <span className="lg-vent">Ventures</span>
+    </div>
+  );
+}
+function LogoAUT() {
+  return (
+    <div className="lg">
+      <span className="lg-aut" style={{ fontSize: 32 }}>AUT</span>
+      <span className="lg-full">Auckland University<br />of Technology</span>
+    </div>
+  );
+}
+function LogoCIS() {
+  return (
+    <div className="lg">
+      <svg className="cis-globe" viewBox="0 0 44 44" aria-hidden="true">
+        <circle cx="22" cy="22" r="21" fill="#D81E28" />
+        <g fill="none" stroke="#fff" strokeWidth="1.1" opacity="0.92">
+          <ellipse cx="22" cy="22" rx="8" ry="21" />
+          <ellipse cx="22" cy="22" rx="15.5" ry="21" />
+          <line x1="1" y1="22" x2="43" y2="22" />
+          <path d="M5.5 12 Q22 15 38.5 12" />
+          <path d="M5.5 32 Q22 29 38.5 32" />
+        </g>
+        <g fill="#fff">
+          <circle cx="22" cy="1.6" r="1.8" /><circle cx="22" cy="42.4" r="1.8" />
+          <circle cx="1.8" cy="22" r="1.8" /><circle cx="42.2" cy="22" r="1.8" />
+          <circle cx="6.5" cy="12" r="1.5" /><circle cx="37.5" cy="12" r="1.5" />
+          <circle cx="6.5" cy="32" r="1.5" /><circle cx="37.5" cy="32" r="1.5" />
+          <circle cx="14" cy="22" r="1.4" /><circle cx="30" cy="22" r="1.4" />
+        </g>
+      </svg>
+      <span className="cis-txt"><b>AUT</b> Computer and Information<br />Sciences Research Centre</span>
+    </div>
+  );
+}
+
 export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => void; onGetStarted?: () => void }) {
   useEffect(() => {
     const io = new IntersectionObserver(
@@ -97,10 +140,9 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
       <section className="partners rv">
         <div className="pk">Built in partnership with</div>
         <div className="prow">
-          {/* TODO: swap text plates for real logo images in /public/partners/ */}
-          <div className="plate"><b>AUT Ventures</b></div>
-          <div className="plate wide"><b>AUT Computer &amp; Information</b><small>Sciences Research Centre</small></div>
-          <div className="plate"><b>AUT</b><small>Auckland University of Technology</small></div>
+          <div className="plate"><LogoVentures /></div>
+          <div className="plate wide"><LogoCIS /></div>
+          <div className="plate"><LogoAUT /></div>
         </div>
       </section>
 
@@ -272,16 +314,20 @@ const CSS = `
 .lp .partners{max-width:1000px;margin:0 auto;padding:24px 7vw 52px;text-align:center}
 .lp .pk{font-size:11.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-bottom:20px}
 .lp .prow{display:flex;gap:16px;justify-content:center;align-items:stretch;flex-wrap:wrap}
-.lp .plate{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 22px;min-width:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(12,42,71,.05)}
-.lp .plate.wide{min-width:210px}
-.lp .plate b{font-size:15px;font-weight:700;color:var(--navy);letter-spacing:-.01em;line-height:1.2}
-.lp .plate small{font-size:11px;color:var(--slate);margin-top:3px}
+.lp .plate{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 24px;min-height:78px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(12,42,71,.05)}
+.lp .lg{display:flex;align-items:center;gap:11px}
+.lp .lg-aut{font-weight:800;color:var(--navy);letter-spacing:-.03em;line-height:1}
+.lp .lg-vent{font-size:23px;font-weight:400;color:var(--slate);letter-spacing:-.01em}
+.lp .lg-full{font-size:11px;line-height:1.24;color:var(--slate);text-align:left;font-weight:600}
+.lp .cis-globe{width:38px;height:38px;flex-shrink:0}
+.lp .cis-txt{font-size:11.5px;line-height:1.3;color:var(--navy);text-align:left;font-weight:700}
+.lp .cis-txt b{color:var(--brand-d)}
 /* layer sections */
 .lp .layer{max-width:1120px;margin:0 auto;padding:40px 7vw 20px}
 .lp .lhead{text-align:center;max-width:680px;margin:0 auto 48px}
-.lp .lbadge{display:inline-flex;align-items:center;gap:9px;font-size:13px;font-weight:600;color:var(--slate);margin-bottom:16px}
-.lp .lbadge span{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:var(--grad);padding:5px 10px;border-radius:20px}
-.lp .lbadge.dark span{background:var(--navy)}
+.lp .lbadge{display:inline-flex;align-items:center;gap:12px;font-size:19px;font-weight:600;color:var(--navy);margin-bottom:18px;letter-spacing:-.01em}
+.lp .lbadge span{font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--grad);padding:7px 14px;border-radius:20px;box-shadow:0 6px 16px rgba(10,141,237,.28)}
+.lp .lbadge.dark span{background:var(--navy);box-shadow:0 6px 16px rgba(12,42,71,.3)}
 .lp .lhead h2,.lp .vhead h2,.lp .safe h2{font-size:clamp(27px,3.6vw,42px);font-weight:600;letter-spacing:-.028em;line-height:1.13;margin-bottom:15px}
 .lp .lhead>p,.lp .vhead>p{font-size:17px;line-height:1.62;color:var(--slate)}
 .lp .frow{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;margin-bottom:56px}
