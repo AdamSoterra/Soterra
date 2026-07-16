@@ -58,6 +58,11 @@ export const events = pgTable(
     // Optional assignee — the crew member responsible. Null = unassigned.
     assigneeId: text("assignee_id"), // Clerk user id of the assignee
     assigneeName: text("assignee_name"),
+    // Optional per-item reminder. The assignee's phone schedules a native
+    // LocalNotification for this instant (see /api/reminders/upcoming +
+    // ReminderSync). Null = no reminder. Phone-side, so it fires offline and
+    // only on the assignee's device.
+    reminderAt: timestamp("reminder_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({ byProject: index("events_project_idx").on(t.projectId) })
@@ -79,6 +84,8 @@ export const tasks = pgTable(
     visibility: text("visibility").default("private").notNull(), // private | team
     assigneeId: text("assignee_id"), // Clerk user id of the assignee (null = unassigned)
     assigneeName: text("assignee_name"),
+    // Optional per-item reminder — see events.reminderAt.
+    reminderAt: timestamp("reminder_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({ byProject: index("tasks_project_idx").on(t.projectId) })

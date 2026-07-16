@@ -10,6 +10,11 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.103.0",
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/local-notifications": "^8.2.1",
+    "@capacitor/status-bar": "^8.0.3",
     "@clerk/nextjs": "^6.39.5",
     "@neondatabase/serverless": "^0.9.5",
     "@vercel/blob": "^2.4.0",
@@ -21,6 +26,7 @@
     "unpdf": "^1.6.2"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.2",
     "@types/node": "^20.14.12",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
