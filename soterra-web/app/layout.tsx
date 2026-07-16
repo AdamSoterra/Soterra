@@ -10,9 +10,9 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Soterra — Ask your plans",
+  title: "Soterra, AI project assistant for construction",
   description:
-    "Ask your project's plans and specs in plain English. Get the answer in seconds, with the source sheet.",
+    "Soterra reads your drawings, specs and schedules so your team can find answers, book inspections and keep the project moving. Every answer cited to the source sheet.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
