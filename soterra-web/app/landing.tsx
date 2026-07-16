@@ -249,8 +249,8 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         <div className="frow rv">
           <div className="ftext">
             <div className="fk">Answers from your plans</div>
-            <h3>Soterra understands your drawings, specifications, schedules and project documents, so your team can find answers, manage tasks, coordinate deliveries, write RFIs and keep the project moving from one intelligent workspace.</h3>
-            <p>Fire ratings, GIB specs, beam sizes, setouts, ask and get the answer in seconds, pointed at the exact sheet.</p>
+            <h3>Soterra understands your drawings, specifications and project documents, so your team spends less time searching and more time building.</h3>
+            <p>Fire ratings, GIB specs, beam sizes and setouts are answered in seconds, with references to the exact sheet.</p>
           </div>
           <div className="fvis">
             <ChatDemo />
