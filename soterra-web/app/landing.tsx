@@ -38,8 +38,8 @@ const INSIGHTS = [
     quote: "Waterproofing penetrations fail 28% more often than any other inspection.",
   },
   {
-    tag: "Projects over 8 storeys",
-    quote: "Mechanical penetrations become the highest rework item after Level 6.",
+    tag: "Pre-line inspections",
+    quote: "1 in 5 fail first time on your jobs, almost always on missing blocking.",
   },
   {
     tag: "3 years of records",
@@ -205,7 +205,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
       <section className="vision" id="vision">
         <div className="vhead rv">
           <div className="lbadge dark"><span>Layer 2</span> The learning engine</div>
-          <h2>It gets smarter with every project you finish.</h2>
+          <h2>It learns your history to predict and prevent mistakes <span className="g">before they happen.</span></h2>
           <p>Instead of only helping with today&apos;s job, Soterra learns from every project: inspections, QA records, RFIs, defects, delays and outcomes, and builds a knowledge base that belongs to your company.</p>
         </div>
 
@@ -217,7 +217,6 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
             </div>
           ))}
         </div>
-        <p className="vnote rv">That&apos;s something ChatGPT or Copilot can&apos;t do. They don&apos;t know your company&apos;s history.</p>
 
         <div className="bim rv">
           <div className="bim-copy">
