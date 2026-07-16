@@ -181,6 +181,30 @@ const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "upload", label: "Upload", icon: I.up },
 ];
 
+// Login-first screen shown when the app runs in app-mode (installed PWA / ?app=1),
+// instead of the marketing landing. Soterra colours, phone-shaped.
+function AppLogin({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted: () => void }) {
+  return (
+    <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 28px", textAlign: "center", background: "radial-gradient(120% 90% at 50% 0%, #103A63 0%, #0C2A47 62%)", color: "#fff" }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/logo-mark.png" alt="Soterra" style={{ width: 74, height: 74, marginBottom: 20, filter: "drop-shadow(0 12px 30px rgba(0,0,0,.4))" }} />
+      <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-.02em", marginBottom: 10 }}>Soterra</h1>
+      <p style={{ fontSize: 15.5, lineHeight: 1.55, color: "rgba(255,255,255,.72)", maxWidth: 300, marginBottom: 32 }}>
+        Your AI site manager. Ask your plans, run your schedule, keep the crew in sync.
+      </p>
+      <button onClick={onLogin} style={{ width: "100%", maxWidth: 320, padding: "15px", borderRadius: 14, border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#fff", background: "linear-gradient(135deg,#41C3FF,#0A8DED)", boxShadow: "0 12px 30px rgba(10,141,237,.4)", marginBottom: 12 }}>
+        Log in
+      </button>
+      <button onClick={onGetStarted} style={{ width: "100%", maxWidth: 320, padding: "14px", borderRadius: 14, border: "1px solid rgba(255,255,255,.22)", cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#fff", background: "transparent" }}>
+        Create an account
+      </button>
+      <p style={{ fontSize: 12.5, color: "rgba(255,255,255,.5)", marginTop: 22, maxWidth: 300, lineHeight: 1.5 }}>
+        Got a site code from your PM? Log in, then enter it to join your site.
+      </p>
+    </div>
+  );
+}
+
 export default function Page() {
   const [tab, setTab] = useState<Tab>("assistant");
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -188,6 +212,8 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState<Cite | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  // App-mode: installed PWA / launched with ?app=1 → login-first instead of marketing.
+  const [appMode, setAppMode] = useState(false);
 
   // ─── sites (projects) + crew ───
   const [projects, setProjects] = useState<Project[]>([]);
@@ -224,6 +250,7 @@ export default function Page() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // ─── plan upload (Upload tab) + indexed docs (Plans tab) ───
   const [docs, setDocs] = useState<PlanDoc[]>([]);
@@ -568,6 +595,27 @@ export default function Page() {
     }
   }, []);
 
+  // Detect app-mode: installed PWA (standalone) or launched with ?app=1. Persist it
+  // so Clerk redirects don't drop us back to the marketing site.
+  useEffect(() => {
+    try {
+      const standalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (navigator as any).standalone === true;
+      const flagged =
+        new URLSearchParams(window.location.search).has("app") ||
+        window.localStorage.getItem("soterra:appmode") === "1";
+      if (standalone || flagged) {
+        setAppMode(true);
+        window.localStorage.setItem("soterra:appmode", "1");
+        setSetupMode("join"); // app users join a PM's site by code; PMs create on the web
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   // Web Speech API setup (desktop browsers). Native STT (Capacitor) comes later.
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -880,9 +928,13 @@ export default function Page() {
 
   if (!isLoaded) return <div className="boot" />;
 
-  /* ─── Signed out: login ─── */
+  /* ─── Signed out: marketing landing (web) or login screen (app-mode) ─── */
   if (!isSignedIn) {
-    return <Landing onLogin={() => clerk.openSignIn()} onGetStarted={() => clerk.openSignUp()} />;
+    return appMode ? (
+      <AppLogin onLogin={() => clerk.openSignIn()} onGetStarted={() => clerk.openSignUp()} />
+    ) : (
+      <Landing onLogin={() => clerk.openSignIn()} onGetStarted={() => clerk.openSignUp()} />
+    );
   }
   if (!projectsLoaded) return <div className="boot" />;
 
@@ -956,6 +1008,7 @@ export default function Page() {
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
       />
       <input ref={fileInputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={onFilePick} />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onFilePick} />
       <div className="crow">
         <span className="hint">
           {attachErr ? <span style={{ color: "var(--red)" }}>{attachErr}</span>
@@ -969,6 +1022,9 @@ export default function Page() {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
             </button>
           )}
+          <button className="attach" title="Take a photo" onClick={() => cameraInputRef.current?.click()} disabled={attachBusy}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+          </button>
           <button className="attach" title="Attach a photo or PDF" onClick={() => fileInputRef.current?.click()} disabled={attachBusy}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 18.6a1.7 1.7 0 0 1-2.3-2.3l7.8-7.8" /></svg>
           </button>
