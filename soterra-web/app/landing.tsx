@@ -73,41 +73,18 @@ function LogoVentures() {
 function LogoAUT() {
   return (
     <div className="lg">
-      <svg className="aut-word" viewBox="0 0 140 74" aria-hidden="true">
-        <text
-          x="70" y="55" textAnchor="middle"
-          fontFamily="'Arial Black','Arial',sans-serif" fontWeight="900"
-          fontSize="46" letterSpacing="3"
-          fill="#FFFFFF" stroke="#161616" strokeWidth="2.4" paintOrder="stroke"
-        >AUT</text>
-      </svg>
+      {/* Real AUT mark (transparent PNG lifted from the official file) */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="aut-img" src="/partners/aut.png" alt="AUT" />
     </div>
   );
 }
 function LogoCIS() {
   return (
     <div className="lg">
-      <svg className="cis-globe" viewBox="0 0 44 44" aria-hidden="true">
-        <circle cx="22" cy="22" r="21" fill="#E8401F" />
-        <g fill="none" stroke="#fff" strokeWidth="1.1" opacity="0.95">
-          <circle cx="22" cy="22" r="21" />
-          <ellipse cx="22" cy="22" rx="7" ry="21" />
-          <ellipse cx="22" cy="22" rx="14" ry="21" />
-          <line x1="1" y1="22" x2="43" y2="22" />
-          <path d="M4 13 Q22 16.5 40 13" />
-          <path d="M4 31 Q22 27.5 40 31" />
-          <path d="M9 6.5 Q22 8.5 35 6.5" />
-          <path d="M9 37.5 Q22 35.5 35 37.5" />
-        </g>
-        <g fill="#fff">
-          <circle cx="22" cy="1.6" r="1.9" /><circle cx="22" cy="42.4" r="1.9" />
-          <circle cx="1.8" cy="22" r="1.9" /><circle cx="42.2" cy="22" r="1.9" />
-          <circle cx="8" cy="22" r="1.5" /><circle cx="36" cy="22" r="1.5" />
-          <circle cx="15" cy="22" r="1.4" /><circle cx="29" cy="22" r="1.4" />
-          <circle cx="7" cy="13" r="1.3" /><circle cx="37" cy="13" r="1.3" />
-          <circle cx="7" cy="31" r="1.3" /><circle cx="37" cy="31" r="1.3" />
-        </g>
-      </svg>
+      {/* Real CISRC globe, lifted off its maroon background; text set dark for the light plate */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="cis-img" src="/partners/cisrc-globe.png" alt="" />
       <span className="cis-txt">AUT COMPUTER AND INFORMATION<br />SCIENCES RESEARCH CENTRE</span>
     </div>
   );
@@ -341,8 +318,8 @@ const CSS = `
 .lp .lg{display:flex;align-items:center;gap:12px}
 .lp .av-mark{width:46px;height:40px;flex-shrink:0}
 .lp .av-txt{font-size:14px;line-height:1.16;font-weight:800;color:#4D5F6E;letter-spacing:.07em;text-align:left;align-self:flex-end;padding-bottom:2px}
-.lp .aut-word{width:84px;height:44px}
-.lp .cis-globe{width:40px;height:40px;flex-shrink:0}
+.lp .aut-img{height:48px;width:auto;display:block}
+.lp .cis-img{width:42px;height:42px;flex-shrink:0}
 .lp .cis-txt{font-size:10.5px;line-height:1.35;color:#243B4A;text-align:left;font-weight:800;letter-spacing:.02em}
 /* layer sections */
 .lp .layer{max-width:1120px;margin:0 auto;padding:40px 7vw 20px}
