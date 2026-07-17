@@ -620,20 +620,25 @@ export default function Page() {
     }
   }, []);
 
-  // Detect app-mode: installed PWA (standalone) or launched with ?app=1. Persist it
-  // so Clerk redirects don't drop us back to the marketing site.
+  // Detect app-mode: the installed PWA (standalone) or an explicit ?app=1 launch.
+  //
+  // The flag lives in sessionStorage, NOT localStorage: it has to survive Clerk's
+  // redirects within a session, but must never permanently hijack the marketing
+  // site. The old localStorage version did exactly that — once a browser had
+  // opened the app once, soterra.co.nz showed the login screen forever in that
+  // browser. Hence the cleanup below.
   useEffect(() => {
     try {
+      window.localStorage.removeItem("soterra:appmode"); // undo the old sticky flag
       const standalone =
         window.matchMedia("(display-mode: standalone)").matches ||
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (navigator as any).standalone === true;
-      const flagged =
-        new URLSearchParams(window.location.search).has("app") ||
-        window.localStorage.getItem("soterra:appmode") === "1";
-      if (standalone || flagged) {
+      const hasParam = new URLSearchParams(window.location.search).has("app");
+      const sessionFlag = window.sessionStorage.getItem("soterra:appmode") === "1";
+      if (standalone || hasParam || sessionFlag) {
         setAppMode(true);
-        window.localStorage.setItem("soterra:appmode", "1");
+        window.sessionStorage.setItem("soterra:appmode", "1");
         setSetupMode("join"); // app users join a PM's site by code; PMs create on the web
       }
     } catch {
