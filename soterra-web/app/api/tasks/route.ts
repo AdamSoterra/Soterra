@@ -160,3 +160,33 @@ export async function PATCH(req: Request) {
   const [row] = await db.update(tasks).set({ done }).where(eq(tasks.id, id)).returning();
   return Response.json({ task: serialize(row) });
 }
+
+// DELETE /api/tasks  { id }  — see the note on the events DELETE handler.
+export async function DELETE(req: Request) {
+  const { userId } = await auth();
+  if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
+  const projectId = await resolveProjectId(req, userId);
+  if (!projectId) return Response.json({ error: "No site selected" }, { status: 403 });
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const id = String(body.id ?? "");
+  if (!id) return Response.json({ error: "Task id is required" }, { status: 400 });
+
+  const [existing] = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.id, id), eq(tasks.projectId, projectId)))
+    .limit(1);
+  if (!existing || (existing.visibility !== "team" && existing.creatorId !== userId && existing.assigneeId !== userId)) {
+    return Response.json({ error: "Task not found" }, { status: 404 });
+  }
+
+  await db.delete(tasks).where(eq(tasks.id, id));
+  return Response.json({ ok: true, id });
+}

@@ -283,3 +283,20 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .mrow .mi{width:18px;text-align:center}
 .mrow.sep{border-top:1px solid var(--line);margin-top:6px;padding-top:14px;border-radius:0}
 .mrow b{font-weight:600}.mrow small{color:var(--mut);font-size:12px}
+
+/* ─── Crew filter chips (calendar) — tap a person to see only their items.
+       Replaces the old non-interactive colour legend. ─── */
+.crewchips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.crewchip{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--slate);
+  background:#fff;border:1px solid var(--line);border-radius:999px;padding:7px 13px;cursor:pointer;
+  font-family:inherit;transition:border-color .15s,color .15s,background .15s}
+.crewchip i{width:10px;height:10px;border-radius:99px;display:inline-block;flex-shrink:0}
+.crewchip:hover{border-color:var(--brand)}
+.crewchip.on{background:var(--navy);border-color:var(--navy);color:#fff}
+
+/* Row delete affordance — quiet until you're on the row, so it can't be fat-fingered. */
+.row-x{border:none;background:transparent;color:var(--mut);cursor:pointer;font-size:13px;line-height:1;
+  padding:6px 7px;border-radius:8px;flex-shrink:0;opacity:.45;transition:opacity .15s,color .15s,background .15s}
+.row-x:hover{opacity:1;color:var(--red,#EF4444);background:rgba(239,68,68,.1)}
+.ev:hover .row-x,.task:hover .row-x{opacity:.8}
+@media(hover:none){.row-x{opacity:.7}}

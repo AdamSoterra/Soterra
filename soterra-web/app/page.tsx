@@ -103,6 +103,13 @@ function dayKey(d: Date): string {
 function todayKey(): string {
   return dayKey(new Date());
 }
+// Next calendar day for a YYYY-MM-DD key. Plain date arithmetic (noon-anchored
+// so DST can't shift it) — used to walk a multi-day event across the grid.
+function nextDayKey(k: string): string {
+  const d = new Date(`${k}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
 function fmtTime(iso: string): string {
   return new Intl.DateTimeFormat("en-NZ", { timeZone: TZ, hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(iso));
 }
@@ -296,6 +303,8 @@ export default function Page() {
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth()); // 0-indexed
   const [calView, setCalView] = useState<"month" | "agenda">("month");
+  // Crew filter: null = everyone. Filters the grid/agenda to one person's items.
+  const [crewFilter, setCrewFilter] = useState<string | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [showEventForm, setShowEventForm] = useState(false);
   const [showTaskForm, setShowTaskForm] = useState(false);
@@ -429,6 +438,39 @@ export default function Page() {
     if ((tab === "plans" || tab === "upload") && !docsLoaded) loadPlans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, evLoaded, taskLoaded, docsLoaded, projectId]);
+
+  // Manual delete — so a wrong booking can be fixed in one tap instead of going
+  // through the assistant. Optimistic; resyncs from the server on failure.
+  const deleteEvent = async (ev: CalEvent) => {
+    if (!window.confirm(`Delete "${ev.title}"? This can't be undone.`)) return;
+    setEvents((es) => es.filter((x) => x.id !== ev.id));
+    setOpenDay(null);
+    try {
+      const res = await apiFetch("/api/events", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: ev.id }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      loadEvents(); // resync — the row is still there
+    }
+  };
+
+  const deleteTask = async (t: CalTask) => {
+    if (!window.confirm(`Delete "${t.title}"? This can't be undone.`)) return;
+    setTasks((ts) => ts.filter((x) => x.id !== t.id));
+    try {
+      const res = await apiFetch("/api/tasks", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: t.id }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      loadTasks();
+    }
+  };
 
   const toggleTask = async (t: CalTask) => {
     const next = !t.done;
@@ -854,23 +896,42 @@ export default function Page() {
     }
   };
 
+  // Crew filter applied once, here — the grid, agenda and day modal all read
+  // from these, so filtering stays consistent across every view.
+  const fEvents = useMemo(
+    () => (crewFilter ? events.filter((e) => e.assigneeId === crewFilter) : events),
+    [events, crewFilter]
+  );
+  const fTasks = useMemo(
+    () => (crewFilter ? tasks.filter((t) => t.assigneeId === crewFilter) : tasks),
+    [tasks, crewFilter]
+  );
+
   // Group events by Auckland day-key, time-sorted within each day.
+  // A multi-day event lands on EVERY day it spans, not just its start day — we
+  // already store end_date, we just weren't drawing it.
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalEvent[]>();
-    for (const e of events) {
-      const k = dayKey(new Date(e.startsAt));
-      const list = map.get(k) ?? [];
-      list.push(e);
-      map.set(k, list);
+    for (const e of fEvents) {
+      const startK = dayKey(new Date(e.startsAt));
+      const endK = e.endsAt ? dayKey(new Date(e.endsAt)) : startK;
+      let k = startK;
+      for (let n = 0; n < 366; n++) {
+        const list = map.get(k) ?? [];
+        list.push(e);
+        map.set(k, list);
+        if (k >= endK) break;
+        k = nextDayKey(k);
+      }
     }
     for (const list of map.values()) list.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
     return map;
-  }, [events]);
+  }, [fEvents]);
 
   // Tasks with a due date, grouped by day-key.
   const tasksByDay = useMemo(() => {
     const map = new Map<string, CalTask[]>();
-    for (const t of tasks) {
+    for (const t of fTasks) {
       if (!t.dueAt) continue;
       const k = dayKey(new Date(t.dueAt));
       const list = map.get(k) ?? [];
@@ -878,7 +939,7 @@ export default function Page() {
       map.set(k, list);
     }
     return map;
-  }, [tasks]);
+  }, [fTasks]);
 
   // Crew colour lookup for colour-by-crew across rows + the grid.
   const memberById = useMemo(() => new Map(members.map((m) => [m.userId, m])), [members]);
@@ -929,12 +990,12 @@ export default function Page() {
     const tk0 = todayKey();
     type Item = { t: number; ev?: CalEvent; tk?: CalTask };
     const byDay = new Map<string, Item[]>();
-    for (const e of events) {
+    for (const e of fEvents) {
       const k = dayKey(new Date(e.startsAt));
       if (k < tk0) continue;
       (byDay.get(k) ?? byDay.set(k, []).get(k)!).push({ t: new Date(e.startsAt).getTime(), ev: e });
     }
-    for (const tk of tasks) {
+    for (const tk of fTasks) {
       if (!tk.dueAt) continue;
       const k = dayKey(new Date(tk.dueAt));
       if (k < tk0) continue;
@@ -943,7 +1004,7 @@ export default function Page() {
     return [...byDay.entries()]
       .sort((a, b) => (a[0] < b[0] ? -1 : 1))
       .map(([k, items]) => ({ k, items: items.sort((a, b) => a.t - b.t) }));
-  }, [events, tasks]);
+  }, [fEvents, fTasks]);
 
   function gotoMonth(delta: number) {
     let m = calMonth + delta;
@@ -1213,12 +1274,23 @@ export default function Page() {
             <div className="page-h">Calendar</div>
             <div className="page-sub">{projName} · site schedule (NZ time)</div>
             {members.length > 1 && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, margin: "0 0 16px" }}>
+              <div className="crewchips">
+                <button
+                  className={"crewchip" + (crewFilter === null ? " on" : "")}
+                  onClick={() => setCrewFilter(null)}
+                >
+                  Everyone
+                </button>
                 {members.map((m) => (
-                  <span key={m.userId} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)" }}>
-                    <i style={{ width: 10, height: 10, borderRadius: 99, background: crewColor(m.colorIndex), display: "inline-block" }} />
+                  <button
+                    key={m.userId}
+                    className={"crewchip" + (crewFilter === m.userId ? " on" : "")}
+                    onClick={() => setCrewFilter(crewFilter === m.userId ? null : m.userId)}
+                    title={m.title || undefined}
+                  >
+                    <i style={{ background: crewColor(m.colorIndex) }} />
                     {m.name}{m.isMe ? " (you)" : ""}
-                  </span>
+                  </button>
                 ))}
               </div>
             )}
@@ -1302,7 +1374,7 @@ export default function Page() {
             ) : tasks.length === 0 ? (
               <div className="page-sub">No tasks yet. Add your first one, or just ask the assistant.</div>
             ) : (
-              tasks.map((t) => <TaskRow key={t.id} t={t} onToggle={toggleTask} full />)
+              tasks.map((t) => <TaskRow key={t.id} t={t} onToggle={toggleTask} full onDelete={deleteTask} />)
             )}
           </div></div>
         )}
@@ -1496,8 +1568,8 @@ export default function Page() {
               {(eventsByDay.get(openDay)?.length ?? 0) === 0 && (tasksByDay.get(openDay)?.length ?? 0) === 0 && (
                 <div className="page-sub" style={{ marginBottom: 0 }}>Nothing on this day yet. Add an event or task below — or just ask the assistant.</div>
               )}
-              {(eventsByDay.get(openDay) ?? []).map((e) => <EventRow key={e.id} e={e} colorFor={colorFor} />)}
-              {(tasksByDay.get(openDay) ?? []).map((t) => <TaskRow key={t.id} t={t} onToggle={toggleTask} />)}
+              {(eventsByDay.get(openDay) ?? []).map((e) => <EventRow key={e.id} e={e} colorFor={colorFor} onDelete={deleteEvent} />)}
+              {(tasksByDay.get(openDay) ?? []).map((t) => <TaskRow key={t.id} t={t} onToggle={toggleTask} onDelete={deleteTask} />)}
             </div>
             <div className="dm-foot">
               <button className="lg-btn primary" style={{ height: 44, margin: 0, flex: 1 }} onClick={() => openEventForm(openDay!)}>＋ Event</button>
@@ -1821,7 +1893,7 @@ function makeCite(sourceLine: string, body: string): Cite {
 
 // One event row — used in the week strip, agenda, and day modal. Bar colour is
 // the assignee's crew colour when assigned, else the event type's colour.
-function EventRow({ e, colorFor }: { e: CalEvent; colorFor?: (id: string | null) => string | null }) {
+function EventRow({ e, colorFor, onDelete }: { e: CalEvent; colorFor?: (id: string | null) => string | null; onDelete?: (e: CalEvent) => void }) {
   const tag = kindTag(e.kind);
   const crew = e.assigneeId ? colorFor?.(e.assigneeId) : null;
   const bar = crew || barColor(e.kind);
@@ -1832,12 +1904,13 @@ function EventRow({ e, colorFor }: { e: CalEvent; colorFor?: (id: string | null)
       <div className="when">{fmtAgendaDay(e.startsAt)}<br /><span className="when-t">{fmtEventRange(e)}</span></div>
       <div className="body"><b>{e.title}</b>{sub && <small>{sub}</small>}</div>
       {tag && <div className="tag" style={{ background: tag.bg, color: tag.fg }}>{tag.label}</div>}
+      {onDelete && <button className="row-x" title="Delete" onClick={() => onDelete(e)}>✕</button>}
     </div>
   );
 }
 
 // One task row. `full` shows the long meta line (Tasks tab); compact otherwise.
-function TaskRow({ t, onToggle, full }: { t: CalTask; onToggle: (t: CalTask) => void; full?: boolean }) {
+function TaskRow({ t, onToggle, full, onDelete }: { t: CalTask; onToggle: (t: CalTask) => void; full?: boolean; onDelete?: (t: CalTask) => void }) {
   const due = fmtDue(t.dueAt);
   const time = fmtTaskTime(t);
   const assignee = t.assigneeName ? `→ ${t.assigneeName}` : null;
@@ -1850,6 +1923,7 @@ function TaskRow({ t, onToggle, full }: { t: CalTask; onToggle: (t: CalTask) => 
       <div className="cb" onClick={() => onToggle(t)}>{t.done ? "✓" : ""}</div>
       <div className="tk"><b>{t.title}</b>{meta && <small>{meta}</small>}</div>
       <span className={"vis " + vis}>{vis === "team" ? "Team" : "Just me"}</span>
+      {onDelete && <button className="row-x" title="Delete" onClick={() => onDelete(t)}>✕</button>}
     </div>
   );
 }
