@@ -186,11 +186,12 @@ const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
 function AppLogin({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted: () => void }) {
   return (
     <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 28px", textAlign: "center", background: "radial-gradient(120% 90% at 50% 0%, #103A63 0%, #0C2A47 62%)", color: "#fff" }}>
+      {/* White mark — the blue one washes out on this navy background. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/logo-mark.png" alt="Soterra" style={{ width: 74, height: 74, marginBottom: 20, filter: "drop-shadow(0 12px 30px rgba(0,0,0,.4))" }} />
-      <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-.02em", marginBottom: 10 }}>Soterra</h1>
-      <p style={{ fontSize: 15.5, lineHeight: 1.55, color: "rgba(255,255,255,.72)", maxWidth: 300, marginBottom: 32 }}>
-        Your AI site manager. Ask your plans, run your schedule, keep the crew in sync.
+      <img src="/logo-mark-white.png" alt="Soterra" style={{ height: 68, width: "auto", marginBottom: 18, filter: "drop-shadow(0 12px 30px rgba(0,0,0,.45))" }} />
+      <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-.02em", marginBottom: 12 }}>Soterra</h1>
+      <p style={{ fontSize: 16, lineHeight: 1.5, color: "rgba(255,255,255,.75)", maxWidth: 310, marginBottom: 32 }}>
+        Turning construction data into <span style={{ color: "#5FD0FF", fontWeight: 600 }}>company intelligence.</span>
       </p>
       <button onClick={onLogin} style={{ width: "100%", maxWidth: 320, padding: "15px", borderRadius: 14, border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#fff", background: "linear-gradient(135deg,#41C3FF,#0A8DED)", boxShadow: "0 12px 30px rgba(10,141,237,.4)", marginBottom: 12 }}>
         Log in

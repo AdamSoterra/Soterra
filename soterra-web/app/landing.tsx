@@ -229,7 +229,6 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
           <Cta kind="solid" big label="Get set up" onAct={onGetStarted} />
           <Cta kind="ghost" big label="Log in" onAct={onLogin} />
         </div>
-        <div className="trust rv in">✓ Every answer cited to your actual drawings, never guessed</div>
       </section>
 
       {/* ─── PARTNERS ─── */}
@@ -379,7 +378,7 @@ const CSS = `
 .lp h1 .g{font-weight:700}
 .lp .lead{font-size:19px;line-height:1.6;color:var(--slate);max-width:620px;margin-bottom:32px}
 .lp .lead b{color:var(--navy);font-weight:600}
-.lp .cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:20px}
+.lp .cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:0}
 .lp .trust{font-size:13.5px;color:var(--mut);font-weight:500}
 /* partners */
 .lp .partners{max-width:1000px;margin:0 auto;padding:24px 7vw 52px;text-align:center}
