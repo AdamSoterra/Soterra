@@ -434,8 +434,9 @@ export default function Page() {
   // Lazy-load each tab's data the first time it's opened (after a site is picked).
   useEffect(() => {
     if (!projectId) return;
-    if (tab === "calendar" && !evLoaded) loadEvents();
-    if (tab === "tasks" && !taskLoaded) loadTasks();
+    // The assistant home shows a today-at-a-glance, so it needs events + tasks too.
+    if ((tab === "calendar" || tab === "assistant") && !evLoaded) loadEvents();
+    if ((tab === "tasks" || tab === "assistant") && !taskLoaded) loadTasks();
     if ((tab === "plans" || tab === "upload") && !docsLoaded) loadPlans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, evLoaded, taskLoaded, docsLoaded, projectId]);
@@ -1247,10 +1248,21 @@ export default function Page() {
             <button className="chat-fab" onClick={() => setRailOpen(true)} aria-label="Past conversations">☰ Chats</button>
           <div className="assistant">
             {messages.length === 0 ? (
-              <div className="hero-full">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="hero-logo" src="/logo-mark.png" alt="Soterra" />
-                <h1>Hi <b className="grad">{firstName}</b>, how can I help?</h1>
+              <div className="hero-full home">
+                <div className="home-scroll">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img className="hero-logo home-logo" src="/logo-mark.png" alt="Soterra" />
+                  <h1 className="home-greet">Hi <b className="grad">{firstName}</b></h1>
+                  <p className="home-sub">Here&apos;s {projName} today</p>
+                  <TodayGlance
+                    events={eventsByDay.get(todayKey()) ?? []}
+                    tasks={(tasksByDay.get(todayKey()) ?? []).filter((t) => !t.done)}
+                    loaded={evLoaded && taskLoaded}
+                    colorFor={colorFor}
+                    onToggle={toggleTask}
+                    onOpen={() => setTab("calendar")}
+                  />
+                </div>
                 <div className="hero-composer">{cbox}</div>
               </div>
             ) : (
@@ -1498,7 +1510,7 @@ export default function Page() {
               onChange={(e) => { const fs = e.target.files; if (planFolderRef.current) planFolderRef.current.value = ""; if (fs && fs.length) onPlanFiles(fs); }} />
             <div
               className="drop"
-              onClick={() => { if (!upCurrent) planFolderRef.current?.click(); }}
+              onClick={() => { if (!upCurrent) planFileRef.current?.click(); }}
               onDragOver={(e) => { e.preventDefault(); if (!upCurrent) setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={(e) => {
@@ -1539,7 +1551,7 @@ export default function Page() {
             {!docsLoaded ? (
               <div className="page-sub">Loading…</div>
             ) : docs.length === 0 ? (
-              <div className="page-sub">{isDemo ? "This demo site already has 1 Arthur Road's plans loaded — try the assistant." : "Nothing indexed yet. Upload your plans above."}</div>
+              <div className="page-sub">{isDemo ? "This demo site already has 43 Kauri Road's plans loaded — try the assistant." : "Nothing indexed yet. Upload your plans above."}</div>
             ) : (
               <div className="docs">
                 {docs.map((d) => (
@@ -1566,7 +1578,7 @@ export default function Page() {
             <div className="sh-canvas">
               <div className="sheetpaper">
                 <div className="frame" /><div className="hl" /><div className="hltag">{sheet.hlTag}</div>
-                <div className="tb"><b>{sheet.code}</b><span>{sheet.title}</span><br /><span style={{ color: "#9AA7B4" }}>1 Arthur Rd</span></div>
+                <div className="tb"><b>{sheet.code}</b><span>{sheet.title}</span><br /><span style={{ color: "#9AA7B4" }}>43 Kauri Rd</span></div>
               </div>
             </div>
             <div className="sh-ans"><div className="src">📐 ANSWER FROM THIS SHEET</div><p dangerouslySetInnerHTML={{ __html: sheet.ans }} /></div>
@@ -1947,6 +1959,50 @@ function makeCite(sourceLine: string, body: string): Cite {
 
 // One event row — used in the week strip, agenda, and day modal. Bar colour is
 // the assignee's crew colour when assigned, else the event type's colour.
+// Today-at-a-glance for the assistant home — today's events + open tasks, so
+// opening the app lands you on your day, not a blank search box (Montázs style).
+function TodayGlance({ events, tasks, loaded, colorFor, onToggle, onOpen }: {
+  events: CalEvent[];
+  tasks: CalTask[];
+  loaded: boolean;
+  colorFor: (id: string | null) => string | null;
+  onToggle: (t: CalTask) => void;
+  onOpen: () => void;
+}) {
+  const empty = loaded && events.length === 0 && tasks.length === 0;
+  return (
+    <div className="glance">
+      <div className="glance-h"><span>Today</span><button onClick={onOpen}>Open calendar →</button></div>
+      {!loaded ? (
+        <div className="glance-empty">Loading your day…</div>
+      ) : empty ? (
+        <div className="glance-empty">Nothing booked for today. Ask me to schedule something, or just start below.</div>
+      ) : (
+        <div className="glance-list">
+          {events.map((e) => {
+            const crew = e.assigneeId ? colorFor(e.assigneeId) : null;
+            return (
+              <div className="gl-row" key={e.id}>
+                <span className="gl-bar" style={{ background: crew || barColor(e.kind) }} />
+                <span className="gl-time">{e.allDay ? "All day" : fmtTime(e.startsAt)}</span>
+                <span className="gl-title">{e.title}</span>
+                {e.assigneeName && <span className="gl-who">{e.assigneeName}</span>}
+              </div>
+            );
+          })}
+          {tasks.map((t) => (
+            <div className="gl-row task" key={t.id}>
+              <span className="gl-cb" onClick={() => onToggle(t)}>{t.done ? "✓" : ""}</span>
+              <span className="gl-title">{t.title}</span>
+              {t.assigneeName && <span className="gl-who">{t.assigneeName}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EventRow({ e, colorFor, onDelete }: { e: CalEvent; colorFor?: (id: string | null) => string | null; onDelete?: (e: CalEvent) => void }) {
   const tag = kindTag(e.kind);
   const crew = e.assigneeId ? colorFor?.(e.assigneeId) : null;

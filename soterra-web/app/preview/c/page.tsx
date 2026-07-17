@@ -37,7 +37,7 @@ export default function PreviewC() {
             <div className="frame" />
             <div className="hl" />
             <div className="hltag">FRR 60 · ED003</div>
-            <div className="tb"><b>ED003</b><span>Door Schedule</span><br /><span className="mut">1 Arthur Rd · p60/85</span></div>
+            <div className="tb"><b>ED003</b><span>Door Schedule</span><br /><span className="mut">43 Kauri Rd · p60/85</span></div>
             <div className="scan" />
           </div>
           <div className="chip">

@@ -38,7 +38,7 @@ export default function PreviewA() {
 
         <div className="hdemo rv">
           <div className="chat">
-            <div className="bar"><span className="dot r" /><span className="dot y" /><span className="dot g" /><b>1 Arthur Road</b></div>
+            <div className="bar"><span className="dot r" /><span className="dot y" /><span className="dot g" /><b>43 Kauri Road</b></div>
             <div className="scene">
               <div className="q">What's the fire rating on the exterior doors?</div>
               <div className="typing"><i /><i /><i /></div>

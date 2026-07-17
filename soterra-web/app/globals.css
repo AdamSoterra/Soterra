@@ -82,6 +82,27 @@ button,input,textarea{font-family:var(--font)}
 .hero-full h1{font-size:clamp(26px,3.8vw,36px);font-weight:300;letter-spacing:-.025em;color:var(--navy);line-height:1.18;margin-bottom:30px}
 .hero-full h1 b{font-weight:600}
 .hero-composer{width:100%;max-width:680px}
+/* Assistant home with a today-at-a-glance: greeting + glance scroll up top,
+   composer pinned at the bottom (Montázs-style). */
+.hero-full.home{justify-content:flex-start;padding:0;overflow:hidden}
+.hero-full.home .home-scroll{width:100%;max-width:680px;margin:0 auto;flex:1;min-height:0;overflow-y:auto;padding:22px 20px 6px;display:flex;flex-direction:column;align-items:center}
+.hero-full.home .home-logo{height:50px;margin:4px 0 14px}
+.hero-full.home .home-greet{font-size:clamp(24px,3.6vw,32px);margin-bottom:2px}
+.hero-full.home .home-sub{font-size:14.5px;color:var(--slate);margin-bottom:20px}
+.hero-full.home .hero-composer{max-width:680px;width:100%;margin:0 auto;padding:8px 20px calc(16px + env(safe-area-inset-bottom))}
+.glance{width:100%;background:#fff;border:1px solid var(--line);border-radius:16px;padding:13px 15px;box-shadow:0 6px 22px rgba(12,42,71,.05);text-align:left}
+.glance-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.glance-h span{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.glance-h button{border:none;background:transparent;color:var(--brand-d);font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit}
+.glance-empty{font-size:14px;color:var(--slate);line-height:1.5;padding:3px 0}
+.glance-list{display:flex;flex-direction:column}
+.gl-row{display:flex;align-items:center;gap:10px;padding:9px 2px;border-top:1px solid var(--line2)}
+.gl-row:first-child{border-top:none}
+.gl-bar{width:4px;height:26px;border-radius:3px;flex-shrink:0}
+.gl-time{font-size:12.5px;font-weight:700;color:var(--slate);min-width:60px;flex-shrink:0}
+.gl-title{font-size:14.5px;color:var(--navy);font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl-who{font-size:12px;color:var(--mut);flex-shrink:0}
+.gl-cb{width:20px;height:20px;border:2px solid var(--line);border-radius:6px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--green);font-size:12px;font-weight:800}
 
 .asst-scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;align-items:center}
 .asst-inner{width:100%;max-width:780px;padding:34px 24px 8px;flex:1;display:flex;flex-direction:column;justify-content:flex-end}
@@ -144,14 +165,17 @@ button,input,textarea{font-family:var(--font)}
 
 /* calendar */
 .cal-top{display:flex;align-items:center;justify-content:space-between;gap:12px 16px;flex-wrap:wrap;margin-bottom:16px}
-.cal-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:24px;box-shadow:0 6px 26px rgba(12,42,71,.05)}
-.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;font-weight:600;color:var(--mut);padding:2px 0 10px}
-.cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
-.cd{aspect-ratio:1.3;border-radius:11px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:9px;font-size:13px;color:var(--navy);position:relative;cursor:pointer}
+.cal-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:24px;box-shadow:0 6px 26px rgba(12,42,71,.05);overflow:visible;box-sizing:border-box}
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:12px;font-weight:700;color:var(--mut);padding:2px 0 8px;letter-spacing:.02em}
+.cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+/* Cells scale with viewport width so the month reads big and clear on a phone
+   yet stays tidy on desktop. min-height (not aspect-ratio) so the grid can never
+   overflow the card. */
+.cd{min-height:clamp(46px,12.5vw,74px);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:8px;font-size:clamp(14px,3.6vw,17px);font-weight:500;color:var(--navy);position:relative;cursor:pointer;box-sizing:border-box}
 .cd:hover{background:var(--bg)}
-.cd.mut{color:#C4D2E3}
-.cd.today{background:var(--grad);color:#fff;font-weight:600;box-shadow:0 6px 16px rgba(10,141,237,.3)}
-.cd .dots{display:flex;gap:3px;margin-top:5px}
+.cd.mut{color:#C4D2E3;font-weight:400}
+.cd.today{background:var(--grad);color:#fff;font-weight:700;box-shadow:0 6px 14px rgba(10,141,237,.26)}
+.cd .dots{display:flex;gap:3px;margin-top:6px;flex-wrap:wrap;justify-content:center;max-width:88%}
 .cd .d{width:6px;height:6px;border-radius:50%}
 .d.bl{background:var(--brand)}.d.gr{background:var(--green)}.d.am{background:var(--amber)}.d.nv{background:var(--navy)}
 .d.pu{background:#8B5CF6}.d.sl{background:#94A6BE}

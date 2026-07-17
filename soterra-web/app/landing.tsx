@@ -125,7 +125,7 @@ function AnswerCard() {
       <div className="ph-top"><span className="ph-cam" /></div>
       <div className="ph-screen">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <div className="ph-bar"><img src="/logo-mark.png" alt="" /><b>1 Arthur Road</b></div>
+        <div className="ph-bar"><img src="/logo-mark.png" alt="" /><b>43 Kauri Road</b></div>
         <div className="q">Anything I should watch before the Level 3 fire penetration inspection?</div>
         <div className="a l3a">
           <div className="srcb">
@@ -165,7 +165,7 @@ function ChatDemo() {
       <div className="ph-top"><span className="ph-cam" /></div>
       <div className="ph-screen">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <div className="ph-bar"><img src="/logo-mark.png" alt="" /><b>1 Arthur Road</b></div>
+        <div className="ph-bar"><img src="/logo-mark.png" alt="" /><b>43 Kauri Road</b></div>
         <div className="chat">
           <div className="q pop" key={`q${turn}`}>{t.q}</div>
           {stage === 1 && <div className="dots pop"><i /><i /><i /></div>}
