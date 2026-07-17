@@ -1252,8 +1252,7 @@ export default function Page() {
                 <div className="home-scroll">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img className="hero-logo home-logo" src="/logo-mark.png" alt="Soterra" />
-                  <h1 className="home-greet">Hi <b className="grad">{firstName}</b></h1>
-                  <p className="home-sub">Here&apos;s {projName} today</p>
+                  <h1 className="home-greet">Hi <b className="grad">{firstName}</b>, how can I help?</h1>
                   <TodayGlance
                     events={eventsByDay.get(todayKey()) ?? []}
                     tasks={(tasksByDay.get(todayKey()) ?? []).filter((t) => !t.done)}

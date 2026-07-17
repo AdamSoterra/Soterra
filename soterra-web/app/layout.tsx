@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ReminderSync } from "./components/reminder-sync";
 import { NotificationPermission } from "./components/notification-permission";
+import { NativeShell } from "./components/native-shell";
 import { DM_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -44,7 +45,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <html lang="en" className={dmSans.variable}>
         <body>
           {children}
-          {/* Native-app only: both no-op in a browser. */}
+          {/* Native-app only: all no-op in a browser. */}
+          <NativeShell />
           <NotificationPermission />
           <ReminderSync />
         </body>
