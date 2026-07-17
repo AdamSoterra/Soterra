@@ -186,6 +186,11 @@ function ChatDemo() {
 }
 
 export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => void; onGetStarted?: () => void }) {
+  // Phone: the header is brand + hamburger only. The site's job is to sell;
+  // logging in belongs in the app, so the CTAs live in the menu (and this is
+  // where app-store badges will go later).
+  const [menu, setMenu] = useState(false);
+
   useEffect(() => {
     const io = new IntersectionObserver(
       (es) => es.forEach((e) => e.isIntersecting && e.target.classList.add("in")),
@@ -214,7 +219,25 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
           <Cta kind="ghost" label="Log in" onAct={onLogin} />
           <Cta kind="solid" label="Get set up" onAct={onGetStarted} />
         </div>
+        <button className="burger" onClick={() => setMenu((o) => !o)} aria-label="Menu" aria-expanded={menu}>
+          {menu ? (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          ) : (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 7h18M3 12h18M3 17h18" /></svg>
+          )}
+        </button>
       </header>
+      {menu && (
+        <div className="msheet">
+          <a href="#now" onClick={() => setMenu(false)}>What it does</a>
+          <a href="#vision" onClick={() => setMenu(false)}>The vision</a>
+          <a href="#safe" onClick={() => setMenu(false)}>Why it&apos;s safe</a>
+          <div className="msheet-cta">
+            <button className="ghost" onClick={() => { setMenu(false); onLogin?.(); }}>Log in</button>
+            <button className="solid" onClick={() => { setMenu(false); onGetStarted?.(); }}>Get set up</button>
+          </div>
+        </div>
+      )}
 
       {/* ─── HERO — deliberately simple. Headline sits straight under the nav
            (the eyebrow pill was removed 2026-07-16) and the whole hero is tuned
@@ -366,6 +389,8 @@ const CSS = `
 .lp .links a{color:var(--slate);font-size:14px;font-weight:500}
 .lp .links a:hover{color:var(--navy)}
 .lp .navcta{display:flex;gap:10px}
+.lp .burger{display:none;margin-left:auto;color:var(--navy);background:transparent;border:none;padding:6px;cursor:pointer}
+.lp .msheet{display:none}
 .lp .ghost{color:var(--navy);font-size:14px;font-weight:600;padding:9px 17px;border:1px solid var(--line);border-radius:11px;background:#fff}
 .lp .ghost:hover{border-color:var(--brand)}
 .lp .solid{background:var(--grad);color:#fff;font-size:14px;font-weight:600;padding:10px 18px;border-radius:11px;box-shadow:0 10px 26px rgba(10,141,237,.28)}
@@ -520,6 +545,16 @@ const CSS = `
 .lp .foot>span{font-size:13px;color:var(--mut)}
 @media(max-width:900px){
   .lp .links{display:none}
+  /* phone header: brand + hamburger only, and noticeably shorter */
+  .lp .navcta{display:none}
+  .lp .burger{display:flex;align-items:center}
+  .lp .nav{padding:9px 6vw;gap:10px}
+  .lp .brand{font-size:18px;gap:8px}
+  .lp .brand img{height:23px}
+  .lp .msheet{display:flex;flex-direction:column;position:sticky;top:49px;z-index:29;background:#fff;border-bottom:1px solid var(--line);padding:6px 6vw 16px;box-shadow:0 16px 34px rgba(12,42,71,.1)}
+  .lp .msheet a{padding:13px 2px;font-size:15.5px;font-weight:600;color:var(--navy);border-bottom:1px solid var(--line2)}
+  .lp .msheet-cta{display:flex;gap:10px;margin-top:14px}
+  .lp .msheet-cta button{flex:1;text-align:center;padding:13px 0;border-radius:12px;font-size:15px;font-weight:600}
   .lp .frow{grid-template-columns:1fr;gap:32px;margin-bottom:44px}
   .lp .frow.rev .ftext{order:0}
   .lp .bullets{grid-template-columns:1fr;gap:12px}
