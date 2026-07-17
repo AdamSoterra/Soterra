@@ -293,6 +293,7 @@ export default function Page() {
   const [upItems, setUpItems] = useState<{ name: string; ok: boolean; note: string }[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const planFileRef = useRef<HTMLInputElement>(null);
+  const planFolderRef = useRef<HTMLInputElement>(null);
 
   // ─── live Calendar + Tasks state ───
   const now = useMemo(() => new Date(), []);
@@ -849,6 +850,47 @@ export default function Page() {
   const copyCode = async (code: string) => {
     if (!code) return;
     try { await navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1600); } catch { /* ignore */ }
+  };
+
+  // The folder picker needs non-standard attributes that React won't type, so set
+  // them on the DOM node directly. Chrome/Edge/Firefox all honour webkitdirectory
+  // and return every file in the tree, subfolders included.
+  useEffect(() => {
+    const el = planFolderRef.current;
+    if (!el) return;
+    el.setAttribute("webkitdirectory", "");
+    el.setAttribute("directory", "");
+  }, [tab]);
+
+  // Dropping a FOLDER gives you directory entries, not files — dataTransfer.files
+  // is empty for them. Walk the tree via the entries API so a PM can drag the whole
+  // "Lot-1&2-Approved-BC" folder (Architectural/CIVIL/Landscape/STRUCTURAL) in one go.
+  const filesFromDrop = async (dt: DataTransfer): Promise<File[]> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const entries = Array.from(dt.items || []).map((i: any) => i.webkitGetAsEntry?.()).filter(Boolean);
+    if (!entries.length) return Array.from(dt.files || []);
+    const out: File[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const walk = async (entry: any): Promise<void> => {
+      if (entry.isFile) {
+        const f = await new Promise<File | null>((res) => entry.file((x: File) => res(x), () => res(null)));
+        if (f) out.push(f);
+        return;
+      }
+      if (entry.isDirectory) {
+        const reader = entry.createReader();
+        // readEntries returns at most 100 per call — keep reading until it's dry,
+        // or a big discipline folder silently loses everything past the 100th file.
+        for (;;) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const batch: any[] = await new Promise((res) => reader.readEntries((b: any[]) => res(b), () => res([])));
+          if (!batch.length) break;
+          for (const e of batch) await walk(e);
+        }
+      }
+    };
+    await Promise.all(entries.map((e) => walk(e)));
+    return out;
   };
 
   // ─── plan upload (private, per-site) — handles a WHOLE set at once ───
@@ -1450,23 +1492,35 @@ export default function Page() {
             </div>
             <input ref={planFileRef} type="file" accept="application/pdf" multiple style={{ display: "none" }}
               onChange={(e) => { const fs = e.target.files; if (planFileRef.current) planFileRef.current.value = ""; if (fs && fs.length) onPlanFiles(fs); }} />
+            {/* Folder picker: returns the whole tree (subfolders included). No `accept`
+                here — webkitdirectory ignores it, so onPlanFiles filters to PDFs. */}
+            <input ref={planFolderRef} type="file" multiple style={{ display: "none" }}
+              onChange={(e) => { const fs = e.target.files; if (planFolderRef.current) planFolderRef.current.value = ""; if (fs && fs.length) onPlanFiles(fs); }} />
             <div
               className="drop"
-              onClick={() => { if (!upCurrent) planFileRef.current?.click(); }}
+              onClick={() => { if (!upCurrent) planFolderRef.current?.click(); }}
               onDragOver={(e) => { e.preventDefault(); if (!upCurrent) setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => { e.preventDefault(); setDragOver(false); if (upCurrent) return; const fs = e.dataTransfer.files; if (fs && fs.length) onPlanFiles(fs); }}
+              onDrop={(e) => {
+                e.preventDefault(); setDragOver(false); if (upCurrent) return;
+                void filesFromDrop(e.dataTransfer).then((fs) => { if (fs.length) onPlanFiles(fs); });
+              }}
               style={{ cursor: upCurrent ? "default" : "pointer", outline: dragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
             >
               <div className="ic">⬆️</div>
               <b>{upCurrent ? `${upCurrent.phase}…` : hasPlans ? "Add or update a sheet" : "Upload your full plan set"}</b>
-              <p>{upCurrent ? upCurrent.name : hasPlans ? "Drop a revised or new sheet (PDF). It becomes the current version — the assistant uses the latest and treats the old as superseded. Keep the whole-set load to site setup." : "Drop your whole drawing set & specs here, or click to choose. As many PDFs as you like — up to 100 MB each. This is the big one-time upload."}</p>
+              <p>{upCurrent ? upCurrent.name : hasPlans ? "Drop a revised or new sheet (PDF). It becomes the current version — the assistant uses the latest and treats the old as superseded. Keep the whole-set load to site setup." : "Drop your whole project folder here — subfolders and all (Architectural, Civil, Structural…). Soterra finds every PDF inside and skips the rest. Up to 100 MB per file."}</p>
               {upCurrent && (
                 <div style={{ width: "80%", maxWidth: 360, height: 6, borderRadius: 99, background: "rgba(148,166,190,.25)", overflow: "hidden", marginTop: 6 }}>
                   <div style={{ width: `${upCurrent.phase === "Uploading" ? (upCurrent.pct || 4) : 100}%`, height: "100%", background: "var(--brand)", transition: "width .2s" }} />
                 </div>
               )}
-              {!upCurrent && <span className="soon" style={{ cursor: "pointer" }}>Choose files</span>}
+              {!upCurrent && (
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+                  <span className="soon" style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); planFolderRef.current?.click(); }}>📁 Choose folder</span>
+                  <span className="soon" style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); planFileRef.current?.click(); }}>Choose files</span>
+                </div>
+              )}
             </div>
 
             {upItems.length > 0 && (
