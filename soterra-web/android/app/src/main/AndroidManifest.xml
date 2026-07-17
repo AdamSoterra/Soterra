@@ -38,4 +38,14 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Camera: the composer's "take a photo" button. Without this the capture
+         intent silently fails in the native app.
+         NOTE (Montázs lesson): deliberately NOT declaring READ_MEDIA_IMAGES —
+         declaring it triggers a Play Store photo-permissions declaration and can
+         block submission. The file picker returns a URI without needing it.
+         POST_NOTIFICATIONS / WAKE_LOCK / RECEIVE_BOOT_COMPLETED are merged in by
+         @capacitor/local-notifications, so they're not repeated here. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

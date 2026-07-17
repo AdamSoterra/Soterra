@@ -630,13 +630,18 @@ export default function Page() {
   useEffect(() => {
     try {
       window.localStorage.removeItem("soterra:appmode"); // undo the old sticky flag
+      // The native Android WebView reports display-mode "browser", NOT standalone,
+      // and Capacitor loads the bare site URL — so without this check the native
+      // app would show the MARKETING SITE to signed-out users instead of login.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const native = Boolean((window as any).Capacitor?.isNativePlatform?.());
       const standalone =
         window.matchMedia("(display-mode: standalone)").matches ||
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (navigator as any).standalone === true;
       const hasParam = new URLSearchParams(window.location.search).has("app");
       const sessionFlag = window.sessionStorage.getItem("soterra:appmode") === "1";
-      if (standalone || hasParam || sessionFlag) {
+      if (native || standalone || hasParam || sessionFlag) {
         setAppMode(true);
         window.sessionStorage.setItem("soterra:appmode", "1");
         setSetupMode("join"); // app users join a PM's site by code; PMs create on the web

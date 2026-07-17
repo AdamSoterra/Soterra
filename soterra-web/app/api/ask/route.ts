@@ -14,7 +14,11 @@ import { resolveProjectId, listMembers } from "@/lib/project";
 import indexData from "@/data/arthur-road-index.json";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// 180, not 60: Montázs measured a ~50-item update_events_bulk streaming ~2000
+// tokens of JSON and brushing the 60s cap. Bulk writes here are non-transactional
+// Promise.all, so a timeout means partial writes with nothing surfaced to the
+// user — the exact bulk failure mode we're trying to kill.
+export const maxDuration = 180;
 
 const DEMO_ID = "1-arthur-road"; // the seeded demo site keeps its bundled plan index
 const MODEL = "claude-sonnet-4-6";
@@ -451,7 +455,7 @@ function parseReminder(raw: unknown): Date | null {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function computeEventUpdateFields(existing: typeof events.$inferSelect, input: Record<string, unknown>, members: Member[]): Record<string, any> {
+function computeEventUpdateFields(existing: typeof events.$inferSelect, input: Record<string, unknown>, members: Member[], speakerId: string): Record<string, any> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fields: Record<string, any> = {};
   if (input.title !== undefined) fields.title = s(input.title) ?? existing.title;
@@ -462,7 +466,17 @@ function computeEventUpdateFields(existing: typeof events.$inferSelect, input: R
     if (!s(input.assignee)) { fields.assigneeId = null; fields.assigneeName = null; }
     else { const r = resolveAssignee(input, members); if (r.assigneeId) { fields.assigneeId = r.assigneeId; fields.assigneeName = r.assigneeName; } }
   }
-  if (input.reminder !== undefined) fields.reminderAt = parseReminder(input.reminder);
+  if (input.reminder !== undefined) {
+    fields.reminderAt = parseReminder(input.reminder);
+    // Silent-fail guard: reminders only fire on the ASSIGNEE's phone. Setting one
+    // on an unassigned item writes the row and then reminds nobody, forever, with
+    // no error. If nothing is assigned, fall back to the person asking.
+    if (fields.reminderAt && !fields.assigneeId && !existing.assigneeId) {
+      fields.assigneeId = speakerId;
+      fields.assigneeName = members.find((m) => m.userId === speakerId)?.name ?? null;
+      if (existing.visibility !== "team") fields.visibility = "team";
+    }
+  }
   const dateChanged = input.date !== undefined;
   const timeChanged = input.time !== undefined;
   const endChanged = input.end_date !== undefined || input.end_time !== undefined;
@@ -482,7 +496,7 @@ function computeEventUpdateFields(existing: typeof events.$inferSelect, input: R
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function computeTaskUpdateFields(existing: typeof tasks.$inferSelect, input: Record<string, unknown>, members: Member[]): Record<string, any> {
+function computeTaskUpdateFields(existing: typeof tasks.$inferSelect, input: Record<string, unknown>, members: Member[], speakerId: string): Record<string, any> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fields: Record<string, any> = {};
   if (input.title !== undefined) fields.title = s(input.title) ?? existing.title;
@@ -493,7 +507,15 @@ function computeTaskUpdateFields(existing: typeof tasks.$inferSelect, input: Rec
   }
   if (input.status === "done") fields.done = true;
   if (input.status === "open") fields.done = false;
-  if (input.reminder !== undefined) fields.reminderAt = parseReminder(input.reminder);
+  if (input.reminder !== undefined) {
+    fields.reminderAt = parseReminder(input.reminder);
+    // Same silent-fail guard as events: an unassigned reminder pings nobody.
+    if (fields.reminderAt && !fields.assigneeId && !existing.assigneeId) {
+      fields.assigneeId = speakerId;
+      fields.assigneeName = members.find((m) => m.userId === speakerId)?.name ?? null;
+      if (existing.visibility !== "team") fields.visibility = "team";
+    }
+  }
   const dateChanged = input.due_date !== undefined;
   const timeChanged = input.due_time !== undefined;
   const endChanged = input.end_date !== undefined || input.end_time !== undefined;
@@ -596,7 +618,7 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         if (!id) return { content: JSON.stringify({ ok: false, error: "id required" }), cards: [] };
         const [existing] = await db.select().from(events).where(and(eq(events.id, id), eq(events.projectId, projectId))).limit(1);
         if (!existing || (existing.visibility !== "team" && existing.creatorId !== userId && existing.assigneeId !== userId)) return { content: JSON.stringify({ ok: false, error: "not found" }), cards: [] };
-        await db.update(events).set(computeEventUpdateFields(existing, input, members)).where(eq(events.id, id));
+        await db.update(events).set(computeEventUpdateFields(existing, input, members, userId)).where(eq(events.id, id));
         const [row] = await db.select().from(events).where(eq(events.id, id)).limit(1);
         return { content: JSON.stringify({ ok: true, message: "Event updated." }), cards: [card("event", "updated", row)] };
       }
@@ -605,7 +627,7 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         if (!id) return { content: JSON.stringify({ ok: false, error: "id required" }), cards: [] };
         const [existing] = await db.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.projectId, projectId))).limit(1);
         if (!existing || (existing.visibility !== "team" && existing.creatorId !== userId && existing.assigneeId !== userId)) return { content: JSON.stringify({ ok: false, error: "not found" }), cards: [] };
-        await db.update(tasks).set(computeTaskUpdateFields(existing, input, members)).where(eq(tasks.id, id));
+        await db.update(tasks).set(computeTaskUpdateFields(existing, input, members, userId)).where(eq(tasks.id, id));
         const [row] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
         return { content: JSON.stringify({ ok: true, message: "Task updated." }), cards: [card("task", "updated", row)] };
       }
@@ -632,13 +654,23 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         const ids = updates.map((u) => s(u.id)).filter((x): x is string => !!x);
         const rows = ids.length ? await db.select().from(events).where(and(eq(events.projectId, projectId), inArray(events.id, ids), evVisible)) : [];
         const byId = new Map(rows.map((e) => [e.id, e]));
-        let updated = 0;
-        await Promise.all(updates.map(async (u) => {
+        // Report EVERY row's outcome. Previously failures were swallowed and only
+        // a success count returned, so a 40-item reschedule with 12 failures was
+        // reported to the user as "done".
+        const results = await Promise.all(updates.map(async (u) => {
           const id = s(u.id); const existing = id ? byId.get(id) : undefined;
-          if (!id || !existing) return;
-          try { await db.update(events).set(computeEventUpdateFields(existing, u, members)).where(eq(events.id, id)); updated++; } catch { /* skip */ }
+          if (!id) return { id: "", ok: false, error: "missing id" };
+          if (!existing) return { id, ok: false, error: "not found" };
+          try {
+            await db.update(events).set(computeEventUpdateFields(existing, u, members, userId)).where(eq(events.id, id));
+            return { id, ok: true };
+          } catch (e) {
+            return { id, ok: false, error: e instanceof Error ? e.message : "update failed" };
+          }
         }));
-        return { content: JSON.stringify({ ok: true, updated, total: updates.length }), cards: [] };
+        const updated = results.filter((r) => r.ok).length;
+        const failed = results.filter((r) => !r.ok);
+        return { content: JSON.stringify({ ok: failed.length === 0, updated, total: updates.length, failed }), cards: [] };
       }
       case "update_tasks_bulk": {
         const updates = Array.isArray(input.updates) ? (input.updates as Record<string, unknown>[]) : [];
@@ -646,13 +678,20 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         const ids = updates.map((u) => s(u.id)).filter((x): x is string => !!x);
         const rows = ids.length ? await db.select().from(tasks).where(and(eq(tasks.projectId, projectId), inArray(tasks.id, ids), tkVisible)) : [];
         const byId = new Map(rows.map((t) => [t.id, t]));
-        let updated = 0;
-        await Promise.all(updates.map(async (u) => {
+        const results = await Promise.all(updates.map(async (u) => {
           const id = s(u.id); const existing = id ? byId.get(id) : undefined;
-          if (!id || !existing) return;
-          try { await db.update(tasks).set(computeTaskUpdateFields(existing, u, members)).where(eq(tasks.id, id)); updated++; } catch { /* skip */ }
+          if (!id) return { id: "", ok: false, error: "missing id" };
+          if (!existing) return { id, ok: false, error: "not found" };
+          try {
+            await db.update(tasks).set(computeTaskUpdateFields(existing, u, members, userId)).where(eq(tasks.id, id));
+            return { id, ok: true };
+          } catch (e) {
+            return { id, ok: false, error: e instanceof Error ? e.message : "update failed" };
+          }
         }));
-        return { content: JSON.stringify({ ok: true, updated, total: updates.length }), cards: [] };
+        const updated = results.filter((r) => r.ok).length;
+        const failed = results.filter((r) => !r.ok);
+        return { content: JSON.stringify({ ok: failed.length === 0, updated, total: updates.length, failed }), cards: [] };
       }
       case "delete_events_bulk": {
         const ids = (Array.isArray(input.ids) ? input.ids : []).map((x) => s(x)).filter((x): x is string => !!x);
