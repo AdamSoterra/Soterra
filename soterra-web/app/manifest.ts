@@ -11,7 +11,9 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#0C2A47",
+    // Splash background matches the app's light palette — a navy splash flashing
+    // before a light app reads as a bug.
+    background_color: "#F6FAFF",
     theme_color: "#0E8FE6",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },

@@ -182,24 +182,48 @@ const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 // Login-first screen shown when the app runs in app-mode (installed PWA / ?app=1),
-// instead of the marketing landing. Soterra colours, phone-shaped.
+// instead of the marketing landing. Uses the SAME light/blue palette as the
+// website and the assistant so the app doesn't feel like a different product.
 function AppLogin({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted: () => void }) {
   return (
-    <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 28px", textAlign: "center", background: "radial-gradient(120% 90% at 50% 0%, #103A63 0%, #0C2A47 62%)", color: "#fff" }}>
-      {/* White mark — the blue one washes out on this navy background. */}
+    <div
+      style={{
+        minHeight: "100dvh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "0 28px",
+        textAlign: "center",
+        color: "#0C2A47",
+        background:
+          "radial-gradient(760px 420px at 82% -6%, rgba(65,195,255,.14), transparent 62%), radial-gradient(680px 420px at 0% 0%, rgba(10,141,237,.06), transparent 55%), #F6FAFF",
+      }}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/logo-mark-white.png" alt="Soterra" style={{ height: 68, width: "auto", marginBottom: 18, filter: "drop-shadow(0 12px 30px rgba(0,0,0,.45))" }} />
+      <img src="/logo-mark.png" alt="Soterra" style={{ height: 66, width: "auto", marginBottom: 18 }} />
       <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-.02em", marginBottom: 12 }}>Soterra</h1>
-      <p style={{ fontSize: 16, lineHeight: 1.5, color: "rgba(255,255,255,.75)", maxWidth: 310, marginBottom: 32 }}>
-        Turning construction data into <span style={{ color: "#5FD0FF", fontWeight: 600 }}>company intelligence.</span>
+      <p style={{ fontSize: 16, lineHeight: 1.5, color: "#52698A", maxWidth: 310, marginBottom: 32 }}>
+        Turning construction data into{" "}
+        <span
+          style={{
+            background: "linear-gradient(135deg,#41C3FF 0%,#0A8DED 100%)",
+            WebkitBackgroundClip: "text",
+            backgroundClip: "text",
+            color: "transparent",
+            fontWeight: 700,
+          }}
+        >
+          company intelligence.
+        </span>
       </p>
-      <button onClick={onLogin} style={{ width: "100%", maxWidth: 320, padding: "15px", borderRadius: 14, border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#fff", background: "linear-gradient(135deg,#41C3FF,#0A8DED)", boxShadow: "0 12px 30px rgba(10,141,237,.4)", marginBottom: 12 }}>
+      <button onClick={onLogin} style={{ width: "100%", maxWidth: 320, padding: "15px", borderRadius: 14, border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#fff", background: "linear-gradient(135deg,#41C3FF,#0A8DED)", boxShadow: "0 12px 30px rgba(10,141,237,.3)", marginBottom: 12 }}>
         Log in
       </button>
-      <button onClick={onGetStarted} style={{ width: "100%", maxWidth: 320, padding: "14px", borderRadius: 14, border: "1px solid rgba(255,255,255,.22)", cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#fff", background: "transparent" }}>
+      <button onClick={onGetStarted} style={{ width: "100%", maxWidth: 320, padding: "14px", borderRadius: 14, border: "1px solid #E7EFF9", cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#0C2A47", background: "#fff" }}>
         Create an account
       </button>
-      <p style={{ fontSize: 12.5, color: "rgba(255,255,255,.5)", marginTop: 22, maxWidth: 300, lineHeight: 1.5 }}>
+      <p style={{ fontSize: 12.5, color: "#94A6BE", marginTop: 22, maxWidth: 300, lineHeight: 1.5 }}>
         Got a site code from your PM? Log in, then enter it to join your site.
       </p>
     </div>
