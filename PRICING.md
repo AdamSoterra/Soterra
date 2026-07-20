@@ -60,30 +60,74 @@ The margin trend matters: **costs fall over time.** Price on value, hold the pri
 
 **No credit system.** Between Windsurf retiring theirs, Adobe's backlash, Salesforce's three models in eighteen months and Cursor's refunds, the evidence is one-directional. Credits are, in Metronome's words, "useful, but not loved" - born of vendor necessity, not customer preference. Our whole value proposition is that asking is free and instant.
 
+## 3b. NZ market benchmarks (verified from vendor pricing pages)
+
+| Product | Price | Unit |
+|---|---|---|
+| **Buildxact** Foundation / Pro / Master | **NZ$199 / $399 / $599 per month, flat** | **unlimited users** |
+| Buildxact **AI add-ons** | **+NZ$99 / $99 / $149 per month** | add-on |
+| **NextMinute** Tradie Growth / Pro | NZ$199 (3-9 users) / $349 (10-14) | flat, user band |
+| **Tradify** Lite / Pro / Plus | NZ$48 / $52 / $62 | **per user**/month |
+| **Fergus** Basic / Professional | NZ$53 / $75 | per user/month |
+| **Xero** Standard (anchor) | NZ$65 | flat |
+
+A 5-person NZ residential builder's core stack lands at roughly **NZ$265-325/month ex GST**.
+
+**Procore** is ACV-based, quote-only, unlimited users, unlimited storage - confirmed from their own AU page. Their SEC filings give the only hard number: FY2025 US$1.3B revenue across 17,850 customers = **~US$72,800 average per customer per year**. Unverified user reports put small contractors at US$500-800/month and mid-size at US$1,000-3,000/month. **Buildertrend has now copied the ACV model too** and removed its published tiers.
+
+**AI document tools price far above trade tools**: Quotr.ai (the closest comparable, plan Q&A in plain English) charges **US$299.90/month for one seat**; Togal.AI US$199-299/user/month; Handoff US$119-719/month. That's 4-6x what NZ job-management tools charge per seat. **AI plan tools are priced as a professional-services replacement, not a software seat.**
+
 ## 4. Recommended structure
 
-- **Unit: per active project, per month. Fixed price.** Construction budgets per job; it goes in the prelims and dies when the job ends. A variable bill has no line to sit on at bid time, and a PM who can't tell the QS the number won't champion the purchase.
-- **Unlimited users on a project.** Always.
-- **Tier by project size**, not headcount. Contract value band, or documents indexed as a proxy.
+**Corrected from the earlier draft.** I initially recommended per-project. The NZ market evidence says otherwise: **not one comparable prices per project.** Buildxact is flat per company with unlimited users. NextMinute is flat by user band. Procore and Buildertrend are both per company banded by annual construction volume, with unlimited users *and* unlimited projects. A builder running five concurrent jobs does not want five subscriptions.
+
+- **Unit: per company, per month, banded by annual construction volume.** Fixed price. This is what the market already does and what builders already understand.
+- **Unlimited users and unlimited projects** inside the band. Always.
+- **Offer a per-project option only for one-off large commercial jobs**, where software genuinely gets costed into the prelims.
 - **One charge per question thread**, however many retrieval rounds it takes (Intercom's principle).
 - **Published fair-use ceiling** as a plain number, not credits. Credit systems obscure value and read as deceptive.
 - **Alert at 80%, hard block at 100%, one-click top-up.** Never auto-bill past the cap. For a fixed-budget buyer a block is reassuring; a surprise invoice is a lost renewal.
 - **Archived projects stay queryable free.** Costs almost nothing (storage only, no AI) and makes the platform sticky across job cycles.
 
-## 5. Candidate bands and what they'd earn
+## 5. The ladder
 
-Gross margin at realistic usage:
+Use the turnover bands the industry already uses. **Registered Master Builders sets its own membership fees on exactly these bands** (under $500k / $500k-$2M / $2M+ / Volume / Commercial / Major), which is proof NZ builders already accept revenue-scaled pricing.
 
-| Price/project/mo | 3 crew light | 3 crew active | 8 crew active | 15 crew active |
+| Tier | Band | Price | What RMB already charges that band, per year |
+|---|---|---|---|
+| **Site** | Residential under ~$2M turnover | **NZ$149/mo** = NZ$1,788/yr | Residential $500k-2M: **$1,900** |
+| **Builder** | Residential $2M+ / volume builder | **NZ$299/mo** = NZ$3,588/yr | Residential $2M+: **$3,475** · Volume: **$4,160** |
+| **Commercial** | Commercial / multi-region | **NZ$599/mo** = NZ$7,188/yr | Commercial: **$4,160** · Major: **$8,810** |
+
+Every rung lands within a few hundred dollars a year of a fee that segment already pays a trade association for brand and guarantee access. That's the anchor for the sales conversation: *"you already pay RMB $1,900 a year for the guarantee. This is the same money for something that answers your code questions with the clause number."*
+
+Sanity checks against the rest of the market: NZ$149 sits **below Buildxact Foundation (NZ$199)** and **above their AI add-on (NZ$99-149)** - so it reads as a real product, not a bolt-on. NZ$299 is well under the **US$299.90 (~NZ$500) Quotr.ai charges for a single seat** at plan Q&A, and we're unlimited users.
+
+### Gross margin at the ladder
+
+| Price | 3 crew active | 8 crew active | 15 crew active | 25 crew heavy |
 |---|---|---|---|---|
-| NZ$99 | 94% | 84% | 57% | **20%** |
-| NZ$199 | 97% | 92% | 79% | 60% |
-| NZ$299 | 98% | 95% | 86% | 73% |
-| NZ$499 | 99% | 97% | 91% | 84% |
+| NZ$149 | 89% | 72% | 47% | **-7%** |
+| NZ$299 | 95% | 86% | 73% | 47% |
+| NZ$599 | 97% | 93% | 87% | 73% |
 
-The NZ$99 / 15-crew cell at 20% is the whole argument for tiering: a big busy site must not be able to sit on the entry tier. Band boundaries need to move a site up before it gets there.
+The **-7% cell is the whole reason bands must be enforced.** A 25-person operation running heavy usage on the NZ$149 tier loses money. Band on turnover, verify at signup, and move them up before they get there.
 
-**These numbers are not validated against the NZ market yet.** They're what the margin math supports, not what a builder will pay. That comes from Maree.
+## 5b. The ROI line that closes the sale
+
+**MBIE, year ended June 2025 (official): 64.6% of NZ building consent applications required an RFI. Median applicant response time: 11 working days.**
+
+Two in three consents generate an RFI, and each one costs a median of eleven working days. That is a government-published pain statistic, and it is the single most quotable number in this whole package.
+
+Against published NZ professional rates (DTCE rate card): **CPEng NZ$280/hr, Director NZ$320/hr.** One avoided 2-hour engineer callback is worth ~NZ$560 + GST, which pays for:
+
+- **3.8 months** of the NZ$149 tier
+- **1.9 months** of the NZ$299 tier
+- **0.9 months** of the NZ$599 tier
+
+One avoided callback per quarter covers the entry tier outright. That is the hard-ROI answer to Bessemer's 2026 renewal warning.
+
+**And the market gap is real:** 66.7% of residential builders now use AI (up from 37.8% in a year), but the applications are marketing 65%, client communication 60%, sales 42.5%. **All front-office. Nobody is using AI on the technical side.** That's the opening.
 
 ## 6. 🔴 The margin hole to fix now
 
@@ -169,7 +213,19 @@ Question 4 is the one that sets the fair-use cap honestly.
 
 ## 9. Open
 
-- No verified NZ construction-software price points yet (research pending).
-- No verified pricing for any construction AI vendor (Document Crunch, Trunk Tools, Togal.AI).
-- Whether Procore AI ends up bundled or paid - not committed publicly as of 2026-07.
-- Fair-use percentiles need real instrumented usage, not a guess.
+- **Fair-use percentiles need real instrumented usage.** This is the only blocker on publishing a cap. Follow Figma: measure first, set second.
+- NZ builder crew sizes, typical contract values and concurrent-project counts - not confirmed, so the usage assumptions in section 1 are reasoned, not measured.
+- Cost of a delay day or a rework event in NZ dollars - not found. One promising lead: a NZ trade-press piece claiming "one in six hours lost on rework", worth chasing.
+- Simpro, Assignar, Buildertrend, Document Crunch, Trunk Tools and Bild AI are all quote-only; the third-party figures circulating for them are low quality and were not used here.
+- Whether Procore AI ends up bundled or separately paid - still not committed publicly as of 2026-07.
+
+## 10. Decision summary
+
+Settled and evidence-backed:
+- **Per company, per month, banded by annual construction volume.** Unlimited users, unlimited projects.
+- **Flat price. No credits, no per-question metering** (Windsurf retired credits because they made users scared to ask quick questions - fatal for this product).
+- **Ladder: NZ$149 / NZ$299 / NZ$599**, anchored on the Master Builders fee bands builders already pay.
+- Fair-use cap exists but is **measured before it is published**; alert at 80%, hard block at 100%, manual top-up, never auto-bill.
+- Hold price as token costs fall.
+
+Needs one real conversation before locking: the numbers themselves.
