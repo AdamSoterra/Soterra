@@ -11,6 +11,7 @@ import {
   addOneDay,
 } from "@/lib/date-tz";
 import { resolveProjectId, listMembers } from "@/lib/project";
+import { computeDf, excerpt, retrieve } from "@/lib/retrieve";
 import indexData from "@/data/arthur-road-index.json";
 
 export const runtime = "nodejs";
@@ -32,53 +33,6 @@ type Member = { userId: string; name: string | null; title: string | null };
 //    TF-IDF retrieval below is generic over anything with text. ──
 type Page = { doc: string; disc: string; file: string; page: number; npages: number; code: string; title: string; text: string; uploadedAt?: number };
 const INDEX = indexData as unknown as Page[];
-
-const SYN: Record<string, string[]> = {
-  colour: ["color", "paint", "finish", "resene", "dulux", "schedule"],
-  color: ["colour", "paint", "finish", "resene", "dulux", "schedule"],
-  paint: ["colour", "resene", "dulux", "finish"],
-  fire: ["frr", "fire-rated", "rated", "fhr"],
-  rating: ["frr", "fire", "rated"],
-  beam: ["lintel", "lvl", "span", "portal", "header", "steel"],
-  lintel: ["beam", "lvl", "span", "header"],
-  garage: ["carport", "basement", "ground"],
-  wall: ["partition", "gib", "plasterboard", "lining", "intertenancy"],
-  insulation: ["r-value", "thermal", "batts", "pink"],
-  window: ["glazing", "glazed", "joinery"],
-  corridor: ["lobby", "circulation", "common"],
-};
-function expand(q: string): string[] {
-  const terms = (q.toLowerCase().match(/[a-z0-9-]+/g) || []).filter((t) => t.length > 1);
-  const out = new Set(terms);
-  for (const t of terms) for (const s of SYN[t] || []) out.add(s);
-  return [...out];
-}
-function computeDf(pages: { text: string }[]): Map<string, number> {
-  const df = new Map<string, number>();
-  for (const p of pages) {
-    const seen = new Set(p.text.toLowerCase().match(/[a-z0-9-]{2,}/g) || []);
-    for (const t of seen) df.set(t, (df.get(t) || 0) + 1);
-  }
-  return df;
-}
-function retrieve<T extends { text: string }>(pages: T[], df: Map<string, number>, q: string, k = 6): T[] {
-  const terms = expand(q);
-  const N = pages.length || 1;
-  const idf = (t: string) => Math.log((N + 1) / ((df.get(t) || 0) + 1)) + 1;
-  const scored = pages
-    .map((p) => {
-      const low = p.text.toLowerCase();
-      let s = 0;
-      for (const t of terms) {
-        const c = (low.match(new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "g")) || []).length;
-        if (c) s += (1 + Math.log(c)) * idf(t);
-      }
-      return { s, p };
-    })
-    .filter((x) => x.s > 0)
-    .sort((a, b) => b.s - a.s);
-  return scored.slice(0, k).map((x) => x.p);
-}
 
 // A project's plan index: uploaded pages (Neon plan_pages) + the bundled demo set
 // for the demo site. Loaded per call so a fresh upload shows up immediately.
@@ -550,7 +504,7 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         // surface — the model then answers from the latest (label carries the date).
         const top = retrieve(pages, df, q, 8);
         if (top.length === 0) return { content: JSON.stringify({ pages: [], note: "Nothing matched in this site's uploaded plans." }), cards: [] };
-        return { content: JSON.stringify({ note: "If the same detail differs between pages, the one with the LATEST 'uploaded' date is the current revision — use it.", pages: top.map((p) => ({ label: pageLabel(p), text: p.text.slice(0, 2800) })) }), cards: [] };
+        return { content: JSON.stringify({ note: "If the same detail differs between pages, the one with the LATEST 'uploaded' date is the current revision — use it.", pages: top.map((p) => ({ label: pageLabel(p), text: excerpt(p.text, q, 2800) })) }), cards: [] };
       }
 
       case "search_code": {
@@ -560,7 +514,7 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         if (pages.length === 0) return { content: JSON.stringify({ pages: [], note: "The Building Code index isn't loaded yet." }), cards: [] };
         const top = retrieve(pages, df, q, 6);
         if (top.length === 0) return { content: JSON.stringify({ pages: [], note: "Nothing matched in the Building Code corpus." }), cards: [] };
-        return { content: JSON.stringify({ pages: top.map((p) => ({ label: codeLabel(p), text: p.text.slice(0, 2800) })) }), cards: [] };
+        return { content: JSON.stringify({ pages: top.map((p) => ({ label: codeLabel(p), text: excerpt(p.text, q, 2800) })) }), cards: [] };
       }
 
       case "create_event": {
@@ -891,6 +845,7 @@ export async function POST(req: Request) {
 
   try {
     let answer = "";
+    let ranOut = true; // cleared when the model stops of its own accord
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const resp = await anthropic.messages.create({
         model: MODEL,
@@ -914,7 +869,7 @@ export async function POST(req: Request) {
       if (text) answer = text;
 
       if (resp.stop_reason === "pause_turn") continue;
-      if (resp.stop_reason !== "tool_use") break;
+      if (resp.stop_reason !== "tool_use") { ranOut = false; break; }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const toolUses = (resp.content as any[]).filter((b) => b.type === "tool_use");
@@ -927,7 +882,34 @@ export async function POST(req: Request) {
       messages.push({ role: "user", content: results });
     }
 
-    const finalAnswer = answer || "Done.";
+    // If we burned every round still searching, `answer` holds whatever text came
+    // with the last tool call — usually a dangling "Let me search more
+    // specifically…", or nothing at all (which used to surface as a bare "Done."
+    // in reply to a Building-Code question). Force one tool-free turn so the model
+    // has to actually answer from what it already found, or say it couldn't.
+    if (ranOut) {
+      try {
+        const wrap = await anthropic.messages.create({
+          model: MODEL,
+          max_tokens: 8192,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          system: [
+            { type: "text", text: STATIC_PROMPT, cache_control: { type: "ephemeral" } },
+            { type: "text", text: dynamicContext },
+          ] as any,
+          messages: [
+            ...messages,
+            { role: "user", content: "You've run out of search attempts. Answer now using only what you already found above, with the same citation rules. If it isn't enough to answer safely, say plainly what you couldn't confirm and what to check — never guess a clause, figure or product." },
+          ],
+        });
+        const t = wrap.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("").trim();
+        if (t) answer = t;
+      } catch (e) {
+        console.error("wrap-up call failed:", e);
+      }
+    }
+
+    const finalAnswer = answer || "I couldn't get to an answer on that one — try rephrasing it, or narrow it to a specific sheet or clause.";
     await db.insert(chatMessages).values({ threadId, role: "assistant", content: finalAnswer });
     await db.update(chatThreads).set({ updatedAt: new Date() }).where(eq(chatThreads.id, threadId));
     return Response.json({ answer: finalAnswer, cards: allCards, threadId, threadNew });

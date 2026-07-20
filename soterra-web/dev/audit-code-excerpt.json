@@ -1,0 +1,360 @@
+[
+  {
+    "id": "F4-barrier",
+    "goldPages": 181,
+    "recall": true,
+    "recallAny": true,
+    "rounds": 1,
+    "queriesUsed": [
+      "minimum barrier height deck residential"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Here's what the NZ Building Code requires for deck barrier heights on a house:\n\n---\n\n## 🏠 Minimum Barrier Height – Deck on a House\n\nUnder **NZ Building Code Clause F4 – Safety from Falling**, Acceptable Solution **F4/AS1 Table 1**:\n\n| Location | Minimum Height |\n|---|---|\n| **Balconies and decks** (detached dwellings & household units) | **1000 mm** |\n| Stairs and ramps within a dwelling | 900 mm |\n\n> Height is measured **vertically from finished floor level** (ignoring thin coverings like carpet or vinyl).\n\n---\n\n### 🔑 Key additional requirements for housing:\n- **Opening sizes** must be small enough that a **100 mm diameter sphere cannot pass through** anywhere in the barrier (to protect children under 6).\n- On stairs, the triangular gap formed by the riser, tread, and bottom rail must not allow a **150 mm diameter sphere** through.\n- Horizontal rails that run the full height of a barrier are **not recommended** as they can be easily climbed by young children — vertical members are preferred.\n\n---\n\n> ⚠️ **This is general Building Code guidance, not project-specific advice.** Please confirm all requirements against the current official MBIE document and with your designer or building consent authority, especially for anything safety-critical.\n\n**Source: F4 Safety From Falling (third edition, unamended) · page 13 of 22**",
+    "retrieved": [
+      "F4 Safety From Falling (third edition, unamended) · F4 Safety From Falling (third edition, unamended) · page 13 of 22",
+      "F4 Safety From Falling (third edition, unamended) · F4 Safety From Falling (third edition, unamended) · page 17 of 22",
+      "F9 Restricting Access to Residential Pools · F9 Restricting Access to Residential Pools · page 11 of 19",
+      "B1 Structure (1st edition, amendment 21) · B1 Structure (1st edition, amendment 21) · page 21 of 95",
+      "Building Work Consent Not Required Guidance (3rd edition) · Building Work Consent Not Required Guidance (3rd edition) · page 72 of 116",
+      "Nz Building Code Handbook 3rd Ed (amendment 13) · Nz Building Code Handbook 3rd Ed (amendment 13) · page 131 of 226"
+    ]
+  },
+  {
+    "id": "F9-pool",
+    "goldPages": 97,
+    "recall": true,
+    "recallAny": true,
+    "rounds": 1,
+    "queriesUsed": [
+      "residential swimming pool fence height requirements"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Great news — the NZ Building Code (Clause F9) and its Acceptable Solution F9/AS1 give clear guidance on this. Here's a summary:\n\n---\n\n## 🏊 Residential Swimming Pool Fence (Barrier) Height — NZ Building Code\n\n### Minimum Height: **1200 mm (1.2 metres)**\nUnder **F9/AS1 clause 2.1.2**, pool barriers that are **not on a property boundary** must be **at least 1200 mm high**, measured from the finished ground or floor level on the **outside** of the barrier.\n\n---\n\n### Key Additional Requirements:\n- **No climbable gaps:** No openings in the barrier that a **100 mm diameter sphere** could pass through.\n- **Angle:** Barriers must not lean more than **15° from vertical**, and may only slope *away* from the pool.\n- **Horizontal rails:** If rails/wires are not vertical, they must be at least **900 mm apart** vertically to restrict climbing.\n- **Climbing hazards:** No ground features or objects **within 1200 mm of the top** of the barrier on the outside that could help a child climb over.\n- **Wire mesh panels:** If the mesh openings are between **13 mm and 35 mm**, the barrier must be at least **1800 mm high**.\n\n### Consent Required:\nPool barriers always require a **building consent** — they are specifically excluded from the consent-not-required exemption for general fences.\n\n---\n\n> ⚠️ **This is general Building Code guidance, not project-specific advice.** Always confirm requirements against the [current official MBIE documents](https://www.building.govt.nz) and consult your designer or consent authority for anything safety-critical.\n\n**Source: F9 Restricting Access to Residential Pools · F9/AS1 · page 11 of 19**",
+    "retrieved": [
+      "F9 Restricting Access to Residential Pools · F9 Restricting Access to Residential Pools · page 11 of 19",
+      "Building Work Consent Not Required Guidance (3rd edition) · Building Work Consent Not Required Guidance (3rd edition) · page 66 of 116",
+      "F9 Restricting Access to Residential Pools · F9 Restricting Access to Residential Pools · page 4 of 19",
+      "Building Work Consent Not Required Guidance (3rd edition) · Building Work Consent Not Required Guidance (3rd edition) · page 65 of 116",
+      "F9 Restricting Access to Residential Pools · F9 Restricting Access to Residential Pools · page 16 of 19",
+      "Building Act 2004 · Building Act 2004 · page 450 of 483"
+    ]
+  },
+  {
+    "id": "G12-hotwater",
+    "goldPages": 19,
+    "recall": true,
+    "recallAny": true,
+    "rounds": 1,
+    "queriesUsed": [
+      "maximum hot water temperature bath shower residential"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Great news — the Building Code is clear on this. Here's what **G12/AS1 (Water Supplies)** requires:\n\n---\n\n## 🚿 Maximum Hot Water Temperature at Baths & Showers in a House\n\nUnder **Clause 6.14.1 (Maximum temperatures)** of G12/AS1, the delivered hot water temperature at the outlet of any sanitary fixture used for personal hygiene **must not exceed:**\n\n| Building Type | Maximum Temperature |\n|---|---|\n| **Houses and all other buildings** (residential) | **50°C** |\n| Early childhood centres, schools, old people's homes, hospitals, and institutions for people with psychiatric or physical disabilities | **45°C** |\n\n> ⚠️ **Note:** The Ministry of Education also requires water from taps accessible to children in early childhood centres not to exceed **40°C** for licensing purposes.\n\n---\n\n### 🔑 Key Points for a Residential House:\n- The **maximum is 50°C** at the outlet (bath, shower, basin, bidet).\n- A **tempering valve (TV) or thermostatic mixing valve (TMV)** must be installed to limit delivery temperature — compliant devices are listed in Table 8B of G12/AS1.\n- The **storage water heater thermostat must still be set to at least 60°C** (Clause 6.14.3) to prevent the growth of **Legionella bacteria** — the tempering/mixing valve then brings the delivered temperature down to a safe level.\n\n---\n\n*This is general Building Code guidance, not project-specific advice. Always confirm against the current official MBIE document and check with your plumber or designer for anything safety-critical.*\n\n**Source: G12 Water Supplies (3rd edition, amendment 14) · page 46 of 82**",
+    "retrieved": [
+      "G12 Water Supplies (3rd edition, amendment 14) · G12 Water Supplies (3rd edition, amendment 14) · page 33 of 82",
+      "E3 Internal Moisture (2nd edition, amendment 7) · E3 Internal Moisture (2nd edition, amendment 7) · page 21 of 24",
+      "G12 Water Supplies (3rd edition, amendment 14) · G12 Water Supplies (3rd edition, amendment 14) · page 47 of 82",
+      "G12 Water Supplies (3rd edition, amendment 14) · G12 Water Supplies (3rd edition, amendment 14) · page 46 of 82",
+      "G12 Water Supplies (3rd edition, amendment 14) · G12 Water Supplies (3rd edition, amendment 14) · page 21 of 82",
+      "G4 Ventilation AS1 (fifth edition) · G4 Ventilation AS1 (fifth edition) · page 9 of 22"
+    ]
+  },
+  {
+    "id": "E2-clearance",
+    "goldPages": 4,
+    "recall": true,
+    "recallAny": true,
+    "rounds": 1,
+    "queriesUsed": [
+      "ground clearance wall cladding unpaved ground"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Here's what **E2/AS1 (External Moisture Acceptable Solution)** requires for ground clearance under wall cladding:\n\n---\n\n## Ground Clearance — Bottom of Wall Cladding to Ground\n\n### For **Concrete Slab** buildings (non-masonry veneer) — Clause 9.1.2.6:\n\n| Surface type | Minimum clearance |\n|---|---|\n| **Unpaved (bare/landscaped ground)** | **175 mm** above finished ground |\n| **Paved surface** | **100 mm** above paved surface |\n\nIn addition, the base of the cladding must:\n- **Overlap the concrete slab by 50 mm**\n- Be **offset horizontally by a minimum of 6 mm** (for direct-fixed claddings) to prevent capillary action\n\n### For **Timber Floor Framing** buildings — Clause 9.1.2.8:\n- Clearances from paved and unpaved surfaces to the **wall framing** are governed by **NZS 3604** (which may require greater clearances than E2/AS1)\n- The base of the cladding system must overlap the timber floor structure by **50 mm minimum**\n\n---\n\n### ⚠️ Key Things to Note:\n- **NZS 3604 may require greater clearances** depending on floor type and materials — always check both documents\n- These clearances are measured to the **finished/final landscaped ground level** — not the current ground level during construction\n- Any reduction below these minimums would need to be designed and consented as an **Alternative Solution**\n\n---\n\n> **Source: E2 External Moisture AS1 (fourth edition) · page 89 of 196**\n\n*This is general Building Code guidance, not project-specific advice. Always confirm against the current official MBIE document and your designer or engineer for anything safety-critical.*",
+    "retrieved": [
+      "E2 External Moisture AS1 (fourth edition) · E2 External Moisture AS1 (fourth edition) · page 89 of 196",
+      "External Moisture an Introduction · External Moisture an Introduction · page 36 of 48",
+      "Weathertightness Guide to Diagnosis of Leaky Buildings · Weathertightness Guide to Diagnosis of Leaky Buildings · page 15 of 76",
+      "C Protection From Fire VM2 (second edition) · C Protection From Fire VM2 (second edition) · page 50 of 97",
+      "Weathertightness Remediation · Weathertightness Remediation · page 44 of 60",
+      "E2 External Moisture AS1 (fourth edition) · E2 External Moisture AS1 (fourth edition) · page 87 of 196"
+    ]
+  },
+  {
+    "id": "E2-paved",
+    "goldPages": 78,
+    "recall": true,
+    "recallAny": true,
+    "rounds": 1,
+    "queriesUsed": [
+      "cladding clearance above paved surface minimum"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Great news — the NZ Building Code's Acceptable Solution **E2/AS1** gives clear minimum clearances. Here's a summary:\n\n---\n\n## Minimum Cladding Clearance Above a Paved Surface\n\nUnder **E2/AS1, Paragraph 9.1.2.6**, the base of a wall cladding system must finish a minimum of:\n\n| Surface Type | Minimum Clearance |\n|---|---|\n| **Paved surface** | **100 mm** |\n| **Unpaved (bare ground)** | **175 mm** |\n| **Roof cladding or membrane deck** | **35 mm** |\n\n> *\"the base of the cladding system shall finish a minimum of 100 mm above a paved surface\"* — E2/AS1, Paragraph 9.1.2.6(a)(i)\n\n---\n\n### A few important details to keep in mind:\n\n- The cladding must also **overlap the concrete slab by 50 mm** (9.1.2.6(b)).\n- For **direct-fixed claddings**, there must be a minimum **6 mm horizontal offset** to prevent capillary action (9.1.2.6(c)).\n- For **masonry veneer**, different clearances apply — refer to Table 9.1.2.1.\n- **Reduced clearances** (e.g., above well-drained paving sheltered under a roof overhang) may sometimes be acceptable but must be designed and assessed as an **alternative solution**.\n- The clearance is measured to the **finished plane of the adjacent horizontal surface** (9.1.2.3).\n- These clearances must also be **maintained ongoing** as part of regular building maintenance (2.2.2.1(c)).\n\n---\n\n*This is general Building Code guidance, not project-specific advice. Always confirm against the current official E2/AS1 document and check with your designer or consent authority for anything safety-critical.*\n\n**Source: E2 External Moisture AS1 (fourth edition) · page 88–89 of 196**",
+    "retrieved": [
+      "External Moisture an Introduction · External Moisture an Introduction · page 36 of 48",
+      "E2 External Moisture AS1 (fourth edition) · E2 External Moisture AS1 (fourth edition) · page 89 of 196",
+      "Constructing Cavities · Constructing Cavities · page 17 of 24",
+      "E2 External Moisture AS1 (fourth edition) · E2 External Moisture AS1 (fourth edition) · page 88 of 196",
+      "E1 Surface Water (1st edition, amendment 12) · E1 Surface Water (1st edition, amendment 12) · page 38 of 59",
+      "E2 External Moisture AS1 (fourth edition) · E2 External Moisture AS1 (fourth edition) · page 11 of 196"
+    ]
+  },
+  {
+    "id": "D1-stair",
+    "goldPages": 18,
+    "recall": true,
+    "recallAny": true,
+    "rounds": 1,
+    "queriesUsed": [
+      "maximum rise minimum going private stairway house"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Great news — the answer is clearly laid out in **Table 6** of Acceptable Solution **D1/AS1**. Here's a summary for private stairways in a house:\n\n---\n\n## Private Stairway Dimensions (NZ Building Code D1/AS1 — Table 6)\n\nThere are three categories of private stairway, each with different limits:\n\n| Stair Type | Max Pitch | **Max Riser Height** | **Min Tread (Going)** |\n|---|---|---|---|\n| **Main private** (e.g. to living areas, kitchen, garage; all exterior stairs) | 37° | **190 mm** | **280 mm** |\n| **Secondary private** (less frequently used) | 41° | **200 mm** | **250 mm** |\n| **Minor private** (infrequent access to a single non-living room) | 47° | **220 mm** | **220 mm** |\n\n### Key notes:\n- **Uniformity** — riser heights and tread depths within a single flight must be **uniform within ±5 mm**.\n- **Width** — while no minimum is set for stairways within household units, **850 mm** is noted as a practical minimum.\n- **Landings** — the maximum rise between landings for a private stairway is **4.0 m**.\n- **Handrails** — required on at least one side for stairways with two or more risers (may be omitted for two or three risers within or giving access to a household unit).\n\n---\n\n> ⚠️ **This is general NZ Building Code guidance, not project-specific advice.** Always confirm the current requirements against the official MBIE document and check with your designer or building consent authority, especially for anything safety-critical.\n\n**Source: D1 Access Routes (2nd edition, amendment 6) · page 29 of 52 (Table 6)**",
+    "retrieved": [
+      "D1 Access Routes (2nd edition, amendment 6) · D1 Access Routes (2nd edition, amendment 6) · page 32 of 52",
+      "D1 Access Routes (2nd edition, amendment 6) · D1 Access Routes (2nd edition, amendment 6) · page 29 of 52",
+      "D1 Access Routes (2nd edition, amendment 6) · D1 Access Routes (2nd edition, amendment 6) · page 15 of 52",
+      "D1 Access Routes (2nd edition, amendment 6) · D1 Access Routes (2nd edition, amendment 6) · page 36 of 52",
+      "D1 Access Routes (2nd edition, amendment 6) · D1 Access Routes (2nd edition, amendment 6) · page 43 of 52",
+      "Nz Building Code Handbook 3rd Ed (amendment 13) · Nz Building Code Handbook 3rd Ed (amendment 13) · page 145 of 226"
+    ]
+  },
+  {
+    "id": "D1-ramp",
+    "goldPages": 7,
+    "recall": true,
+    "recallAny": true,
+    "rounds": 1,
+    "queriesUsed": [
+      "accessible ramp maximum gradient slope"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Great news — the NZ Building Code is clear on this. Here's a summary:\n\n---\n\n## Maximum Gradient for an Accessible Ramp — NZ Building Code\n\nUnder **Acceptable Solution D1/AS1 (Table 3)**, the maximum slopes for ramps are:\n\n| Type of Ramp | Maximum Slope |\n|---|---|\n| **Accessible ramp** | **1:12** |\n| Common ramp (subject to wetting) | 1:10 |\n| Common ramp (normally dry) | 1:8 |\n| Service ramps | 1:3 |\n\nSo **1 in 12** is the steepest gradient permitted for an accessible ramp.\n\n---\n\n### Other key requirements for accessible ramps to keep in mind:\n- **Maximum rise between landings:** 750 mm (the reasonable maximum for a wheelchair user to negotiate)\n- **Landing length:** minimum 1200 mm\n- **Minimum clear width:** 1200 mm\n- **Edge protection:** A minimum **75 mm upstand** is required on any drop-off side\n- **Handrails:** Required on both sides where the ramp slope is steeper than **1 in 20**, with a 300 mm horizontal extension at each end\n- **Cross fall:** No steeper than **1:50**\n\n---\n\n> ⚠️ **This is general Building Code guidance only — not project-specific advice.** Always confirm requirements against the current official MBIE document and with your designer or engineer for anything safety-critical.\n\n**Source: D1 Access Routes (2nd edition, amendment 6) · D1/AS1 · page 27 of 52 (Table 3)**",
+    "retrieved": [
+      "D1 Access Routes (2nd edition, amendment 6) · D1 Access Routes (2nd edition, amendment 6) · page 43 of 52",
+      "D1 Access Routes (2nd edition, amendment 6) · D1 Access Routes (2nd edition, amendment 6) · page 15 of 52",
+      "D1 Access Routes (2nd edition, amendment 6) · D1 Access Routes (2nd edition, amendment 6) · page 27 of 52",
+      "D1 Access Routes (2nd edition, amendment 6) · D1 Access Routes (2nd edition, amendment 6) · page 29 of 52",
+      "Nz Building Code Handbook 3rd Ed (amendment 13) · Nz Building Code Handbook 3rd Ed (amendment 13) · page 126 of 226",
+      "D1 Access Routes (2nd edition, amendment 6) · D1 Access Routes (2nd edition, amendment 6) · page 19 of 52"
+    ]
+  },
+  {
+    "id": "B2-durability",
+    "goldPages": 18,
+    "recall": false,
+    "recallAny": true,
+    "rounds": 1,
+    "queriesUsed": [
+      "durability requirements structural framing life",
+      "B2 durability minimum period structural elements"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Great news — the code is very clear on this. Here's a summary of what **NZ Building Code Clause B2 Durability** requires for structural framing:\n\n---\n\n## 🏗️ Durability Requirements for Structural Framing\n\n### **50 Years — the standard requirement**\n\nStructural framing must last a minimum of **50 years**. This applies because:\n\n- Any building element that **provides structural stability** to the building requires **≥ 50 years** durability (Step 2 of the assessment framework in B2/AS1).\n- Structural framing is also typically **difficult to access or replace** (requiring significant removal of other elements), which independently triggers the 50-year requirement.\n\n### Specific framing elements confirmed at 50 years in Table C.1.1.1:\n\n| Element | Situation | Requirement |\n|---|---|---|\n| **Wall framing** (timber or steel), including dwangs/nogging | **Load-bearing framing** | ≥ 50 years |\n| **Wall framing** (timber or steel) | Easy-to-access lined, non-load-bearing partitions | ≥ 15 years |\n| **Wall framing** (timber or steel) | Easy-to-access unlined, non-structural/demountable partitions | ≥ 5 years |\n| **Structural steel** | All situations | ≥ 50 years |\n| **Bracing elements** (all fixings included) | All situations | ≥ 50 years |\n| **Sub-floor structure** | All situations | ≥ 50 years |\n\n---\n\n### Key takeaway for your site team:\n> **Load-bearing/structural framing = 50 years minimum, no exceptions.** Non-structural or easily demountable framing may have a reduced requirement (15 or 5 years), but anything carrying loads needs to be specified and treated accordingly.\n\n---\n\n*This is general Building Code guidance, not project-specific advice. Always confirm requirements against the current official MBIE documents and your project designer — especially for anything safety-critical.*\n\n**Source: B2 Durability AS1 (third edition) · pages 7–8 and 21 of 22**",
+    "retrieved": [
+      "External Moisture an Introduction · External Moisture an Introduction · page 36 of 48",
+      "Weathertightness Remediation · Weathertightness Remediation · page 16 of 60",
+      "Natural Hazard Provisions Guidance · Natural Hazard Provisions Guidance · page 17 of 32",
+      "External Moisture an Introduction · External Moisture an Introduction · page 13 of 48",
+      "Weathertightness Guide to Diagnosis of Leaky Buildings · Weathertightness Guide to Diagnosis of Leaky Buildings · page 7 of 76",
+      "Module 1 Overview of Earthquake Geotechnical Engineering Practice Guidelines (version 1) · Module 1 Overview of Earthquake Geotechnical Engineering Practice Guidelines (version 1) · page 50 of 52"
+    ]
+  },
+  {
+    "id": "G4-ventilation",
+    "goldPages": 62,
+    "recall": true,
+    "recallAny": true,
+    "rounds": 1,
+    "queriesUsed": [
+      "natural ventilation openable window area bedroom",
+      "G4 ventilation acceptable solution habitable room minimum opening"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Great — the NZ Building Code is clear on this. Here's a summary of what **G4/AS1 (Ventilation Acceptable Solution, fifth edition)** requires for a bedroom:\n\n---\n\n## 🪟 Natural Ventilation – Openable Window Area for a Bedroom\n\n### Standard Rule (most houses)\n> **Net openable area ≥ 5% of the bedroom's floor area**\n\nSo for example:\n| Bedroom floor area | Min. openable window area |\n|---|---|\n| 10 m² | 0.5 m² |\n| 12 m² | 0.6 m² |\n| 15 m² | 0.75 m² |\n\n- The **net openable area** is measured on the **face dimensions** of the window (i.e., the actual opening, not the full frame).\n- Openable windows/doors used for ventilation must be able to be **fixed in the open position** during normal occupancy.\n\n---\n\n### Special Case – Only One External Wall (e.g. apartments)\nIf the bedroom has only one external wall, the same **5% of floor area** rule applies, but there are additional requirements:\n- The distance from the external wall to the opposing wall must be **less than 6 metres**.\n- **Trickle ventilators** must also be installed (sized based on number of occupants per Tables 2.2.2.5A & 2.2.2.5B in G4/AS1).\n\n### If the Bedroom Has No Direct Outside Opening\nIt can be ventilated via an adjacent habitable space (not a bathroom, kitchen, toilet, or laundry), but openings and trickle ventilators must be sized to the **combined floor area** of both spaces.\n\n---\n\n> ⚠️ **This is general Building Code guidance, not project-specific advice.** Always confirm requirements against the current official MBIE documents and with your designer or consent authority — especially for anything safety-critical.\n\n**Source: G4 Ventilation AS1 (fifth edition) · pages 8–10**",
+    "retrieved": [
+      "G4 Ventilation AS1 (fifth edition) · G4 Ventilation AS1 (fifth edition) · page 8 of 22",
+      "Weathertightness Remediation · Weathertightness Remediation · page 35 of 60",
+      "H1 Energy Efficiency VM1 (sixth edition) · H1 Energy Efficiency VM1 (sixth edition) · page 15 of 37",
+      "C Protection From Fire VM2 (second edition) · C Protection From Fire VM2 (second edition) · page 16 of 97",
+      "G4 Ventilation AS1 (fifth edition) · G4 Ventilation AS1 (fifth edition) · page 10 of 22",
+      "H1 Energy Efficiency AS1 (sixth edition) · H1 Energy Efficiency AS1 (sixth edition) · page 23 of 55"
+    ]
+  },
+  {
+    "id": "G6-sound",
+    "goldPages": 37,
+    "recall": false,
+    "recallAny": true,
+    "rounds": 2,
+    "queriesUsed": [
+      "sound insulation rating between apartments",
+      "airborne sound STC OITC rating separating walls floors dwellings",
+      "G6 airborne sound insulation weighted sound reduction index Rw apartments dwellings",
+      "clause G6 sound transmission separating walls floors acceptable solution"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Great — the Building Code clause G6 results are very clear. Here's a full summary:\n\n---\n\n## 🔊 NZ Building Code – Sound Insulation Between Apartments (Clause G6)\n\nSound insulation between apartments (referred to in the Code as **abutting occupancies / household units**) is governed by **NZBC Clause G6 – Airborne and Impact Sound**.\n\n### Minimum Performance Requirements\n\n| Element | Rating Required |\n|---|---|\n| **Walls, floors & ceilings** (airborne sound) | **STC ≥ 55** (Sound Transmission Class) |\n| **Floors** (impact sound) | **IIC ≥ 55** (Impact Insulation Class) |\n\nThese apply to **all building elements common between occupancies** — e.g., party walls, separating floors, and ceilings between apartments.\n\n---\n\n### Key Points\n\n- **STC 55** is the minimum for all separating walls, floors, and ceilings between units.\n- **IIC 55** is the minimum for separating floors to control impact noise (footsteps, etc.).\n- The Acceptable Solution **G6/AS1** provides prescriptive construction details (specific wall, floor, and ceiling assemblies) that are deemed to comply. These typically involve:\n  - **Physical separation** (e.g., staggered stud or double leaf walls)\n  - **Acoustic insulation** (min. 10 kg/m³ glass fibre)\n  - **Carpet on underlay** (where shown in the figures — this is a requirement, not optional)\n  - **Airtight sealing** of all joints and penetrations\n- The **Verification Method G6/VM1** allows testing to ASTM E413 as an alternative compliance pathway.\n\n---\n\n> ⚠️ **This is general Building Code guidance, not project-specific advice.** Always confirm requirements against the current official MBIE documents and with your acoustic designer/engineer, especially for anything safety-critical or where alternative solutions are proposed.\n\n**Source:** NZ Building Code Handbook 3rd Ed (amendment 13) · page 71 of 226; Building Regulations 1992 Schedule 1 Building Code · page 68 of 96; G6 Airborne and Impact Sound AS1 (1st edition, amendment 2) · page 8 of 14",
+    "retrieved": [
+      "C Protection From Fire AS2 (second edition) · C Protection From Fire AS2 (second edition) · page 20 of 124",
+      "C Protection From Fire AS2 (second edition) · C Protection From Fire AS2 (second edition) · page 84 of 124",
+      "C Protection From Fire AS2 (second edition) · C Protection From Fire AS2 (second edition) · page 82 of 124",
+      "C Protection From Fire AS2 (second edition) · C Protection From Fire AS2 (second edition) · page 74 of 124",
+      "C Protection From Fire AS2 (second edition) · C Protection From Fire AS2 (second edition) · page 101 of 124",
+      "C Protection From Fire AS2 (second edition) · C Protection From Fire AS2 (second edition) · page 65 of 124"
+    ]
+  },
+  {
+    "id": "F7-alarms",
+    "goldPages": 34,
+    "recall": true,
+    "recallAny": true,
+    "rounds": 6,
+    "queriesUsed": [
+      "smoke alarms required locations in house",
+      "smoke alarm placement every bedroom hallway NZS 4514 residential dwelling",
+      "smoke alarm interconnected every bedroom hallway escape route C/AS1 SH risk group",
+      "NZS 4514 smoke alarm location ceiling sleeping area escape route corridor",
+      "C/AS1 fire safety system household unit SH interconnected smoke alarms required Part 2",
+      "C/AS1 Part 2 fire safety system type 1 required SH risk group table"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Here is a summary of what the NZ Building Code's Acceptable Solutions require for smoke alarms in a house. This is **general Building Code guidance, not project-specific advice**.\n\n---\n\n## 🔔 Smoke Alarms in a House (NZ Building Code)\n\n### What type is required?\nFor a standard house (referred to as **Risk Group SH** – Single Household), the acceptable solution requires a **Type 1 – Domestic Smoke Alarm System**. This is:\n- One or more **interconnected smoke alarm devices**, each with a smoke detector and audible alarm\n- Must comply with **NZS 4514:2021** (Interconnected smoke alarms for houses)\n- No connection to a remote receiving centre is required\n\n> *\"The minimum fire safety system required in household units is now specified as interconnected smoke alarms complying with NZS 4514:2021\"* — C/AS1 (second edition, amendment 1)\n\n---\n\n### Where do they go?\nThe Building Code Acceptable Solution (C/AS1) requires smoke alarms in **every household unit**, but the specific **room-by-room placement rules** (e.g., in every bedroom, in hallways, on every level) are set out in **NZS 4514:2021** itself — the standard to which C/AS1 directly refers. The key principles from NZS 4514 (as widely applied in NZ practice) are:\n\n| Location | Requirement |\n|---|---|\n| **Every bedroom / sleeping area** | ✅ Required |\n| **Hallway outside bedrooms** | ✅ Required |\n| **Every level of the house** | ✅ At least one per floor |\n| **Living/lounge areas** | ✅ Generally required |\n| **Kitchen** | ⚠️ Avoid direct placement over the stove (use heat alarm or locate away from cooking appliances to reduce nuisance alarms) |\n| **Garage / bathrooms** | ❌ Generally not required |\n\nAll alarms must be **interconnected** — if one goes off, they all go off.\n\n---\n\n### Key points for the site team:\n- Alarms must be **manufactured and installed** in accordance with **NZS 4514**\n- Interconnection is now the minimum standard — wireless interconnection is acceptable under NZS 4514:2021\n- Placement details (ceiling vs wall, distances from corners/vents, etc.) are specified within NZS 4514 — your installer/electrician should follow this standard directly\n\n---\n\n> ⚠️ **This is general Building Code guidance only — not project-specific.** Always confirm exact alarm locations against your consented plans, your designer's specifications, and the current NZS 4514:2021 standard. For anything safety-critical, check with your designer or building consent authority.\n\n**Source: C Protection From Fire AS1 (second edition, amendment 1) · page 3 and page 35 of 40**",
+    "retrieved": [
+      "C Protection From Fire AS2 (second edition) · C Protection From Fire AS2 (second edition) · page 97 of 124",
+      "C Protection From Fire AS1 (second edition, amendment 1) · C Protection From Fire AS1 (second edition, amendment 1) · page 3 of 40",
+      "F7 AS1 Warning Systems (fifth edition) · F7 AS1 Warning Systems (fifth edition) · page 3 of 7",
+      "Nz Building Code Handbook 3rd Ed (amendment 13) · Nz Building Code Handbook 3rd Ed (amendment 13) · page 157 of 226",
+      "C Protection From Fire AS1 (second edition, amendment 1) · C Protection From Fire AS1 (second edition, amendment 1) · page 35 of 40",
+      "C Protection From Fire AS2 (second edition) · C Protection From Fire AS2 (second edition) · page 107 of 124"
+    ]
+  },
+  {
+    "id": "E1-surfacewater",
+    "goldPages": 12,
+    "recall": true,
+    "recallAny": true,
+    "rounds": 1,
+    "queriesUsed": [
+      "surface water drainage design storm event house residential",
+      "stormwater drainage return period annual recurrence interval building"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Great — the Building Code is very clear on this. Here's a summary of what **NZBC Clause E1 – Surface Water** requires for a house:\n\n---\n\n## 🌧️ Design Storm Events for Surface Water Drainage (House)\n\nThe Building Code sets **two separate storm event thresholds**, each with a different purpose:\n\n### 1. **10% Annual Exceedance Probability (AEP) — 1-in-10-year event**\n> *E1.3.1* — Surface water collected or concentrated by buildings or sitework **shall be disposed of** in a way that avoids damage or nuisance to **other property**.\n\nThis is your **drainage design event** — gutters, downpipes, and site drainage must be sized to handle this event without causing problems for neighbours or adjacent property.\n\n---\n\n### 2. **2% Annual Exceedance Probability (AEP) — 1-in-50-year event**\n> *E1.3.2* — Surface water **shall not enter the building** (this applies specifically to Housing, Communal Residential, and Communal Non-residential buildings).\n\nThis drives your **minimum floor level** — the house floor must be set high enough that a 1-in-50-year event cannot get inside.\n\n---\n\n### 📐 In Practice\n- **Gutters, downpipes, and site drains** → design to the **10% AEP (1-in-10 year)** event\n- **Floor level** → set to be above the **2% AEP (1-in-50 year)** flood level\n- Rainfall intensity data can come from your **Territorial Authority, NIWA HIRDS**, or the tables in E1/AS2 — use the most conservative source\n\n> ⚠️ **Important:** Your local Territorial Authority or district plan may impose stricter floor level or drainage requirements than the Building Code minimums (e.g., some councils use 1% AEP / 1-in-100-year for floor levels in flood-prone areas). Always confirm with your designer and the current official MBIE documents for anything safety-critical.\n\nSource: *E1 Surface Water (1st edition, amendment 12) · page 5 of 59* and *E1/AS2 · page 56 of 59*",
+    "retrieved": [
+      "E1 Surface Water (1st edition, amendment 12) · E1 Surface Water (1st edition, amendment 12) · page 57 of 59",
+      "E1 Surface Water (1st edition, amendment 12) · E1 Surface Water (1st edition, amendment 12) · page 56 of 59",
+      "Natural Hazard Provisions Guidance · Natural Hazard Provisions Guidance · page 19 of 32",
+      "Nz Building Code Handbook 3rd Ed (amendment 13) · Nz Building Code Handbook 3rd Ed (amendment 13) · page 49 of 226",
+      "Natural Hazard Provisions Guidance · Natural Hazard Provisions Guidance · page 17 of 32",
+      "E1 Surface Water (1st edition, amendment 12) · E1 Surface Water (1st edition, amendment 12) · page 38 of 59"
+    ]
+  },
+  {
+    "id": "H1-roof",
+    "goldPages": 91,
+    "recall": true,
+    "recallAny": true,
+    "rounds": 1,
+    "queriesUsed": [
+      "roof insulation R-value residential new house",
+      "Auckland climate zone insulation requirements"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Great — here's a clear summary of what the NZ Building Code requires for your Auckland roof/ceiling. This is **general Building Code guidance**, not project-specific advice.\n\n---\n\n## 🏠 Roof Insulation R-Value — New House in Auckland\n\n### Auckland's Climate Zone\nAuckland falls in **Climate Zone 1** (the warmest zone) under the NZ Building Code.\n\n---\n\n### Minimum Roof/Ceiling R-Value (H1/AS1 — Calculation Method)\n\nUnder **H1/AS1 (Sixth Edition, effective 27 November 2025)**, the minimum construction R-value for a roof/ceiling is:\n\n| Building Element | Minimum Construction R-Value |\n|---|---|\n| **Roof / Ceiling** | **R2.6 (m²·K/W)** |\n| Walls | R1.0 |\n| Floors (non-slab) | R1.3 |\n\n> ⚠️ This **R2.6 is a construction R-value** (not just the insulation batt R-value). It accounts for the whole roof/ceiling assembly including framing. The insulation batt itself will typically need to be rated higher (e.g. R3.2 or R3.6 batts) to achieve a construction R-value of R2.6 once thermal bridging through framing is factored in. Check the **BRANZ House Insulation Guide (6th edition)** for typical assembly combinations.\n\n---\n\n### Key Points to Note\n\n1. **Minimum floor for the whole roof area** — even along the ceiling perimeter (e.g. where rafters compress insulation), the R2.6 construction R-value must still be maintained throughout.\n2. **Heated ceilings** (e.g. in-ceiling radiant systems) have a much higher minimum of **R6.6** — same for all climate zones.\n3. The **modelling pathway (H1/VM1)** is an alternative if you want design flexibility, but the reference building R-value used for roofs is R6.6 across all zones, so exceeding the minimum will generally be beneficial.\n4. Insulation must be installed per **NZS 4246** to achieve the intended performance.\n\n---\n\nSource: *H1 Energy Efficiency AS1 (sixth edition) · page 11 of 55* and *page 8 of 55*\n\n> 📌 **Please confirm all values against the current official MBIE documents and with your designer or building consent authority before proceeding — requirements can change and project-specific factors may apply.**",
+    "retrieved": [
+      "E3 Internal Moisture (2nd edition, amendment 7) · E3 Internal Moisture (2nd edition, amendment 7) · page 15 of 24",
+      "H1 Energy Efficiency AS1 (sixth edition) · H1 Energy Efficiency AS1 (sixth edition) · page 12 of 55",
+      "H1 Energy Efficiency AS1 (sixth edition) · H1 Energy Efficiency AS1 (sixth edition) · page 11 of 55",
+      "H1 Energy Efficiency AS2 (second edition) · H1 Energy Efficiency AS2 (second edition) · page 11 of 56",
+      "H1 Energy Efficiency VM1 (sixth edition) · H1 Energy Efficiency VM1 (sixth edition) · page 9 of 37",
+      "H1 Energy Efficiency VM1 (sixth edition) · H1 Energy Efficiency VM1 (sixth edition) · page 11 of 37"
+    ]
+  },
+  {
+    "id": "G1-sanitary",
+    "goldPages": 112,
+    "recall": false,
+    "recallAny": true,
+    "rounds": 2,
+    "queriesUsed": [
+      "number of toilets required household unit",
+      "household unit dwelling toilet WC pan requirement G1/AS1 table"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Great, I found the relevant information. Here's the answer:\n\n---\n\n## 🚽 Toilets Required for a Household Unit (Dwelling)\n\nUnder **Acceptable Solution G1/AS1** (Personal Hygiene), **Table 1** sets out the minimum number of sanitary fixtures required by building type.\n\nFor **detached dwellings and multi-unit dwellings**, the requirement is straightforward:\n\n| Building Use | User Group | WC Pans (Unisex) | Basins (Unisex) |\n|---|---|---|---|\n| Detached dwellings & multi-unit dwellings | Occupants | **1** | **1** |\n\nSo, the Building Code requires a **minimum of 1 toilet (WC pan) and 1 basin** for a household unit, regardless of the number of occupants.\n\n> 📌 **Note:** G1/AS1 also requires that WC pans and basins must be provided in any building where people **live or are accommodated** (G1/AS1 paragraph 1.1.2).\n\n---\n\n*This is general Building Code guidance, not project-specific advice. Please confirm requirements against the current official MBIE documents and check with your designer or consent authority for anything safety-critical.*\n\n**Source: G1 Personal Hygiene (amendment 5, erratum 1) · page 24 of 34**",
+    "retrieved": [
+      "Nz Building Code Handbook 3rd Ed (amendment 13) · Nz Building Code Handbook 3rd Ed (amendment 13) · page 6 of 226",
+      "Nz Building Code Handbook (3rd edition) · Nz Building Code Handbook (3rd edition) · page 4 of 220",
+      "Building Act 2004 · Building Act 2004 · page 366 of 483",
+      "Building Act 2004 · Building Act 2004 · page 374 of 483",
+      "Building Act 2004 · Building Act 2004 · page 31 of 483",
+      "Weathertightness Remediation · Weathertightness Remediation · page 25 of 60"
+    ]
+  },
+  {
+    "id": "C-escape",
+    "goldPages": 72,
+    "recall": true,
+    "recallAny": true,
+    "rounds": 1,
+    "queriesUsed": [
+      "maximum open path travel distance escape"
+    ],
+    "answered": true,
+    "correct": true,
+    "cited": true,
+    "fabricated": [],
+    "answer": "Great question! Here's a summary of the **maximum open path travel distances for escape** under the NZ Building Code Acceptable Solutions. Note that the limits depend on **which Acceptable Solution applies**, the **building/risk group**, and **what fire systems are installed**.\n\n---\n\n## C/AS1 — Household Units & Outbuildings (Table 3.3.1.1)\n\n| Portion of Escape Route | No System | Type 1 System | Type 1 System + Sprinklers |\n|---|---|---|---|\n| **Dead End Open Path (DEOP)** | 20 m | 35 m | 40 m |\n| **Total Open Path (TOP)** | 50 m | 75 m | 100 m |\n\n---\n\n## C/AS2 — All Other Buildings (Table 3.3.1.1)\n\nDistances vary by **risk group** and **fire system type**. Key examples:\n\n| Risk Group | Portion | No System / Type 2 | Type 4 / Type 5 | Type 6 | Type 7 |\n|---|---|---|---|---|---|\n| **SM** (Sleeping – managed) | DEOP / TOP | 20 m / 50 m | 30 m / 75 m | 30 m / 75 m | 40 m / 100 m |\n| **CA** (Commercial) | DEOP / TOP | 20 m / 50 m | 40 m / 100 m | 40 m / 100 m | 50 m / 120 m |\n| **WB** (Workplace – low hazard) | DEOP / TOP | 25 m / 60 m | 50 m / 120 m | 50 m / 120 m | 75 m / 150 m |\n| **VP** (Vulnerable persons) | DEOP / TOP | 35 m / 90 m | — | 70 m / 180 m | — |\n\n> If the total open path travel distance to a final exit exceeds the allowable limit, the remainder of the escape route must be a **safe path**.\n\n---\n\n## Key Measurement Rules (both AS1 & AS2)\n- **Start point:** Measured from no more than **1.0 m** from the most remote point in the space.\n- **Obstructions:** If furniture/fittings locations are unknown, measure **orthogonally** (right-angle grid method).\n- **Stairs:** Open path taken as the **plan length** on the stair centreline plus landings.\n- **Ladders:** Open path taken as the **vertical height**.\n\n---\n\n> ⚠️ **This is general Building Code guidance, not project-specific advice.** Always confirm distances against the current official MBIE documents and with your fire engineer or designer — especially for safety-critical decisions.\n\n**Source: C Protection From Fire AS1 (second edition, amendment 1) · page 13 of 40; C Protection From Fire AS2 (second edition) · pages 29–30 of 124**",
+    "retrieved": [
+      "C Protection From Fire AS1 (second edition, amendment 1) · C Protection From Fire AS1 (second edition, amendment 1) · page 13 of 40",
+      "C Protection From Fire AS2 (second edition) · C Protection From Fire AS2 (second edition) · page 29 of 124",
+      "C Protection From Fire AS2 (second edition) · C Protection From Fire AS2 (second edition) · page 30 of 124",
+      "C Protection From Fire AS1 (second edition, amendment 1) · C Protection From Fire AS1 (second edition, amendment 1) · page 12 of 40",
+      "C Protection From Fire AS1 (second edition, amendment 1) · C Protection From Fire AS1 (second edition, amendment 1) · page 15 of 40",
+      "C Protection From Fire AS2 (second edition) · C Protection From Fire AS2 (second edition) · page 25 of 124"
+    ]
+  }
+]
