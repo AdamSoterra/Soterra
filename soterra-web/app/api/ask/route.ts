@@ -12,6 +12,7 @@ import {
 } from "@/lib/date-tz";
 import { resolveProjectId, listMembers } from "@/lib/project";
 import { computeDf, excerpt, retrieve } from "@/lib/retrieve";
+import { currentRevisionsOnly } from "@/lib/sheetRev";
 import indexData from "@/data/arthur-road-index.json";
 
 export const runtime = "nodejs";
@@ -50,9 +51,14 @@ async function getProjectIndex(projectId: string): Promise<{ pages: Page[]; df: 
     code: r.code ?? "", title: r.title ?? "", text: r.text, uploadedAt: r.createdAt?.getTime() ?? 0,
   }));
   if (projectId === DEMO_ID) pages = [...INDEX.map((p) => ({ ...p, uploadedAt: 0 })), ...pages];
-  // Newest-first so, when the same detail appears in more than one revision, the
-  // latest-uploaded page wins ties in retrieval (belt-and-braces with the label
-  // date + the "use the latest revision" rule in the prompt).
+  // Drop superseded revisions BEFORE anything else sees them. Uploading
+  // "…-Rev.3" doesn't overwrite "…-Rev.1" (different doc name, so the
+  // replace-by-doc in indexPdf can't fire), which left both revisions in the
+  // corpus and a superseded detail could be retrieved and cited. Sorting
+  // newest-first and telling the model to prefer the latest was only ever a
+  // soft guard — TF-IDF can rank the old sheet higher.
+  pages = currentRevisionsOnly(pages);
+  // Newest-first so, where two pages still tie, the latest-uploaded wins.
   pages.sort((a, b) => (b.uploadedAt ?? 0) - (a.uploadedAt ?? 0));
   return { pages, df: computeDf(pages) };
 }

@@ -237,6 +237,43 @@ function AppLogin({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted
   );
 }
 
+// The indexed-document list, collapsed by default. A full drawing set is 120+
+// sheets, which buried the rest of the page and made finding one to delete a
+// long scroll. Shown on both Plans and Update plans, so it lives here.
+function DocsList({ docs, onDelete }: { docs: { doc: string; indexed: number }[]; onDelete: (doc: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const shown = q.trim() ? docs.filter((d) => d.doc.toLowerCase().includes(q.trim().toLowerCase())) : docs;
+  const pages = docs.reduce((n, d) => n + d.indexed, 0);
+  return (
+    <div className="docs-wrap">
+      <button className={"docs-toggle" + (open ? " open" : "")} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+        <b>{docs.length} document{docs.length === 1 ? "" : "s"}</b>
+        <small>{pages} page{pages === 1 ? "" : "s"} indexed</small>
+        <span className="docs-act">{open ? "Hide" : "Show"}</span>
+      </button>
+      {open && (
+        <>
+          {docs.length > 8 && (
+            <input className="docs-find" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a sheet…" />
+          )}
+          <div className="docs">
+            {shown.map((d) => (
+              <div className="doc" key={d.doc}>
+                <div className="ic spc">PDF</div>
+                <div className="dt"><b>{d.doc}</b><small>{d.indexed} page{d.indexed === 1 ? "" : "s"} indexed</small></div>
+                <button className="sh-x" title="Remove from index" onClick={() => onDelete(d.doc)} style={{ position: "static" }}>✕</button>
+              </div>
+            ))}
+            {shown.length === 0 && <div className="page-sub" style={{ margin: "4px 2px" }}>Nothing matches “{q}”.</div>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Page() {
   const [tab, setTab] = useState<Tab>("assistant");
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -1477,14 +1514,8 @@ export default function Page() {
                     <div><div className="big">{docs.reduce((n, d) => n + d.indexed, 0)}</div><small>pages indexed</small></div>
                     <div style={{ flex: 1 }}><small>{docs.length} document{docs.length > 1 ? "s" : ""} read and searchable by the assistant.</small><span className="grn">● Ready</span></div>
                   </div>
-                  <div className="docs" style={{ marginTop: 14 }}>
-                    {docs.map((d) => (
-                      <div className="doc" key={d.doc}>
-                        <div className="ic spc">PDF</div>
-                        <div className="dt"><b>{d.doc}</b><small>{d.indexed} page{d.indexed === 1 ? "" : "s"} indexed</small></div>
-                        <button className="sh-x" title="Remove from index" onClick={() => deletePlan(d.doc)} style={{ position: "static" }}>✕</button>
-                      </div>
-                    ))}
+                  <div style={{ marginTop: 14 }}>
+                    <DocsList docs={docs} onDelete={deletePlan} />
                   </div>
                 </>
               )}
@@ -1552,15 +1583,7 @@ export default function Page() {
             ) : docs.length === 0 ? (
               <div className="page-sub">{isDemo ? "This demo site already has 43 Kauri Road's plans loaded — try the assistant." : "Nothing indexed yet. Upload your plans above."}</div>
             ) : (
-              <div className="docs">
-                {docs.map((d) => (
-                  <div className="doc" key={d.doc}>
-                    <div className="ic spc">PDF</div>
-                    <div className="dt"><b>{d.doc}</b><small>{d.indexed} page{d.indexed === 1 ? "" : "s"} indexed</small></div>
-                    <button className="sh-x" title="Remove from index" onClick={() => deletePlan(d.doc)} style={{ position: "static" }}>✕</button>
-                  </div>
-                ))}
-              </div>
+              <DocsList docs={docs} onDelete={deletePlan} />
             )}
           </div></div>
         )}

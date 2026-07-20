@@ -46,7 +46,10 @@ button,input,textarea{font-family:var(--font)}
 .proj-chip .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(16,185,129,.15)}
 .proj-chip small{color:var(--mut);font-weight:500}
 .avatar{width:36px;height:36px;border-radius:50%;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;cursor:pointer;border:none;flex-shrink:0;box-shadow:0 4px 12px rgba(10,141,237,.3)}
-@media(max-width:740px){.topnav{gap:12px;padding:0 14px}.navtab{padding:9px 11px}.navtab span{display:none}.proj-chip small{display:none}}
+/* On mobile the site chip ran off the right edge and got clipped mid-name. The
+   avatar opens the same menu and that menu already names the site at the top,
+   so drop the chip rather than duplicate it. */
+@media(max-width:740px){.topnav{gap:12px;padding:0 14px}.navtab{padding:9px 11px}.navtab span{display:none}.proj-chip{display:none}}
 /* Native app (Capacitor): the status bar overlays the WebView, so reserve its
    space at the top of the header and the home indicator's at the bottom.
    Scoped to .is-capacitor so the website never gets this padding. */
@@ -330,3 +333,16 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .row-x:hover{opacity:1;color:var(--red,#EF4444);background:rgba(239,68,68,.1)}
 .ev:hover .row-x,.task:hover .row-x{opacity:.8}
 @media(hover:none){.row-x{opacity:.7}}
+
+/* Collapsible indexed-document list (Plans + Update plans). */
+.docs-wrap{margin-top:4px}
+.docs-toggle{display:flex;align-items:center;gap:10px;width:100%;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;font-family:var(--font);color:var(--navy);text-align:left;box-shadow:0 1px 2px rgba(12,42,71,.04);transition:border-color .15s}
+.docs-toggle:hover{border-color:rgba(14,143,230,.4)}
+.docs-toggle svg{color:var(--mut);flex-shrink:0;transition:transform .18s}
+.docs-toggle.open svg{transform:rotate(90deg)}
+.docs-toggle b{font-size:14px;font-weight:600}
+.docs-toggle small{color:var(--mut);font-size:12.5px}
+.docs-toggle .docs-act{margin-left:auto;font-size:13px;font-weight:600;color:var(--brand)}
+.docs-find{width:100%;margin-top:10px;padding:10px 13px;border:1px solid var(--line);border-radius:11px;font-family:var(--font);font-size:13.5px;color:var(--navy);background:#fff;outline:none;transition:border-color .15s}
+.docs-find:focus{border-color:rgba(14,143,230,.5)}
+.docs-wrap .docs{margin-top:10px}
