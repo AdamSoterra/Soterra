@@ -89,29 +89,71 @@ A 5-person NZ residential builder's core stack lands at roughly **NZ$265-325/mon
 - **Alert at 80%, hard block at 100%, one-click top-up.** Never auto-bill past the cap. For a fixed-budget buyer a block is reassuring; a surprise invoice is a lost renewal.
 - **Archived projects stay queryable free.** Costs almost nothing (storage only, no AI) and makes the platform sticky across job cycles.
 
-## 5. The ladder
+## 5. Who is actually out there (Stats NZ, official, Feb 2025)
 
-Use the turnover bands the industry already uses. **Registered Master Builders sets its own membership fees on exactly these bands** (under $500k / $500k-$2M / $2M+ / Volume / Commercial / Major), which is proof NZ builders already accept revenue-scaled pricing.
+Before setting bands, the real shape of the market. Construction enterprises by turnover:
 
-| Tier | Band | Price | What RMB already charges that band, per year |
+| Turnover | Enterprises | Share | Cumulative |
 |---|---|---|---|
-| **Site** | Residential under ~$2M turnover | **NZ$149/mo** = NZ$1,788/yr | Residential $500k-2M: **$1,900** |
-| **Builder** | Residential $2M+ / volume builder | **NZ$299/mo** = NZ$3,588/yr | Residential $2M+: **$3,475** · Volume: **$4,160** |
-| **Commercial** | Commercial / multi-region | **NZ$599/mo** = NZ$7,188/yr | Commercial: **$4,160** · Major: **$8,810** |
+| under $100K | 30,177 | 37.2% | 37.2% |
+| $100K-500K | 30,489 | 37.5% | **74.7%** |
+| $500K-1M | 8,091 | 10.0% | 84.7% |
+| **$1M-5M** | **9,837** | 12.1% | 96.8% |
+| $5M-10M | 1,386 | 1.7% | 98.5% |
+| $10M-20M | 714 | 0.9% | 99.4% |
+| $20M-50M | 357 | 0.4% | 99.8% |
+| $50M+ | 168 | 0.2% | 100% |
+| **Total** | **81,219** | | |
 
-Every rung lands within a few hundred dollars a year of a fee that segment already pays a trade association for brand and guarantee access. That's the anchor for the sales conversation: *"you already pay RMB $1,900 a year for the guarantee. This is the same money for something that answers your code questions with the clause number."*
+**Three quarters of NZ construction firms turn over under $500K.** And by headcount, 67.4% have **zero employees** and 90.6% have five or fewer. Residential Building Construction (27,993 firms) averages **1.3 employees per firm**. Non-residential (1,656 firms) averages 6.8.
 
-Sanity checks against the rest of the market: NZ$149 sits **below Buildxact Foundation (NZ$199)** and **above their AI add-on (NZ$99-149)** - so it reads as a real product, not a bolt-on. NZ$299 is well under the **US$299.90 (~NZ$500) Quotr.ai charges for a single seat** at plan Q&A, and we're unlimited users.
+Two consequences:
 
-### Gross margin at the ladder
+1. **The addressable market for a NZ$149+ product is ~12,500 firms, not 81,000.** Everything below $1M turnover is a sole trader whose Master Builders fee is $260/year. NZ$1,788/year is not a realistic ask for them, and pretending otherwise would produce a tier nobody buys.
+2. **Only 1,239 firms turn over $10M+.** That is the entire Procore-prospect pool in New Zealand. It's another reason not to build the strategy around Procore integration.
 
-| Price | 3 crew active | 8 crew active | 15 crew active | 25 crew heavy |
+Consent values for context (Stats NZ, year to May 2026): average new dwelling **$449,800**; standalone house **$574,500**; renovation **$88,800**; new non-residential **$1.65M**; new commercial building **$3.92M**.
+
+## 5b. The ladder
+
+Band on turnover, using bands the industry already uses. **Registered Master Builders sets its own membership fees on exactly this basis**, which is proof NZ builders already accept revenue-scaled pricing.
+
+| Tier | Band | Firms | Price | What RMB charges that segment/yr |
 |---|---|---|---|---|
-| NZ$149 | 89% | 72% | 47% | **-7%** |
-| NZ$299 | 95% | 86% | 73% | 47% |
-| NZ$599 | 97% | 93% | 87% | 73% |
+| **Site** | $1M-5M turnover | 9,837 | **NZ$149/mo** (NZ$1,788/yr) | Residential $500k-2M: **$1,900** |
+| **Builder** | $5M-20M | 2,100 | **NZ$299/mo** (NZ$3,588/yr) | Residential $2M+: **$3,475** · Volume: **$4,160** |
+| **Commercial** | $20M+ | 525 | **NZ$599/mo** (NZ$7,188/yr) | Commercial: **$4,160** · Major: **$8,810** |
 
-The **-7% cell is the whole reason bands must be enforced.** A 25-person operation running heavy usage on the NZ$149 tier loses money. Band on turnover, verify at signup, and move them up before they get there.
+Every rung lands within a few hundred dollars a year of a fee that segment already pays a trade association for brand access. That's the sales anchor: *"you already pay RMB $1,900 a year for the guarantee. This is the same money for something that answers your code questions with the clause number."*
+
+Cross-checks: NZ$149 sits **below Buildxact Foundation (NZ$199)** and **above their AI add-on (NZ$99-149)**, so it reads as a real product not a bolt-on. NZ$299 is well under the **US$299.90 (~NZ$500) Quotr.ai charges for one seat** at plan Q&A, and we're unlimited users.
+
+**Deliberately no sub-$1M tier at launch.** 68,757 firms sit there and it is tempting, but their willingness to pay is anchored at a $260/year association fee. Revisit only if a much lighter product emerges.
+
+### Gross margin at realistic NZ firm sizes
+
+Earlier drafts modelled 8-15 crew. Stats NZ says the average residential firm is **1.3 employees**, so those were wrong. Corrected:
+
+| Firm | Questions/mo | AI cost | Margin on NZ$149 |
+|---|---|---|---|
+| 1 working owner | 110 | NZ$5.30 | **96%** |
+| Owner + 2 | 264 | NZ$12.73 | **91%** |
+| Owner + 5 | 528 | NZ$25.45 | **83%** |
+
+Margins are better than first modelled, because NZ construction firms are much smaller than assumed. The band enforcement still matters at the top: a 25-person operation on heavy usage would run the NZ$149 tier negative, which is why turnover is verified at signup.
+
+### What the business looks like
+
+Penetration of the $1M+ bands (12,462 firms):
+
+| Penetration | Customers | Revenue |
+|---|---|---|
+| 0.5% | 63 | NZ$149k/yr |
+| 1% | 124 | NZ$287k/yr |
+| 2% | 250 | NZ$582k/yr |
+| 5% | 623 | NZ$1.44M/yr |
+
+**1-2% of the addressable NZ market is a NZ$300-580k/year business.** That is a genuine solo-founder outcome and it validates the price points. It is also small enough to say plainly: NZ alone caps out, so the product either goes deeper per customer or eventually goes offshore.
 
 ## 5b. The ROI line that closes the sale
 
