@@ -58,11 +58,30 @@ console.log(`cached prefix (tools + system): ${prefix.input_tokens.toLocaleStrin
 console.log(`  cold write @ $${CACHE_WRITE_5M}/M : $${((prefix.input_tokens / 1e6) * CACHE_WRITE_5M).toFixed(5)}`);
 console.log(`  warm read  @ $${CACHE_READ}/M : $${((prefix.input_tokens / 1e6) * CACHE_READ).toFixed(5)}\n`);
 
+// PLAN questions are the core product and cost MORE than code questions:
+// search_plans sends 8 pages (route line 511) vs search_code's 6. Measure both.
+const planPagesData = JSON.parse(fs.readFileSync("data/arthur-road-index.json", "utf8"));
+const planDf = computeDf(planPagesData);
+
+// The route also prepends a dynamic context block (date, upcoming events, tasks,
+// crew) that the earlier measurement ignored. Approximate a realistic one so the
+// per-question number isn't understated.
+const DYNAMIC_CONTEXT = `Today is Monday 21 July 2026, 7:42 am (Pacific/Auckland). Site: Kauri Tower.
+Crew: Adam (site manager), Jon (foreman), Maree (PM), Dave (chippie), Sam (apprentice).
+Upcoming events: Gib Delivery Sat 18 Jul 12:50pm (whole crew) · Council inspection Tue 22 Jul 9:00am (Adam) · Pour level 3 Wed 23 Jul 7:00am (whole crew) · Scaffold handover Thu 24 Jul 2:00pm (Jon) · Weathertightness review Fri 25 Jul 10:00am (Maree).
+Open tasks: Confirm lintel sizes with engineer (Jon, due Tue 22 Jul) · Order H3.2 framing (Adam, due Wed 23 Jul) · Chase RFI 042 response (Maree, overdue) · Book crane for level 4 (Adam, due Fri 25 Jul).`;
+
 const QUESTIONS = [
   "What's the minimum barrier height for a deck on a house?",
   "What ground clearance do I need under wall cladding to unpaved ground?",
   "Draft an RFI about a clash between the midfloor penetration and the beam.",
   "What roof insulation R-value do I need for a new house in Auckland?",
+];
+const PLAN_QUESTIONS = [
+  "What's the external wall cladding build-up on this job?",
+  "What insulation R-value is specified for the roof?",
+  "What's the foundation slab thickness?",
+  "What are the window sizes in the bedrooms?",
 ];
 
 type Run = { q: string; inTok: number; outTok: number; cacheRead: number; cacheWrite: number; cost: number };
@@ -101,12 +120,57 @@ for (const q of QUESTIONS) {
   }
 }
 
+// ---- PLAN questions: 8 pages + dynamic context, i.e. the real core path ----
+const planRuns: Run[] = [];
+console.log(`\n--- PLAN questions (8 pages, with dynamic context) ---`);
+for (const q of PLAN_QUESTIONS) {
+  for (let pass = 0; pass < 2; pass++) {
+    const hits = retrieve(planPagesData as any[], planDf, q, 8);
+    const toolResult = JSON.stringify({
+      pages: hits.map((p: any) => ({ label: `${p.doc}${p.code ? " · " + p.code : ""} · page ${p.page} of ${p.npages}`, text: excerpt(p.text, q, 2800) })),
+    });
+
+    const msg: any = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 8192,
+      system: [
+        { type: "text", text: STATIC_PROMPT, cache_control: { type: "ephemeral" } },
+        { type: "text", text: DYNAMIC_CONTEXT },
+      ] as any,
+      tools: TOOLS.map((t, i) => (i === TOOLS.length - 1 ? { ...t, cache_control: { type: "ephemeral" } } : t)) as any,
+      messages: [
+        { role: "user", content: q },
+        { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "search_plans", input: { query: q } }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: toolResult }] },
+      ],
+    });
+
+    const u = msg.usage;
+    const cost =
+      (u.input_tokens / 1e6) * IN + (u.output_tokens / 1e6) * OUT +
+      ((u.cache_read_input_tokens ?? 0) / 1e6) * CACHE_READ +
+      ((u.cache_creation_input_tokens ?? 0) / 1e6) * CACHE_WRITE_5M;
+
+    if (pass === 1) {
+      planRuns.push({ q, inTok: u.input_tokens, outTok: u.output_tokens, cacheRead: u.cache_read_input_tokens ?? 0, cacheWrite: u.cache_creation_input_tokens ?? 0, cost });
+      console.log(`$${cost.toFixed(5)}  in:${String(u.input_tokens).padStart(5)}  out:${String(u.output_tokens).padStart(4)}  cacheRead:${String(u.cache_read_input_tokens ?? 0).padStart(6)}  "${q.slice(0, 42)}"`);
+    }
+  }
+}
+const planAvg = planRuns.reduce((a, r) => a + r.cost, 0) / planRuns.length;
+
 const avg = runs.reduce((a, r) => a + r.cost, 0) / runs.length;
 const avgOut = runs.reduce((a, r) => a + r.outTok, 0) / runs.length;
-console.log(`\n───────── STEADY-STATE (warm cache) ─────────`);
-console.log(`avg cost per question : $${avg.toFixed(5)}  (NZD ~$${(avg * 1.66).toFixed(5)})`);
-console.log(`avg output tokens     : ${Math.round(avgOut)}`);
-console.log(`\nper 1,000 questions   : $${(avg * 1000).toFixed(2)} USD  /  ~$${(avg * 1000 * 1.66).toFixed(2)} NZD`);
-for (const n of [200, 500, 1000, 3000]) {
-  console.log(`  ${String(n).padStart(5)} q/mo -> $${(avg * n).toFixed(2)} USD/mo  (~$${(avg * n * 1.66).toFixed(2)} NZD/mo)`);
+const ROUNDS = 1.3; // measured average tool rounds
+const blended = (avg + planAvg) / 2;
+console.log(`\n───────── STEADY-STATE (warm cache), single round ─────────`);
+console.log(`CODE question (6 pages)          : $${avg.toFixed(5)}`);
+console.log(`PLAN question (8 pages + context): $${planAvg.toFixed(5)}   <- the core path, ${((planAvg / avg - 1) * 100).toFixed(0)}% more`);
+console.log(`blended                          : $${blended.toFixed(5)}`);
+console.log(`\nWith the measured ${ROUNDS} avg tool rounds:`);
+console.log(`  blended per question : $${(blended * ROUNDS).toFixed(5)} USD  =  NZ$${(blended * ROUNDS * 1.66).toFixed(4)}`);
+console.log(`  avg output tokens    : ${Math.round(avgOut)}`);
+const real = blended * ROUNDS * 1.66;
+for (const n of [110, 264, 528, 1650]) {
+  console.log(`  ${String(n).padStart(5)} q/mo -> NZ$${(real * n).toFixed(2)}/mo`);
 }

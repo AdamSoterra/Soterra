@@ -60,6 +60,75 @@ The margin trend matters: **costs fall over time.** Price on value, hold the pri
 
 **No credit system.** Between Windsurf retiring theirs, Adobe's backlash, Salesforce's three models in eighteen months and Cursor's refunds, the evidence is one-directional. Credits are, in Metronome's words, "useful, but not loved" - born of vendor necessity, not customer preference. Our whole value proposition is that asking is free and instant.
 
+## 1b. Corrections to the cost figure (double-checked)
+
+Two things I got wrong first time, both making the real number **higher**:
+
+1. **`search_plans` sends 8 pages, `search_code` sends 6** (route lines 511 / 521). I measured the code path. Plan questions are the core product and carry ~33% more retrieval payload.
+2. **I omitted `dynamicContext`** - the date, upcoming events, open tasks and crew list the route prepends to every call. That's uncached input on every question.
+
+Corrected blended estimate: **~US$0.033 / NZ$0.055 per question**, against the NZ$0.048 first reported. About 15% higher. It doesn't change any conclusion - margins stay 83-96% - but the honest number is NZ$0.055.
+
+## 1c. Cost-reduction levers - tested, not guessed
+
+Since 74% of cost is the retrieval payload, that's the only lever worth pulling. Tested against the accuracy audit:
+
+| Lever | Accuracy | Verdict |
+|---|---|---|
+| Baseline: 6 pages, 2,800 chars | **15/15** | current |
+| **4 pages**, 2,800 chars | **14/15** | ❌ **costs an answer. Don't.** |
+| 4 pages, 2,000 chars | not completed | untested |
+| **Haiku 4.5** instead of Sonnet ($1/$5 vs $3/$15, ~67% cheaper) | not completed | ⭐ **the lever worth testing** |
+
+**Cutting retrieval breadth is off the table** - dropping to 4 pages lost an answer, and accuracy is the product. The remaining idea worth real work is **model routing**: send simple lookups to Haiku 4.5 and keep Sonnet for RFI drafting and anything code-critical. That's a potential ~60% cut on the dominant cost with no reduction in what the model sees. Run `MODEL_ID=claude-haiku-4-5 npx tsx dev/audit-code.mts --excerpt` to test it.
+
+**The honest framing though: cost reduction is not the priority.** At NZ$13/month to serve a typical customer against NZ$99-149 revenue, shaving the AI bill is rounding-error optimisation. The margin risk is the uncapped ceiling (section 6), not the per-question price.
+
+## 1d. 🔴 Operational: the API key ran out of credit mid-audit
+
+While measuring, the Anthropic API returned `400 - credit balance is too low`. That's worth flagging because **the live app fails the same way**. If the key empties, every assistant question errors. Before charging anyone:
+- Set up auto-reload or billing alerts on the Anthropic account
+- Make sure the route surfaces a clear message on that specific error rather than a generic failure
+
+## 1e. Infrastructure - what it actually costs (checked, not assumed)
+
+Measured current usage: **103.4 MB of blobs, a 14 MB database.**
+
+| Service | Usage | Cost |
+|---|---|---|
+| **Vercel Pro** | $20 USD/mo, **already paid** and shared with the other projects | marginal cost of Soterra ≈ $0 |
+| **Vercel Blob** | 103 MB against 1 GB included in Pro | **free** (~10 sites before overage, then $0.023/GB-mo = trivial) |
+| **Neon** | 14 MB against a 0.5 GB free tier | **free** on storage; the 100 CU-hours/mo compute limit bites first |
+| **Clerk** | free to 10,000 MAU | **free** for a long time |
+
+| Stage | Fixed monthly |
+|---|---|
+| Today (1-5 customers) | **NZ$33** |
+| ~20 customers (Neon Launch $19) | **NZ$65** |
+| ~100 customers | **NZ$73** |
+
+**There is nothing meaningful to cut.** Soterra is already running on roughly NZ$33/month of infrastructure, most of which is a Vercel bill that exists anyway. Indexing is $0. The only cost that scales with customers is AI, and it scales gently.
+
+## 1f. NZ tax (Ltd) - structure, not advice
+
+I'm not your accountant and you should confirm this with them, but the structural facts:
+
+- **Company tax: 28%** on profit.
+- **GST: 15%. Registration required once turnover passes NZ$60,000** in any 12-month period. That's **51 customers at NZ$99**, 34 at NZ$149, 17 at NZ$299.
+- **Quote prices EX GST.** Every NZ comparable does (Buildxact, Tradify, NextMinute, Xero all publish "NZD, ex GST"). Your customers are GST-registered builders who claim it straight back, so GST is **neutral to them** and adding it doesn't make you more expensive.
+- **Registering before you have to is usually the right call** for a B2B seller - it's neutral to your customers and lets you claim input credits on your own spend. Worth a five-minute conversation with the accountant.
+- **Overseas B2B purchases** (Anthropic, Vercel, Clerk) go through the reverse-charge mechanism rather than the supplier charging you NZ GST. Generally neutral if you're making fully taxable supplies.
+- All of it (software, API spend, domain) is deductible.
+
+### After-tax P&L at the two candidate entry prices
+
+| Customers | NZ$99/mo net after tax | NZ$149/mo net after tax |
+|---|---|---|
+| 10 | NZ$7,167/yr | NZ$11,487/yr |
+| 25 | NZ$18,076/yr | NZ$28,876/yr |
+| 50 | NZ$36,711/yr | NZ$58,311/yr |
+| 100 | NZ$73,909/yr | NZ$117,109/yr |
+
 ## 3b. NZ market benchmarks (verified from vendor pricing pages)
 
 | Product | Price | Unit |
@@ -260,6 +329,24 @@ Question 4 is the one that sets the fair-use cap honestly.
 - Cost of a delay day or a rework event in NZ dollars - not found. One promising lead: a NZ trade-press piece claiming "one in six hours lost on rework", worth chasing.
 - Simpro, Assignar, Buildertrend, Document Crunch, Trunk Tools and Bild AI are all quote-only; the third-party figures circulating for them are low quality and were not used here.
 - Whether Procore AI ends up bundled or separately paid - still not committed publicly as of 2026-07.
+
+## 9b. Staying cheap and competitive at launch
+
+The ask was to stay cheap early and be competitive. The infra section shows we already *are* cheap - NZ$33/month to run the whole thing - so "cheap at the start" is about **what we charge**, not what we spend. Recommendation:
+
+**Launch with a founding price, not a permanent low price.**
+
+- **Founding rate: NZ$99/mo** (all tiers, first cohort), locked for the life of their account. Still 84%+ margin.
+- **List price stays NZ$149/299/599.** The founding customers see they're getting a deal that later customers won't.
+
+Why founding-rate rather than just pricing low:
+- A permanent low price is **very hard to raise** - you'd be re-pricing existing customers, which is exactly the Cursor mistake. A founding rate lets you honour early backers *and* charge list to everyone after, with no bad-faith increase.
+- It creates urgency now ("this rate won't last") without cheapening the product long-term.
+- NZ$99 undercuts Buildxact's NZ$199 entry and sits right at their AI add-on price, so it reads as competitive without looking like a toy.
+
+**Don't go free.** A free tier for this product is a trap: every free user still costs real AI money (unlike storage-only free tiers), and "free" signals "not serious" to a builder deciding whether to trust it on a compliance question. A **14-day free trial with no card** (which you already run on Montázs) is the right shape - it costs you a few dollars of AI per trial and filters for real intent.
+
+**One lever to keep in reserve, not use yet:** annual prepay at ~2 months free (NZ$990/yr instead of NZ$1,188). Improves cash flow and cuts churn, but adds a procurement step, so introduce it once you have a few monthly customers, not at launch.
 
 ## 10. Decision summary
 

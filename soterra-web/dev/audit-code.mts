@@ -16,13 +16,17 @@ for (const line of fs.readFileSync(".env.local", "utf8").split("\n")) {
 }
 
 const USE_EXCERPT = process.argv.includes("--excerpt");
+// Cost levers under test: how many pages we send, and how much of each.
+const K = Number(process.env.K ?? 6);
+const LIMIT = Number(process.env.LIMIT ?? 2800);
+const MODEL_OVERRIDE = process.env.MODEL_ID;
 
 const { computeDf, retrieve, excerpt } = await import("../lib/retrieve.ts");
 const { db } = await import("../lib/db.ts");
 const { codePages } = await import("../lib/schema.ts");
 const Anthropic = (await import("@anthropic-ai/sdk")).default;
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = process.env.MODEL_ID ?? "claude-sonnet-4-6";
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Verbatim from the ask route, so the audit exercises the real instructions.
@@ -83,7 +87,8 @@ const pages = rows.map((r) => ({ doc: r.doc, page: r.page, npages: r.npages, tit
 const df = computeDf(pages);
 const codeLabel = (p: (typeof pages)[number]) => `${p.doc}${p.title ? " · " + p.title : ""} · page ${p.page} of ${p.npages}`;
 
-console.log(`corpus: ${pages.length} pages | mode: ${USE_EXCERPT ? "excerpt (relevance window)" : "slice(0,2800) [current prod]"}\n`);
+console.log(`K=${K} limit=${LIMIT} model=${MODEL}
+corpus: ${pages.length} pages | mode: ${USE_EXCERPT ? "excerpt (relevance window)" : "slice(0,2800) [current prod]"}\n`);
 
 const results: Row[] = [];
 
@@ -98,12 +103,12 @@ for (const Q of QUESTIONS) {
   // with a better query after seeing the first hits; cutting it off after one
   // round measures a pipeline that doesn't exist in production.
   const runSearch = (query: string) => {
-    const hits = retrieve(pages, df, query, 6);
+    const hits = retrieve(pages, df, query, K);
     if (hits.length === 0) return { hits, payload: JSON.stringify({ pages: [], note: "Nothing matched in the Building Code corpus." }) };
     return {
       hits,
       payload: JSON.stringify({
-        pages: hits.map((p) => ({ label: codeLabel(p), text: USE_EXCERPT ? excerpt(p.text, query, 2800) : p.text.slice(0, 2800) })),
+        pages: hits.map((p) => ({ label: codeLabel(p), text: USE_EXCERPT ? excerpt(p.text, query, LIMIT) : p.text.slice(0, LIMIT) })),
       }),
     };
   };
@@ -132,7 +137,7 @@ for (const Q of QUESTIONS) {
       const query = String(tu.input?.query ?? Q.q);
       queriesUsed.push(query);
       const { hits, payload } = runSearch(query);
-      allHanded.push(...hits.map((p) => (USE_EXCERPT ? excerpt(p.text, query, 2800) : p.text.slice(0, 2800))));
+      allHanded.push(...hits.map((p) => (USE_EXCERPT ? excerpt(p.text, query, LIMIT) : p.text.slice(0, LIMIT))));
       return { type: "tool_result", tool_use_id: tu.id, content: payload };
     });
     messages.push({ role: "user", content: results });
