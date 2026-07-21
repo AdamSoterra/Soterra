@@ -258,7 +258,46 @@ Two consequences:
 
 Consent values for context (Stats NZ, year to May 2026): average new dwelling **$449,800**; standalone house **$574,500**; renovation **$88,800**; new non-residential **$1.65M**; new commercial building **$3.92M**.
 
-## 5b. The ladder
+## 5a. ⭐ REVISED LADDER — user-banded, cheap (Adam's call, 2026-07-21)
+
+Adam's steer: band on **number of users**, stay cheap, get most teams under NZ$100. This supersedes the turnover ladder below (kept for reference and for the sales anchor).
+
+| Tier | Band | Price | Margin at a FULL band (4 q/user/day) |
+|---|---|---|---|
+| **Crew** | up to 5 users | **NZ$79/mo** | 77% |
+| **Site** | up to 15 users | **NZ$199/mo** | 72% |
+| **Company** | unlimited users | **NZ$399/mo** | 63% (at 40 users) |
+
+**Most NZ firms land on Crew and it's very profitable there** — 90.6% of construction enterprises have five or fewer staff:
+
+| Users on Crew (NZ$79) | AI cost | Margin |
+|---|---|---|
+| 1 | NZ$3.70 | **95%** |
+| 3 | NZ$11.09 | **86%** |
+| 5 (full band) | NZ$18.48 | **77%** |
+
+### ⭐ The coffee test — use this in every sales conversation
+
+| Crew | Site coffee/mo (NZ$5.50/head/day) | Soterra | Ratio |
+|---|---|---|---|
+| 5 guys | NZ$605 | NZ$79 | **7.7x cheaper** |
+| 7 guys | NZ$847 | NZ$79 | **10.7x cheaper** |
+| 15 guys | NZ$1,815 | NZ$199 | 9.1x cheaper |
+| 25 guys | NZ$3,025 | NZ$399 | 7.6x cheaper |
+
+**Soterra costs roughly a tenth of what the site spends on coffee, at every tier.** That is the single most persuasive line available and it holds across the whole ladder.
+
+Against the ROI number: one avoided 2-hour engineer callback (NZ$560) pays **7.1 months** of Crew.
+
+### Why user-banding is OK here (it isn't per-seat)
+
+Earlier I argued against per-seat pricing because seat-rationing starves the whole-team adoption the product needs. **Bands are different from per-seat**: inside a band you add people for free, so nobody is counting heads at NZ$16/user. NextMinute already prices NZ this way (NZ$199 for 3-9 users, NZ$349 for 10-14), so it's a familiar shape.
+
+The one real cost: a team of 5 hesitating to add a 6th because it jumps NZ$79 → NZ$199. Mitigations — make the bands generous (5 / 15 / unlimited, not 3 / 6 / 10), and be willing to hold a 6th or 7th user on Crew for an early customer rather than lose them.
+
+Bands are also self-enforcing in a way turnover never was: user count is something the app can actually see, so no honour system and no audit.
+
+## 5b. The ladder (turnover-banded — superseded by 5a, kept for the sales anchor)
 
 Band on turnover, using bands the industry already uses. **Registered Master Builders sets its own membership fees on exactly this basis**, which is proof NZ builders already accept revenue-scaled pricing.
 
