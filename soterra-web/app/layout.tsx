@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ReminderSync } from "./components/reminder-sync";
+import SwRegister from "./components/sw-register";
 import { NotificationPermission } from "./components/notification-permission";
 import { NativeShell } from "./components/native-shell";
 import { DM_Sans } from "next/font/google";
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <NativeShell />
           <NotificationPermission />
           <ReminderSync />
+          <SwRegister />
         </body>
       </html>
     </ClerkProvider>

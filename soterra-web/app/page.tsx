@@ -233,6 +233,11 @@ function AppLogin({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted
       <p style={{ fontSize: 12.5, color: "#94A6BE", marginTop: 22, maxWidth: 300, lineHeight: 1.5 }}>
         Got a site code from your PM? Log in, then enter it to join your site.
       </p>
+      {/* On-site crew live on their phones — make installing findable without
+          needing to know which browser menu to hunt through. */}
+      <a href="/install" style={{ fontSize: 13, color: "#0E8FE6", marginTop: 16, fontWeight: 600, textDecoration: "none" }}>
+        📱 Put Soterra on your phone
+      </a>
     </div>
   );
 }
@@ -1234,6 +1239,7 @@ export default function Page() {
             <div className="menu">
               <div className="mrow"><span className="mi">🏗️</span><div><b>{projName}</b><br /><small>{curProject?.role === "admin" ? "You're the admin" : (members.find((m) => m.isMe)?.title || "Crew member")}</small></div></div>
               <div className="mrow" onClick={() => { setCrewOpen(true); setMenuOpen(false); loadMembers(); }}><span className="mi">👥</span> Crew &amp; invite code</div>
+              <div className="mrow" onClick={() => { setMenuOpen(false); window.open("/install", "_blank"); }}><span className="mi">📱</span> Put it on a phone</div>
               <div className="mrow sep" onClick={() => clerk.signOut()}><span className="mi">↩️</span> Sign out</div>
             </div>
           )}
