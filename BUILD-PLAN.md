@@ -2,18 +2,31 @@
 
 _Locked 2026-07-22. This is the spec for the next thread. Everything here is decided unless marked ❓._
 
-> ## ▶️ START HERE (new thread)
+> ## ✅ BUILT — 2026-07-22. Steps 0–4 are live on soterra.co.nz.
 >
-> **Build everything in this plan EXCEPT §3 (MBIE determinations).** Adam will download those manually when he's home; the automated route is blocked by Imperva. Nothing else depends on them.
+> | # | Piece | State |
+> |---|---|---|
+> | **0** | **Company layer + isolation test** | ✅ live. `companies` table, `projects.companyId` (not null), `resolveScope()` derives companyId from the caller's verified project. `CompanyId` is a branded type only that function can mint, so a query that skipped the check doesn't compile. `npx tsx dev/verify-company-isolation.mts` seeds two real companies and calls the real query layer — **25/25 green**. |
+> | 1 | History learner | ✅ built. Two passes: exact parse of the council's numbered fail list, then a model pass for the free text (on a Partial Pass every real defect is in prose). Anonymised on ingest. ⚠️ end-to-end unverified — see the blocker below. |
+> | 2 | Insights page | ✅ live. Counts per category (clickable to filter), most-repeated items, this site's checks, every past inspection, drop-zone for reports. |
+> | 3 | Checklist engine | ✅ live. Hangs off the calendar event. Items cited to the drawings / the Code / your own history, with the source badge and exact page on each. Good / Needs fixing / N/A on the phone, photos, notes. |
+> | 4 | CCC checklist | ✅ live **and working right now** — the evidence pack is a fixed list, so it needs no model call. |
+> | 5 | Determinations | ⛔ not built, as instructed. |
 >
-> **Adam is away and wants this built autonomously.** Order is fixed:
-> **Step 0 (company layer) → 1 (history learner) → 2 (Insights page) → 3 (checklist engine) → 4 (CCC checklist).**
+> ### 🔴 ONE BLOCKER, AND IT'S BIGGER THAN THIS BUILD
+> **The Anthropic account is out of credit.** `"Your credit balance is too low to access the Anthropic API."` It's the shared org wallet, so **the live Soterra assistant cannot answer anything right now** — and Montázs and Kalvio are down too. Top it up (auto-reload is the fix you already said was worth a click) and everything below starts working with no code change:
+> - reading inspection reports into history
+> - assistant-generated checklists
+> - `search_history` in the assistant
 >
-> Two things to bring to him rather than guess:
-> 1. The **category mapping** (council codes → the 12 groups) — draft it from the 27 real reports in `All inspection reports/Council/`, then have him check it. He'll spot in seconds what would take an hour to get wrong.
-> 2. **Company creation at signup vs first project** (❓ open item 3) — pick the sensible default (company at signup), build it, flag it.
+> ### Two things for you
+> 1. **`CATEGORY-MAP.md`** — the category mapping drafted from your 27 real reports, with the ten judgement calls I made and two questions I can't answer from council data. Please check it.
+> 2. **Open item 3 is decided and built:** a company is created with the **first site**, and every later site that person creates joins it. Splitting one builder across two companies would split their own history in half.
 >
-> Deploy as you go: `cd soterra-web && npm run build && npx vercel deploy --prod --yes`, then verify the live URL. Commit after each piece.
+> ### Loading your own reports
+> `cd soterra-web && npx tsx dev/ingest-reports.mts "../All inspection reports/Council" <projectId> --dry` to see what it finds without writing anything; drop `--dry` to file it. Or just drop the PDFs on the Insights page.
+>
+> Deploy: `cd soterra-web && npx vercel deploy --prod --yes`.
 
 ---
 
