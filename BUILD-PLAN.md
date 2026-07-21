@@ -61,7 +61,9 @@ The existing code is `api/analyze-reports.py` (393 lines, header: *"Vercel Serve
 3. Tick through it on the phone, attach photos, add notes
 4. Stays on the event forever
 
-**"All inspections in one spot" = the calendar you already have.** This is why the build adds only one page, not three.
+**Retrieval is assistant-first** (Adam, 2026-07-22): *"what failed on the last cavity wrap?"* beats scrolling a calendar. Needs a small tool so the assistant can find past inspections and their results.
+
+**The Insights page does both jobs** — top failed items per category on top, list of past inspections underneath. Still **one new page total**; the list is just the bottom half.
 
 Checklist item sources, in order:
 - **This project's drawings** (`search_plans`) — every *"as per plan"* item
@@ -90,7 +92,17 @@ Same engine, second type: **CCC checklist**. Different item source (the CCC evid
 1. **Always show the year in the citation** (*"Determination 2021/045"*) so currency is visible.
 2. **A determination decides one specific case.** The assistant must cite it as *guidance*, never as the rule, and must defer to the current Acceptable Solution for any figure. MBIE says this themselves.
 
-### 🔴 Download is BLOCKED — needs a decision
+### Do we actually need to download them? — YES
+
+Live-fetching at question time does **not** work, for two reasons:
+1. It would hit **the same Imperva block** that refused curl, the browser and WebFetch.
+2. Even if it didn't: slower (seconds per question), costs per question, no citation control, and retrieval quality depends on a search engine's index rather than the full text.
+
+Downloading and indexing is the Building Code pattern, which already scores 15/15 with exact citations. Same `lib/indexPdf.ts` pipeline.
+
+**But we do not need all 1,000.** The last **2–3 years** (a couple of hundred files) is plenty to prove value and can be extended later. Adam downloads to a folder (same as `All inspection reports/`), we process.
+
+### 🔴 Automated download is BLOCKED — Adam will do it manually
 
 `building.govt.nz` sits behind **Imperva/Incapsula**. Tried and refused: `curl`, the sandboxed browser (empty DOM), and WebFetch (worked once from cache, now blocked).
 
@@ -141,9 +153,12 @@ Once the PDFs are local, **ingestion is trivial** — it's the same `lib/indexPd
 
 ---
 
-## Carried over (not part of this build)
+## Carried over — CLOSED by Adam 2026-07-22
 
-- 🔴 **Rotate the Clerk secret key** — `sk_live_…` was pasted into a chat log. Still outstanding.
-- 🔴 **Anthropic billing**: Soterra, Montázs and Kalvio have separate API keys but share **one org wallet**. My research runs drained it and took the API down for all three. **Turn on auto-reload, and split the products into separate Workspaces** so costs are attributable and one runaway can't kill the others.
-- Signed release APK + keystore (for sideload distribution; `/install` PWA works today).
-- Web push, so reminders work on iPhone and on the web (currently Android-app-only).
+Adam's call, recorded and not to be re-raised:
+- **Shared Anthropic org wallet** — fine; Montázs and Kalvio will have very small usage, essentially all spend will be Soterra. (Only residual: an empty balance stops the assistant answering, so auto-reload is worth a click. Mentioned once, dropped.)
+- **Clerk secret key rotation** — Adam is comfortable, no action.
+
+Still genuinely open, but not part of this build:
+- Signed release APK + keystore for sideload distribution (the `/install` PWA works today).
+- Web push, so reminders fire on iPhone and on the web (currently Android-app only).
