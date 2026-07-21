@@ -96,15 +96,15 @@ export async function POST(req: Request) {
   }
 
   const generate = body.generate !== false;
-  const items = generate
-    ? await generateChecklistItems(scope, { kind, inspectionCode, title: [eventTitle, title].filter(Boolean).join(" — ") })
-    : [];
-
-  if (generate && items.length === 0) {
-    return Response.json(
-      { error: "The assistant couldn't build that checklist — usually because this site has no drawings uploaded yet. Upload the plan set, or add items by hand." },
-      { status: 422 }
-    );
+  let items: { title: string; detail: string; source: string; sourceRef: string | null; category: string }[] = [];
+  if (generate) {
+    const result = await generateChecklistItems(scope, { kind, inspectionCode, title: [eventTitle, title].filter(Boolean).join(" — ") });
+    if (!result.ok) {
+      // 503 when the assistant itself is down (retryable), 422 when the sources
+      // genuinely had nothing (retrying won't help).
+      return Response.json({ error: result.message }, { status: result.reason === "failed" ? 503 : 422 });
+    }
+    items = result.items;
   }
 
   const user = await currentUser();

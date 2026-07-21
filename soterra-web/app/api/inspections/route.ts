@@ -100,6 +100,17 @@ export async function POST(req: Request) {
     );
   }
 
+  // If the model pass failed we only have the council's own numbered fail list.
+  // On an outright Fail that's complete; on a Partial Pass — where every real
+  // defect lives in prose — it would file a report that looks clean when it
+  // isn't. A flattering history is worse than no history, so refuse it.
+  if (extracted.degraded) {
+    return Response.json(
+      { error: `Couldn't read that report properly — ${extracted.degradedReason}. Nothing was filed; try again once it's back, so the history doesn't end up looking cleaner than the job was.` },
+      { status: 503 }
+    );
+  }
+
   const saved = await saveInspection(scope, { doc, file: pathname, eventId, extracted, createdBy: userId });
 
   return Response.json({

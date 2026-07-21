@@ -38,6 +38,12 @@ export type ExtractedInspection = {
   /** False when the document isn't an inspection report at all (a fee proposal,
    *  a spec). The caller refuses it rather than filing an empty inspection. */
   isInspectionReport: boolean;
+  /** True when the model pass failed and only the deterministic parse ran. The
+   *  row is still usable, but on a Partial Pass — where every real defect is in
+   *  prose — it will look far cleaner than the job actually was. The caller
+   *  MUST say so rather than quietly filing a flattering history. */
+  degraded: boolean;
+  degradedReason?: string;
   source: "council" | "consultant";
   inspectionCode: string | null;
   inspectionType: string | null;
@@ -188,6 +194,8 @@ export async function extractInspection(opts: {
 
   const anthropic = new Anthropic({ maxRetries: 3 });
   let modelOut: Record<string, unknown> = {};
+  let degraded = false;
+  let degradedReason: string | undefined;
   try {
     const resp = await anthropic.messages.create({
       model: MODEL,
@@ -210,7 +218,13 @@ ${trimForModel(clean)}`,
     modelOut = JSON.parse(text);
   } catch (e) {
     console.error("inspection extraction failed:", e);
-    // Fall through: the deterministic pass below still produces a usable row.
+    // Fall through: the deterministic pass below still produces a usable row —
+    // but flag it, because on a Partial Pass that row is misleadingly clean.
+    degraded = true;
+    degradedReason =
+      e instanceof Anthropic.APIError && e.status === 400 && /credit balance/i.test(String(e.message))
+        ? "the assistant is out of credit"
+        : "the assistant couldn't be reached";
   }
 
   const inspectionCode = (str(modelOut.inspection_code) || header.code || fromName.code || null)?.toUpperCase() ?? null;
@@ -246,6 +260,8 @@ ${trimForModel(clean)}`,
     // when the model call failed, so a transient API error doesn't get reported
     // to the user as "that isn't an inspection report".
     isInspectionReport: modelOut.is_inspection_report !== false,
+    degraded,
+    degradedReason,
     source: str(modelOut.source) === "consultant" ? "consultant" : inspectionCode || header.code ? "council" : "consultant",
     inspectionCode,
     inspectionType: str(modelOut.inspection_type) || codeName(inspectionCode) || known?.name || header.typeName || null,

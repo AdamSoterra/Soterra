@@ -122,14 +122,23 @@ function queryFor(code: string | null, title: string): string {
   return [c, title].filter(Boolean).join(" ");
 }
 
+export type GeneratedItem = { title: string; detail: string; source: string; sourceRef: string | null; category: string };
+export type GenerateResult =
+  | { ok: true; items: GeneratedItem[] }
+  // "empty" = the sources genuinely had nothing. "failed" = the assistant
+  // couldn't be reached at all. Telling a site manager "upload your drawings"
+  // when the real problem is an API outage sends them off fixing the wrong
+  // thing, so the two are kept apart all the way to the message on screen.
+  | { ok: false; reason: "empty" | "failed"; message: string };
+
 export async function generateChecklistItems(
   scope: Scope,
   opts: { kind: ChecklistKind; inspectionCode: string | null; title: string }
-): Promise<{ title: string; detail: string; source: string; sourceRef: string | null; category: string }[]> {
+): Promise<GenerateResult> {
   // The CCC pack is a fixed evidence list, not a retrieval problem — the
   // documents a council wants don't change per site.
   if (opts.kind === "ccc") {
-    return CCC_PACK.map((c) => ({ title: c.title, detail: c.detail, source: "ccc", sourceRef: "CCC evidence pack", category: c.category }));
+    return { ok: true, items: CCC_PACK.map((c) => ({ title: c.title, detail: c.detail, source: "ccc", sourceRef: "CCC evidence pack", category: c.category })) };
   }
 
   const q = queryFor(opts.inspectionCode, opts.title);
@@ -174,8 +183,7 @@ export async function generateChecklistItems(
     });
     const text = resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
     const parsed = JSON.parse(text) as { items?: Record<string, unknown>[] };
-    const items = Array.isArray(parsed.items) ? parsed.items : [];
-    return items
+    const items = (Array.isArray(parsed.items) ? parsed.items : [])
       .map((r) => ({
         title: String(r.title ?? "").trim(),
         detail: String(r.detail ?? "").trim(),
@@ -184,9 +192,22 @@ export async function generateChecklistItems(
         category: isCategory(r.category) ? r.category : "Other",
       }))
       .filter((r) => r.title.length > 2);
+    if (!items.length) {
+      return {
+        ok: false,
+        reason: "empty",
+        message: planPages.length
+          ? "Nothing solid enough to check came out of the drawings, the Code or your history for that inspection. Try a different inspection type, or add the items by hand."
+          : "This site has no drawings uploaded yet, so there's nothing to build the check from. Upload the plan set first — or add the items by hand.",
+      };
+    }
+    return { ok: true, items };
   } catch (e) {
     console.error("checklist generation failed:", e);
-    return [];
+    const msg = e instanceof Anthropic.APIError && e.status === 400 && /credit balance/i.test(String(e.message))
+      ? "The assistant is out of credit — top up the Anthropic account and this will work again."
+      : "The assistant couldn't be reached just now. Give it a moment and try again.";
+    return { ok: false, reason: "failed", message: msg };
   }
 }
 

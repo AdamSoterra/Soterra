@@ -58,6 +58,11 @@ for (const f of files) {
     }
 
     const extracted = await extractInspection({ text, filename: f });
+    if (extracted.degraded) {
+      console.log(`  FAIL  ${doc} — ${extracted.degradedReason}; only the deterministic parse ran, so this was NOT filed`);
+      skipped++;
+      continue;
+    }
     if (!extracted.isInspectionReport) {
       console.log(`  skip  ${doc} — not an inspection report`);
       skipped++;
