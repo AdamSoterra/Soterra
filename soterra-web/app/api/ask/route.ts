@@ -12,8 +12,7 @@ import {
 } from "@/lib/date-tz";
 import { resolveProjectId, listMembers } from "@/lib/project";
 import { computeDf, excerpt, retrieve } from "@/lib/retrieve";
-import { currentRevisionsOnly } from "@/lib/sheetRev";
-import indexData from "@/data/arthur-road-index.json";
+import { DEMO_ID, getProjectIndex, type Page } from "@/lib/projectIndex";
 
 export const runtime = "nodejs";
 // 180, not 60: Montázs measured a ~50-item update_events_bulk streaming ~2000
@@ -22,7 +21,6 @@ export const runtime = "nodejs";
 // user — the exact bulk failure mode we're trying to kill.
 export const maxDuration = 180;
 
-const DEMO_ID = "1-arthur-road"; // the seeded demo site keeps its bundled plan index
 const MODEL = "claude-sonnet-4-6";
 const DAILY_LIMIT = 300;
 const KINDS = ["inspection", "delivery", "pour", "meeting", "reminder", "other"] as const;
@@ -32,36 +30,7 @@ type Member = { userId: string; name: string | null; title: string | null };
 
 // ── Retrieval index shapes. Both plan pages and code pages carry `.text`, so the
 //    TF-IDF retrieval below is generic over anything with text. ──
-type Page = { doc: string; disc: string; file: string; page: number; npages: number; code: string; title: string; text: string; uploadedAt?: number };
-const INDEX = indexData as unknown as Page[];
 
-// A project's plan index: uploaded pages (Neon plan_pages) + the bundled demo set
-// for the demo site. Loaded per call so a fresh upload shows up immediately.
-async function getProjectIndex(projectId: string): Promise<{ pages: Page[]; df: Map<string, number> }> {
-  const rows = await db
-    .select({
-      doc: planPages.doc, file: planPages.file, page: planPages.page, npages: planPages.npages,
-      code: planPages.code, title: planPages.title, disc: planPages.disc, text: planPages.text,
-      createdAt: planPages.createdAt,
-    })
-    .from(planPages)
-    .where(eq(planPages.projectId, projectId));
-  let pages: Page[] = rows.map((r) => ({
-    doc: r.doc, disc: r.disc ?? "", file: r.file ?? "", page: r.page, npages: r.npages,
-    code: r.code ?? "", title: r.title ?? "", text: r.text, uploadedAt: r.createdAt?.getTime() ?? 0,
-  }));
-  if (projectId === DEMO_ID) pages = [...INDEX.map((p) => ({ ...p, uploadedAt: 0 })), ...pages];
-  // Drop superseded revisions BEFORE anything else sees them. Uploading
-  // "…-Rev.3" doesn't overwrite "…-Rev.1" (different doc name, so the
-  // replace-by-doc in indexPdf can't fire), which left both revisions in the
-  // corpus and a superseded detail could be retrieved and cited. Sorting
-  // newest-first and telling the model to prefer the latest was only ever a
-  // soft guard — TF-IDF can rank the old sheet higher.
-  pages = currentRevisionsOnly(pages);
-  // Newest-first so, where two pages still tie, the latest-uploaded wins.
-  pages.sort((a, b) => (b.uploadedAt ?? 0) - (a.uploadedAt ?? 0));
-  return { pages, df: computeDf(pages) };
-}
 function pageLabel(p: Page): string {
   const bits = [p.doc];
   if (p.code) bits.push(p.code);
@@ -168,7 +137,7 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
   {
     name: "create_event",
     description:
-      "Add an event to the site calendar (inspection, delivery, pour, meeting, reminder…). SAVE-FIRST: as soon as you have a title + date, call this immediately. Compute relative dates yourself. Set `assignee` to a crew member's name when the user books something FOR a specific person ('book a delivery for the site manager'). Set `kind` only when the type is clear.",
+      "Add an event to the site calendar (inspection, delivery, pour, meeting, reminder…). SAVE-FIRST: as soon as you have a title + date, call this immediately. Compute relative dates yourself. Set `assignee` to a crew member's name when the user books something FOR a specific person ('book a delivery for the site manager'). Set `kind` only when the type is clear. Set `reminder` in this SAME call when they ask to be reminded — do not create then update.",
     input_schema: {
       type: "object",
       properties: {
@@ -180,6 +149,7 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
         kind: { type: "string", enum: [...KINDS] },
         location: { type: "string" },
         assignee: { type: "string", description: "A crew member's name to make responsible (from the CREW list). Omit if not for a specific person." },
+        reminder: { type: "string", description: "Phone reminder, 'YYYY-MM-DD HH:MM' in project local time (or just 'HH:MM' for the same day). Set it whenever the user asks to be reminded/notified/alerted. It fires ONLY on the assignee's phone, so also set `assignee` — if omitted the speaker is auto-assigned." },
         visibility: { type: "string", enum: ["team", "private"], description: "'team' (whole crew) or 'private' (just the creator)." },
       },
       required: ["title", "date"],
@@ -198,6 +168,7 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
         end_date: { type: "string" },
         end_time: { type: "string" },
         assignee: { type: "string", description: "A crew member's name to assign it to (from the CREW list)." },
+        reminder: { type: "string", description: "Phone reminder, 'YYYY-MM-DD HH:MM' in project local time (or just 'HH:MM' for the same day). Set it whenever the user asks to be reminded/notified/alerted. It fires ONLY on the assignee's phone, so also set `assignee` — if omitted the speaker is auto-assigned." },
         visibility: { type: "string", enum: ["team", "private"] },
       },
       required: ["title"],
@@ -364,6 +335,7 @@ function eventInsertFromInput(input: Record<string, unknown>, ctx: Ctx) {
   const endsAt = resolveEndsAt(date, time, s(input.end_date), s(input.end_time));
   const { assigneeId, assigneeName } = resolveAssignee(input, ctx.members);
   const visRaw = s(input.visibility);
+  const rem = reminderFromInput(input, date);
   return {
     projectId: ctx.projectId,
     creatorId: ctx.userId,
@@ -379,7 +351,31 @@ function eventInsertFromInput(input: Record<string, unknown>, ctx: Ctx) {
     // Default private (never auto-broadcast); but assigning to someone means it's
     // shared with at least them, so an assigned item defaults to team-visible.
     visibility: visRaw === "team" ? "team" : visRaw === "private" ? "private" : assigneeId ? "team" : "private",
+    // Set at creation so "book the inspection Tuesday and remind me an hour
+    // before" is ONE tool call. Previously `reminder` existed only on
+    // update_event, so the assistant had to create then update — two calls, and
+    // it often didn't bother, silently dropping the reminder the user asked for.
+    reminderAt: rem,
+    // A reminder fires ONLY on the assignee's phone, so an unassigned reminder
+    // reminds nobody, silently, forever. The update path already guards this
+    // (computeEventUpdateFields); creation needs the same guard. NB: visibility
+    // above is deliberately computed from the EXPLICIT assignee, so a private
+    // self-reminder doesn't get broadcast to the crew by this fallback.
+    ...(rem && !assigneeId ? { assigneeId: ctx.userId, assigneeName: ctx.creatorName ?? null } : {}),
   };
+}
+// A reminder fires only on the assignee's phone, so the item must be assigned —
+// the route already auto-assigns the speaker when a reminder is set on an
+// unassigned item. This just parses the value.
+function reminderFromInput(input: Record<string, unknown>, fallbackDate?: string | null): Date | null {
+  const r = s(input.reminder);
+  if (!r) return null;
+  const m = r.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})$/);
+  if (m) return zonedWallClockToUtc(m[1], m[2]);
+  // Tolerate a bare "HH:MM" by pinning it to the item's own day.
+  const t = r.match(/^(\d{2}:\d{2})$/);
+  if (t && fallbackDate) return zonedWallClockToUtc(fallbackDate, t[1]);
+  return null;
 }
 function taskInsertFromInput(input: Record<string, unknown>, ctx: Ctx) {
   const title = s(input.title)!;
@@ -389,6 +385,7 @@ function taskInsertFromInput(input: Record<string, unknown>, ctx: Ctx) {
   const endsAt = dueDate ? resolveEndsAt(dueDate, dueTime, s(input.end_date), s(input.end_time)) : null;
   const { assigneeId, assigneeName } = resolveAssignee(input, ctx.members);
   const visRaw = s(input.visibility);
+  const taskRem = reminderFromInput(input, dueDate);
   return {
     projectId: ctx.projectId,
     creatorId: ctx.userId,
@@ -399,6 +396,9 @@ function taskInsertFromInput(input: Record<string, unknown>, ctx: Ctx) {
     assigneeId,
     assigneeName,
     visibility: visRaw === "team" ? "team" : visRaw === "private" ? "private" : assigneeId ? "team" : "private",
+    reminderAt: taskRem,
+    // Same unassigned-reminder guard as events — see eventInsertFromInput.
+    ...(taskRem && !assigneeId ? { assigneeId: ctx.userId, assigneeName: ctx.creatorName ?? null } : {}),
   };
 }
 

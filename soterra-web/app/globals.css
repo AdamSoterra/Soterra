@@ -196,6 +196,21 @@ html.is-capacitor .composer-wrap{padding-bottom:calc(10px + env(safe-area-inset-
 .ev .when-t{font-weight:500;color:var(--slate)}
 .ev .body{flex:1;min-width:0}.ev .body b{font-size:14px;color:var(--navy);display:block}.ev .body small{font-size:12.5px;color:var(--slate)}
 .ev .tag{font-size:10.5px;font-weight:600;padding:4px 11px;border-radius:8px;white-space:nowrap}
+/* On a phone the single flex row ran out of width: the 82px date column plus a
+   nowrap tag squeezed the title into 2-3 lines and the sub-line collided with
+   the tag. Re-lay it as a grid — date + tag + ✕ on the first line, title and
+   sub-line spanning the full width underneath, colour bar spanning both. */
+@media(max-width:520px){
+  .ev{display:grid;grid-template-columns:4px 1fr auto auto;column-gap:10px;row-gap:6px;padding:13px;align-items:center}
+  .ev .bar{grid-area:1/1/3/2;align-self:stretch}
+  .ev .when{grid-area:1/2/2/3;width:auto}
+  .ev .when br{display:none}
+  .ev .when .when-t{margin-left:7px}
+  .ev .tag{grid-area:1/3/2/4}
+  .ev .row-x{grid-area:1/4/2/5}
+  .ev .body{grid-area:2/2/3/5;min-width:0}
+  .ev .body b{overflow-wrap:anywhere}
+}
 
 /* calendar header controls: Month/Agenda toggle + month nav + Today/New */
 .seg{display:inline-flex;background:#fff;border:1px solid var(--line);border-radius:11px;padding:3px;box-shadow:0 1px 2px rgba(12,42,71,.04)}
