@@ -393,3 +393,88 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .inst-foot{margin-top:30px}
 .inst-foot a{font-size:13.5px;color:var(--slate);text-decoration:none;font-weight:500}
 .inst-foot a:hover{color:var(--brand)}
+
+/* ═══ Insights + pre-inspection checks ═══════════════════════════════════
+   Follows the existing ladder exactly: 12-14px radius on rows, 16-18px on
+   panels, the 0 2px 12px resting shadow, rgba(65,195,255,.14) for selected. */
+
+/* Shared progress bar — promoted from the inline upload bar so the checklist
+   rows, the category ranking and the uploader all use one thing. */
+.upbar{width:80%;max-width:360px;height:6px;border-radius:99px;background:rgba(148,166,190,.25);overflow:hidden;margin-top:6px}
+.upbar-fill{height:100%;background:var(--brand);transition:width .2s}
+
+/* Ranked category list */
+.rank{display:flex;flex-direction:column;gap:4px}
+.rank-row{display:flex;align-items:center;gap:11px;width:100%;background:none;border:none;padding:9px 8px;border-radius:10px;cursor:pointer;font-family:var(--font);text-align:left;transition:background .15s}
+.rank-row:hover{background:rgba(65,195,255,.07)}
+.rank-row.on{background:rgba(65,195,255,.14)}
+.rank-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.rank-lbl{flex:1;min-width:0;font-size:14px;color:var(--navy);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank-track{height:6px;border-radius:99px;background:rgba(148,166,190,.22);overflow:hidden;flex:0 0 34%;display:block}
+.rank-fill{height:100%;background:var(--brand);border-radius:99px;transition:width .25s;display:block}
+.rank-n{font-size:12.5px;font-weight:700;color:var(--slate);flex-shrink:0;min-width:26px;text-align:right}
+
+/* A repeated failure, or a line item on a past inspection */
+.ins-row{display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:9px;box-shadow:0 2px 12px rgba(12,42,71,.04)}
+.ins-n{font-size:14px;font-weight:700;color:var(--brand-d);flex:0 0 auto;min-width:30px;padding-top:1px}
+.ins-body{flex:1;min-width:0}
+.ins-body b{display:block;font-size:14px;color:var(--navy);font-weight:600;line-height:1.4}
+.ins-body small{display:block;font-size:12.5px;color:var(--slate);margin-top:3px}
+.ins-detail{color:var(--mut) !important;margin-top:5px !important;line-height:1.5}
+.cat-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;margin-top:6px}
+
+/* Status pill — .tag is only sized inside .ev, so this is the standalone one */
+.pill{font-size:10.5px;font-weight:600;padding:5px 11px;border-radius:8px;white-space:nowrap;flex:0 0 auto;align-self:center}
+.pill.pass{background:rgba(16,185,129,.12);color:var(--green)}
+.pill.fail{background:rgba(239,68,68,.1);color:var(--red)}
+.pill.open{background:rgba(245,158,11,.14);color:var(--amber)}
+.pill.na{background:rgba(146,166,190,.16);color:var(--slate)}
+
+/* "show all" reset next to a filtered section heading */
+.pg-clear{background:none;border:none;color:var(--brand);font-family:var(--font);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;margin-left:10px;padding:0}
+.pg-clear:hover{color:var(--brand-d)}
+
+/* Checks hanging off a calendar event */
+.ev-checks{display:flex;flex-direction:column;gap:6px;margin-top:9px}
+.ev-check{align-self:flex-start;max-width:100%;background:rgba(65,195,255,.1);border:none;border-radius:9px;padding:7px 11px;font-family:var(--font);font-size:12.5px;font-weight:600;color:var(--brand-d);cursor:pointer;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:background .15s}
+.ev-check:hover{background:rgba(65,195,255,.2)}
+.ev-check.new{background:#fff;border:1.5px dashed var(--line);color:var(--slate)}
+.ev-check.new:hover{border-color:rgba(14,143,230,.4);color:var(--brand-d)}
+
+/* One item on a check, as walked on a phone */
+.ck{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 15px;margin-bottom:10px;box-shadow:0 2px 12px rgba(12,42,71,.04);transition:border-color .15s,background .15s}
+.ck-ok{border-color:rgba(16,185,129,.35);background:rgba(16,185,129,.03)}
+.ck-issue{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.04)}
+.ck-na{opacity:.55}
+.ck-head{display:flex;gap:10px;align-items:flex-start}
+.ck-txt{flex:1;min-width:0}
+.ck-txt b{display:block;font-size:14.5px;color:var(--navy);font-weight:600;line-height:1.4}
+.ck-txt small{display:block;font-size:13px;color:var(--slate);margin-top:4px;line-height:1.5}
+.ck-meta{display:flex;gap:7px;align-items:center;margin-top:8px;flex-wrap:wrap}
+/* Where the item came from. Loud on purpose: an item you can't trace is a guess. */
+.src{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:6px;background:rgba(146,166,190,.16);color:var(--slate);flex:0 0 auto}
+.src-plans{background:rgba(14,116,189,.1);color:var(--brand-d)}
+.src-code{background:rgba(139,92,246,.12);color:#7C3AED}
+.src-history{background:rgba(239,68,68,.1);color:var(--red)}
+.src-ccc{background:rgba(16,185,129,.12);color:var(--green)}
+.src-ref{font-size:11.5px;color:var(--mut);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ck-actions{margin-top:11px}
+.ck-extra{margin-top:11px}
+.ck-note{font-size:13px;color:var(--navy);background:var(--bg);border-radius:10px;padding:9px 11px;line-height:1.5;cursor:pointer}
+.ck-note:hover{background:rgba(65,195,255,.09)}
+.ck-tools{display:flex;gap:8px;align-items:center;margin-top:10px}
+.ck-tools button{background:none;border:none;font-family:var(--font);font-size:12.5px;font-weight:600;color:var(--slate);cursor:pointer;padding:4px 0}
+.ck-tools button:hover{color:var(--brand-d)}
+.ck-by{margin-left:auto;font-size:11.5px;color:var(--mut)}
+
+/* Site photos on a check */
+.shots{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.shot{width:56px;height:56px;border-radius:12px;border:1px solid var(--line);object-fit:cover;background:var(--bg);flex-shrink:0}
+
+/* On a phone the bar was eating the label — "Weathertightness / Cladding" is
+   the longest name and the one that matters most, so give it the room. */
+@media(max-width:560px){
+  .rank-track{flex:0 0 20%}
+  .rank-lbl{font-size:13.5px}
+  .rank-row{gap:9px;padding:9px 6px}
+}

@@ -49,9 +49,12 @@ export type ExtractedInspection = {
 
 // ─── Deterministic pass ──────────────────────────────────────────────────
 
-/** Council filenames carry the lot: BCO…_…_ICA_Fail_20240221.pdf */
+/** Council filenames carry the lot: BCO…_…_ICA_Fail_20240221.pdf
+ *  NB the code can contain a digit — IF1, IF2 — so it is [A-Z][A-Z0-9]{1,3},
+ *  not [A-Z]{2,4}. The all-letters form silently dropped every final
+ *  inspection, which is the one that matters most. */
 export function parseCouncilFilename(filename: string): { code: string | null; outcome: string | null; date: string | null } {
-  const m = filename.match(/_([A-Z]{2,4})_(Pass|Fail|Partial Pass|Completed|Not Ready)_(\d{8})/i);
+  const m = filename.match(/_([A-Z][A-Z0-9]{1,3})_(Pass|Fail|Partial Pass|Completed|Not Ready)_(\d{8})/i);
   if (!m) return { code: null, outcome: null, date: null };
   const d = m[3];
   return {
@@ -86,7 +89,7 @@ export function parseCouncilFails(text: string): { title: string }[] {
 
 /** Header fields the council prints in a fixed shape. */
 export function parseCouncilHeader(text: string): { code: string | null; typeName: string | null; date: string | null; outcome: string | null } {
-  const codeM = text.match(/Inspection Type Code\s+(.{0,45}?)\(([A-Z]{2,4})\)/);
+  const codeM = text.match(/Inspection Type Code\s+(.{0,45}?)\(([A-Z][A-Z0-9]{1,3})\)/);
   const dateM = text.match(/Date of Inspection\s+(\d{2})-(\d{2})-(\d{4})/);
   const outM = text.match(/Inspection Outcome\s+(Pass|Fail|Partial Pass|Completed|Not Ready)/i);
   return {

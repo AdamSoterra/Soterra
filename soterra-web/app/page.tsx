@@ -4,7 +4,7 @@ import { useUser, useClerk } from "@clerk/nextjs";
 import { upload } from "@vercel/blob/client";
 import Landing from "./landing";
 
-type Tab = "assistant" | "calendar" | "tasks" | "plans" | "upload";
+type Tab = "assistant" | "calendar" | "tasks" | "plans" | "upload" | "insights";
 type Cite = { code: string; title: string; sub: string; ans: string; hlTag: string };
 type AsstCard = {
   id: string;
@@ -26,6 +26,59 @@ type Attachment = { kind: "image" | "pdf"; mediaType: string; data: string; name
 type Project = { id: string; name: string; code: string; role: string; timezone?: string };
 type Member = { userId: string; name: string; title: string | null; role: string; colorIndex: number; isMe: boolean };
 type PlanDoc = { doc: string; npages: number; indexed: number; file: string | null; uploadedAt: string };
+
+// ─── Inspection history + checklists ───
+type CategoryCount = { category: string; count: number };
+type TopItem = { title: string; category: string; count: number; lastSeen: string | null };
+type InspectionRow = {
+  id: string; doc: string; projectId: string; projectName: string | null;
+  source: string; inspectionCode: string | null; inspectionType: string | null;
+  outcome: string; inspectedOn: string | null; itemCount: number; createdAt: string;
+};
+type Insights = {
+  company: { name: string | null; sites: number };
+  summary: { inspections: number; failedItems: number; cleanPasses: number; returnVisits: number };
+  categories: CategoryCount[];
+  topItems: TopItem[];
+  inspections: InspectionRow[];
+};
+type ChecklistPhoto = { id: string; itemId: string; url: string; caption: string | null };
+type ChecklistItem = {
+  id: string; ord: number; category: string | null; title: string; detail: string | null;
+  source: string; sourceRef: string | null; status: "pending" | "ok" | "issue" | "na";
+  note: string | null; checkedByName: string | null; photos: ChecklistPhoto[];
+};
+type ChecklistHead = {
+  id: string; eventId: string | null; kind: string; title: string; inspectionCode: string | null;
+  status: string; createdByName: string | null; createdAt: string;
+  total?: number; done?: number; issues?: number;
+};
+type ChecklistFull = { checklist: ChecklistHead; items: ChecklistItem[] };
+
+// Category colours — must match lib/categories.ts CATEGORY_COLOR.
+const CAT_COLOR: Record<string, string> = {
+  Fire: "#EF4444",
+  "Weathertightness / Cladding": "#0E74BD",
+  Structural: "#0A2540",
+  "Plumbing & Drainage": "#06B6D4",
+  Electrical: "#F59E0B",
+  Mechanical: "#8B5CF6",
+  "Interior / Linings": "#10B981",
+  "Access & Barriers": "#EC4899",
+  "Site / External": "#65A30D",
+  Acoustic: "#7C3AED",
+  Seismic: "#B45309",
+  Architect: "#0891B2",
+  Other: "#94A6BE",
+};
+const catColor = (c: string) => CAT_COLOR[c] ?? "#94A6BE";
+
+const OUTCOME_PILL: Record<string, string> = { pass: "pass", partial: "open", fail: "fail", unknown: "na" };
+const OUTCOME_LABEL: Record<string, string> = { pass: "Passed", partial: "Partial", fail: "Failed", unknown: "—" };
+
+// Where a checklist item came from. An item with no source is a guess, so the
+// badge is deliberately loud about which of the three sources backed it.
+const SRC_LABEL: Record<string, string> = { plans: "Plans", code: "Code", history: "Our history", ccc: "CCC pack", manual: "Added" };
 
 // Soterra's project timezone. TODO: per-project tz once projects carry one.
 const TZ = "Pacific/Auckland";
@@ -179,11 +232,13 @@ const I = {
   plans: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3 3 7.5 12 12l9-4.5L12 3z" /><path d="M3 12l9 4.5L21 12M3 16.5 12 21l9-4.5" /></svg>),
   up: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 20h16" /></svg>),
   tasks: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 6h12M9 12h12M9 18h12" /><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" /></svg>),
+  insights: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>),
 };
 const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "assistant", label: "Assistant", icon: I.chat },
   { id: "calendar", label: "Calendar", icon: I.cal },
   { id: "tasks", label: "Tasks", icon: I.tasks },
+  { id: "insights", label: "Insights", icon: I.insights },
   { id: "plans", label: "Plans", icon: I.plans },
   { id: "upload", label: "Upload", icon: I.up },
 ];
@@ -303,6 +358,7 @@ export default function Page() {
   const [setupCode, setSetupCode] = useState("");
   const [setupPersonName, setSetupPersonName] = useState("");
   const [setupTitle, setSetupTitle] = useState("");
+  const [setupCompany, setSetupCompany] = useState("");
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupErr, setSetupErr] = useState<string | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
@@ -351,6 +407,30 @@ export default function Page() {
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [showEventForm, setShowEventForm] = useState(false);
   const [showTaskForm, setShowTaskForm] = useState(false);
+
+  // ─── Insights (company-wide inspection history) ───
+  const [insights, setInsights] = useState<Insights | null>(null);
+  const [insightsLoaded, setInsightsLoaded] = useState(false);
+  const [catFilter, setCatFilter] = useState<string | null>(null);
+  const [openInspection, setOpenInspection] = useState<{ inspection: InspectionRow; items: { id: string; category: string; title: string; detail: string | null; location: string | null }[] } | null>(null);
+  const reportFileRef = useRef<HTMLInputElement>(null);
+  const [repCurrent, setRepCurrent] = useState<{ name: string; phase: string; pct: number } | null>(null);
+  const [repItems, setRepItems] = useState<{ name: string; ok: boolean; note: string }[]>([]);
+
+  // ─── Checklists (attached to a calendar event) ───
+  const [checklists, setChecklists] = useState<ChecklistHead[]>([]);
+  const [clCodes, setClCodes] = useState<{ code: string; name: string }[]>([]);
+  const [openChecklist, setOpenChecklist] = useState<ChecklistFull | null>(null);
+  const [clBusy, setClBusy] = useState(false);
+  const [clErr, setClErr] = useState<string | null>(null);
+  // The "new checklist" sheet, opened from an event or from Insights.
+  const [newCl, setNewCl] = useState<{ eventId: string | null; eventTitle: string | null } | null>(null);
+  const [newClKind, setNewClKind] = useState<"inspection" | "ccc">("inspection");
+  const [newClCode, setNewClCode] = useState("");
+  const [noteFor, setNoteFor] = useState<string | null>(null); // item id whose note box is open
+  const [noteText, setNoteText] = useState("");
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const photoForRef = useRef<string | null>(null); // which item a picked photo belongs to
 
   // fetch() wrapper that tags every request with the current site so the server
   // can scope + authorise it. All per-site routes go through this.
@@ -414,6 +494,29 @@ export default function Page() {
     }
   };
 
+  const loadInsights = async (category?: string | null) => {
+    try {
+      const qs = category ? `?category=${encodeURIComponent(category)}` : "";
+      const res = await apiFetch(`/api/insights${qs}`);
+      const data = await res.json();
+      if (data && data.summary) setInsights(data);
+    } catch {
+      /* leave as-is on failure */
+    } finally {
+      setInsightsLoaded(true);
+    }
+  };
+  const loadChecklists = async () => {
+    try {
+      const res = await apiFetch("/api/checklists");
+      const data = await res.json();
+      if (Array.isArray(data.checklists)) setChecklists(data.checklists);
+      if (Array.isArray(data.codes)) setClCodes(data.codes);
+    } catch {
+      /* ignore */
+    }
+  };
+
   // Switch to a site: point the fetch header at it, reset per-site data, reload.
   const selectProject = (id: string) => {
     projRef.current = id;
@@ -422,6 +525,11 @@ export default function Page() {
     setEvents([]); setTasks([]); setThreads([]); setMessages([]); setThreadId(null); setDocs([]);
     setEvLoaded(false); setTaskLoaded(false); setDocsLoaded(false);
     setMembers([]); setSiteCode(null);
+    // Insights are company-wide, but the fetch is authorised through the current
+    // site — so a switch still has to re-fetch, and must not leave the old
+    // site's checklists on screen.
+    setInsights(null); setInsightsLoaded(false); setCatFilter(null); setOpenInspection(null);
+    setChecklists([]); setOpenChecklist(null); setRepItems([]);
     loadThreads();
     loadMembers();
   };
@@ -480,8 +588,12 @@ export default function Page() {
     if ((tab === "calendar" || tab === "assistant") && !evLoaded) loadEvents();
     if ((tab === "tasks" || tab === "assistant") && !taskLoaded) loadTasks();
     if ((tab === "plans" || tab === "upload") && !docsLoaded) loadPlans();
+    if (tab === "insights" && !insightsLoaded) { loadInsights(); loadChecklists(); }
+    // The calendar needs the checklist counts to show which inspections are
+    // already prepped, so load them alongside events.
+    if (tab === "calendar" && !checklists.length) loadChecklists();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, evLoaded, taskLoaded, docsLoaded, projectId]);
+  }, [tab, evLoaded, taskLoaded, docsLoaded, insightsLoaded, projectId]);
 
   // Manual delete — so a wrong booking can be fixed in one tap instead of going
   // through the assistant. Optimistic; resyncs from the server on failure.
@@ -853,14 +965,19 @@ export default function Page() {
   };
 
   // ─── site create / join ───
-  const resetSetup = () => { setSetupName(""); setSetupCode(""); setSetupErr(null); setCreatedCode(null); setSetupMode("create"); setSetupPersonName(user?.firstName || ""); setSetupTitle(""); };
+  const resetSetup = () => { setSetupName(""); setSetupCode(""); setSetupErr(null); setCreatedCode(null); setSetupMode("create"); setSetupPersonName(user?.firstName || ""); setSetupTitle(""); setSetupCompany(""); };
   const closeSetup = () => { setSetupOpen(false); resetSetup(); };
   const createSite = async () => {
     const name = setupName.trim();
     if (!name) { setSetupErr("Give your site a name."); return; }
+    // Only the FIRST site names the company — after that the server puts every
+    // new site under the company this person already belongs to, so their
+    // failure history stays one history instead of splitting in two.
+    const firstSite = projects.length === 0;
+    if (firstSite && !setupCompany.trim()) { setSetupErr("Enter your company name."); return; }
     setSetupBusy(true); setSetupErr(null);
     try {
-      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name, personName: setupPersonName.trim() || null, title: setupTitle.trim() || null }) });
+      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name, companyName: setupCompany.trim() || null, personName: setupPersonName.trim() || null, title: setupTitle.trim() || null }) });
       const data = await res.json();
       if (!res.ok || !data.project) throw new Error(data.error || "Couldn't create the site.");
       setProjects((ps) => [...ps, data.project]);
@@ -971,6 +1088,156 @@ export default function Page() {
     setUpCurrent(null);
     loadPlans();
   };
+  // ─── inspection reports → this company's failure history ───
+  const onReportFiles = async (fileList: FileList | File[]) => {
+    const pid = projRef.current;
+    if (!pid || repCurrent) return;
+    const pdfs = Array.from(fileList).filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    for (const f of pdfs) {
+      setRepCurrent({ name: f.name, phase: "Uploading", pct: 0 });
+      try {
+        const blob = await upload(`${pid}/${f.name}`, f, {
+          access: "private",
+          handleUploadUrl: "/api/upload/token",
+          clientPayload: JSON.stringify({ projectId: pid }),
+          contentType: "application/pdf",
+          onUploadProgress: (p) => setRepCurrent({ name: f.name, phase: "Uploading", pct: Math.round(p.percentage) }),
+        });
+        setRepCurrent({ name: f.name, phase: "Reading the report", pct: 100 });
+        const res = await apiFetch("/api/inspections", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pathname: blob.pathname, filename: f.name }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "couldn't read that report");
+        const note = data.items === 0
+          ? `${OUTCOME_LABEL[data.outcome] ?? "Filed"} — nothing outstanding`
+          : `${data.items} item${data.items === 1 ? "" : "s"} · ${data.categories.slice(0, 2).join(", ")}${data.categories.length > 2 ? "…" : ""}`;
+        setRepItems((prev) => [{ name: f.name, ok: true, note }, ...prev]);
+      } catch (e) {
+        setRepItems((prev) => [{ name: f.name, ok: false, note: e instanceof Error ? e.message : "upload failed" }, ...prev]);
+      }
+    }
+    setRepCurrent(null);
+    setInsightsLoaded(false);
+    loadInsights(catFilter);
+  };
+
+  // ─── checklists ───
+  const openChecklistById = async (id: string) => {
+    setClErr(null);
+    try {
+      const res = await apiFetch(`/api/checklists?id=${encodeURIComponent(id)}`);
+      const data = await res.json();
+      if (res.ok && data.checklist) setOpenChecklist(data);
+    } catch {
+      /* ignore */
+    }
+  };
+  const createChecklist = async () => {
+    if (!newCl) return;
+    setClBusy(true); setClErr(null);
+    try {
+      const res = await apiFetch("/api/checklists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId: newCl.eventId,
+          kind: newClKind,
+          inspectionCode: newClKind === "inspection" ? newClCode || null : null,
+          title: newClKind === "ccc" ? "CCC evidence pack" : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.checklist) throw new Error(data.error || "Couldn't build that checklist.");
+      setNewCl(null); setNewClCode("");
+      setOpenChecklist(data);
+      loadChecklists();
+    } catch (e) {
+      setClErr(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setClBusy(false);
+    }
+  };
+  // Tick an item. Optimistic — on site, on a phone, on bad reception, waiting
+  // for a round trip before the tick lands is the difference between a tool
+  // people use and one they don't.
+  const setItemStatus = async (itemId: string, status: ChecklistItem["status"]) => {
+    setOpenChecklist((c) => (c ? { ...c, items: c.items.map((i) => (i.id === itemId ? { ...i, status } : i)) } : c));
+    try {
+      const res = await apiFetch("/api/checklists", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, status }),
+      });
+      if (!res.ok) throw new Error();
+      loadChecklists();
+    } catch {
+      if (openChecklist) openChecklistById(openChecklist.checklist.id); // resync
+    }
+  };
+  const saveNote = async (itemId: string) => {
+    const note = noteText.trim() || null;
+    setOpenChecklist((c) => (c ? { ...c, items: c.items.map((i) => (i.id === itemId ? { ...i, note } : i)) } : c));
+    setNoteFor(null); setNoteText("");
+    try {
+      await apiFetch("/api/checklists", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, note: note ?? "" }),
+      });
+    } catch {
+      if (openChecklist) openChecklistById(openChecklist.checklist.id);
+    }
+  };
+  const onPhotoPicked = async (file: File) => {
+    const pid = projRef.current;
+    const itemId = photoForRef.current;
+    if (!pid || !itemId) return;
+    try {
+      // Resize on the phone before it goes up: a modern camera JPEG is 5-8 MB
+      // and nobody on a site has the bandwidth for that.
+      const small = await resizeImage(file, 1600, 0.82);
+      const blob = await upload(`${pid}/checklists/${Date.now()}-${file.name.replace(/[^\w.-]+/g, "_")}`, small, {
+        access: "private",
+        handleUploadUrl: "/api/upload/token",
+        clientPayload: JSON.stringify({ projectId: pid }),
+        contentType: "image/jpeg",
+      });
+      const res = await apiFetch("/api/checklists", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, photo: { url: blob.pathname } }),
+      });
+      if (!res.ok) throw new Error();
+      if (openChecklist) openChecklistById(openChecklist.checklist.id);
+    } catch {
+      setClErr("Couldn't attach that photo — try again.");
+    }
+  };
+  const closeOutChecklist = async (status: "open" | "done") => {
+    if (!openChecklist) return;
+    const id = openChecklist.checklist.id;
+    setOpenChecklist((c) => (c ? { ...c, checklist: { ...c.checklist, status } } : c));
+    try {
+      await apiFetch("/api/checklists", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checklistId: id, status }),
+      });
+      loadChecklists();
+    } catch {
+      openChecklistById(id);
+    }
+  };
+  const deleteChecklist = async (id: string) => {
+    if (!window.confirm("Delete this checklist? Everything ticked off on it goes too.")) return;
+    setOpenChecklist(null);
+    setChecklists((cs) => cs.filter((c) => c.id !== id));
+    try {
+      await apiFetch(`/api/checklists?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    } catch {
+      loadChecklists();
+    }
+  };
+
   const deletePlan = async (doc: string) => {
     if (!window.confirm(`Remove "${doc}" from this site's index? The assistant will stop using it.`)) return;
     setDocs((ds) => ds.filter((d) => d.doc !== doc)); // optimistic
@@ -991,6 +1258,18 @@ export default function Page() {
     () => (crewFilter ? tasks.filter((t) => t.assigneeId === crewFilter) : tasks),
     [tasks, crewFilter]
   );
+  // Checks indexed by the event they hang off, so the day sheet can show at a
+  // glance which inspections are already prepped.
+  const checksByEvent = useMemo(() => {
+    const m = new Map<string, ChecklistHead[]>();
+    for (const c of checklists) {
+      if (!c.eventId) continue;
+      const list = m.get(c.eventId) ?? [];
+      list.push(c);
+      m.set(c.eventId, list);
+    }
+    return m;
+  }, [checklists]);
 
   // Group events by Auckland day-key, time-sorted within each day.
   // A multi-day event lands on EVERY day it spans, not just its start day — we
@@ -1142,6 +1421,9 @@ export default function Page() {
         setMode={setSetupMode}
         name={setupName}
         setName={setSetupName}
+        company={setupCompany}
+        setCompany={setSetupCompany}
+        showCompany={projects.length === 0}
         code={setupCode}
         setCode={setSetupCode}
         personName={setupPersonName}
@@ -1593,6 +1875,151 @@ export default function Page() {
             )}
           </div></div>
         )}
+
+        {tab === "insights" && (
+          <div className="page"><div className="page-inner">
+            <div className="cal-top">
+              <div>
+                <div className="page-h">Insights</div>
+                <div className="page-sub" style={{ marginBottom: 0 }}>
+                  {insights?.company.name ? `${insights.company.name} · ` : ""}
+                  what you keep getting pulled up on, across {insights?.company.sites === 1 ? "your site" : `all ${insights?.company.sites ?? ""} sites`}
+                </div>
+              </div>
+              <button className="cal-new" onClick={() => { setNewCl({ eventId: null, eventTitle: null }); setNewClKind("inspection"); setNewClCode(""); setClErr(null); }}>＋ New check</button>
+            </div>
+
+            <input ref={reportFileRef} type="file" accept="application/pdf" multiple style={{ display: "none" }}
+              onChange={(e) => { const fs = e.target.files; if (reportFileRef.current) reportFileRef.current.value = ""; if (fs && fs.length) onReportFiles(fs); }} />
+
+            {!insightsLoaded ? (
+              <div className="page-sub" style={{ marginTop: 18 }}>Loading…</div>
+            ) : (insights?.summary.inspections ?? 0) === 0 ? (
+              <div className="drop" style={{ marginTop: 18, cursor: repCurrent ? "default" : "pointer" }} onClick={() => { if (!repCurrent) reportFileRef.current?.click(); }}>
+                <div className="ic">📋</div>
+                <b>{repCurrent ? `${repCurrent.phase}…` : "Add your inspection reports"}</b>
+                <p>
+                  {repCurrent
+                    ? repCurrent.name
+                    : "Drop in the council and consultant reports you've already had — Soterra reads each one, keeps only what failed, and tags it. After a handful you can see what your crew actually gets pulled up on, and the assistant can build a check from it."}
+                </p>
+                {repCurrent ? (
+                  <div className="upbar"><div className="upbar-fill" style={{ width: `${repCurrent.phase === "Uploading" ? repCurrent.pct || 4 : 100}%` }} /></div>
+                ) : (
+                  <span className="soon">Choose reports</span>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="idx" style={{ marginTop: 4 }}>
+                  <div>
+                    <div className="big">{Math.round(((insights!.summary.cleanPasses || 0) / Math.max(insights!.summary.inspections, 1)) * 100)}%</div>
+                    <small>passed first time</small>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <small>
+                      {insights!.summary.inspections} inspection{insights!.summary.inspections === 1 ? "" : "s"} filed · {insights!.summary.failedItems} item{insights!.summary.failedItems === 1 ? "" : "s"} picked up · {insights!.summary.returnVisits} needed the inspector back.
+                    </small>
+                    <span className="grn">● Every failed item below came off one of your own reports</span>
+                  </div>
+                </div>
+
+                <div className="pg-k">Where you get pulled up</div>
+                <div className="cal-card">
+                  {insights!.categories.length === 0 ? (
+                    <div className="page-sub" style={{ marginBottom: 0 }}>Nothing failed yet across your filed reports. Enjoy it.</div>
+                  ) : (
+                    <div className="rank">
+                      {insights!.categories.map((c) => {
+                        const max = insights!.categories[0]?.count || 1;
+                        const on = catFilter === c.category;
+                        return (
+                          <button
+                            key={c.category}
+                            className={"rank-row" + (on ? " on" : "")}
+                            onClick={() => { const next = on ? null : c.category; setCatFilter(next); loadInsights(next); }}
+                            title={on ? "Show everything" : `Show only ${c.category}`}
+                          >
+                            <span className="rank-dot" style={{ background: catColor(c.category) }} />
+                            <span className="rank-lbl">{c.category}</span>
+                            <span className="rank-track"><span className="rank-fill" style={{ width: `${Math.round((c.count / max) * 100)}%`, background: catColor(c.category) }} /></span>
+                            <span className="rank-n">{c.count}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pg-k" style={{ marginTop: 22 }}>
+                  {catFilter ? `Most repeated — ${catFilter}` : "Most repeated items"}
+                  {catFilter && <button className="pg-clear" onClick={() => { setCatFilter(null); loadInsights(null); }}>show all</button>}
+                </div>
+                {insights!.topItems.length === 0 ? (
+                  <div className="page-sub">Nothing to show here yet.</div>
+                ) : (
+                  insights!.topItems.map((t, i) => (
+                    <div className="ins-row" key={i}>
+                      <span className="ins-n">{t.count}×</span>
+                      <div className="ins-body">
+                        <b>{t.title}</b>
+                        <small>{t.category}{t.lastSeen ? ` · last ${t.lastSeen}` : ""}</small>
+                      </div>
+                      <span className="cat-dot" style={{ background: catColor(t.category) }} />
+                    </div>
+                  ))
+                )}
+
+                <div className="pg-k" style={{ marginTop: 22 }}>Pre-inspection checks{checklists.length > 0 ? ` (${checklists.length})` : ""}</div>
+                {checklists.length === 0 ? (
+                  <div className="page-sub">
+                    None yet on {projName}. A check is built from this site&apos;s drawings, the Building Code and your own history — tick it off on your phone before the inspector turns up.
+                  </div>
+                ) : (
+                  checklists.map((c) => <ChecklistRow key={c.id} c={c} onOpen={() => openChecklistById(c.id)} />)
+                )}
+
+                <div className="pg-k" style={{ marginTop: 22 }}>Past inspections</div>
+                {insights!.inspections.map((r) => (
+                  <div className="doc" key={r.id} onClick={async () => {
+                    const res = await apiFetch(`/api/inspections?id=${encodeURIComponent(r.id)}`);
+                    const data = await res.json();
+                    if (res.ok) setOpenInspection({ inspection: r, items: data.items || [] });
+                  }}>
+                    <div className="ic spc" style={{ background: r.outcome === "pass" ? "var(--green)" : r.outcome === "fail" ? "var(--red)" : undefined }}>
+                      {r.inspectionCode || (r.source === "council" ? "BCA" : "CON")}
+                    </div>
+                    <div className="dt">
+                      <b>{r.inspectionType || r.doc}</b>
+                      <small>{[r.inspectedOn, r.projectName, `${r.itemCount} item${r.itemCount === 1 ? "" : "s"} to fix`].filter(Boolean).join(" · ")}</small>
+                    </div>
+                    <span className={"pill " + (OUTCOME_PILL[r.outcome] ?? "na")}>{OUTCOME_LABEL[r.outcome] ?? "—"}</span>
+                    <div className="arr">›</div>
+                  </div>
+                ))}
+
+                <div className="pg-k" style={{ marginTop: 22 }}>Add more reports</div>
+                <div className="drop" style={{ padding: "26px 20px", cursor: repCurrent ? "default" : "pointer" }} onClick={() => { if (!repCurrent) reportFileRef.current?.click(); }}>
+                  <b>{repCurrent ? `${repCurrent.phase}…` : "Drop in another inspection report"}</b>
+                  <p>{repCurrent ? repCurrent.name : "Council checklists or a consultant's site observation report — PDF with real text, not a scan."}</p>
+                  {repCurrent && <div className="upbar"><div className="upbar-fill" style={{ width: `${repCurrent.phase === "Uploading" ? repCurrent.pct || 4 : 100}%` }} /></div>}
+                </div>
+              </>
+            )}
+
+            {repItems.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                {repItems.map((it, i) => (
+                  <div key={i} className={"up-row" + (it.ok ? " done" : " error")} style={{ marginBottom: 8 }}>
+                    <span>{it.ok ? "✅" : "⚠️"}</span>
+                    <b style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</b>
+                    <small style={{ marginLeft: "auto", flex: "0 0 auto", color: it.ok ? "var(--green)" : "var(--red)" }}>{it.note}</small>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div></div>
+        )}
       </div>
 
       {/* ─── sheet modal ─── */}
@@ -1662,7 +2089,22 @@ export default function Page() {
               {(eventsByDay.get(openDay)?.length ?? 0) === 0 && (tasksByDay.get(openDay)?.length ?? 0) === 0 && (
                 <div className="page-sub" style={{ marginBottom: 0 }}>Nothing on this day yet. Add an event or task below — or just ask the assistant.</div>
               )}
-              {(eventsByDay.get(openDay) ?? []).map((e) => <EventRow key={e.id} e={e} colorFor={colorFor} onDelete={deleteEvent} />)}
+              {(eventsByDay.get(openDay) ?? []).map((e) => (
+                <EventRow
+                  key={e.id}
+                  e={e}
+                  colorFor={colorFor}
+                  onDelete={deleteEvent}
+                  checks={checksByEvent.get(e.id) ?? []}
+                  onOpenCheck={(id) => { setOpenDay(null); openChecklistById(id); }}
+                  onNewCheck={(ev) => {
+                    setOpenDay(null);
+                    setNewCl({ eventId: ev.id, eventTitle: ev.title });
+                    setNewClKind("inspection");
+                    setNewClCode(""); setClErr(null);
+                  }}
+                />
+              ))}
               {(tasksByDay.get(openDay) ?? []).map((t) => <TaskRow key={t.id} t={t} onToggle={toggleTask} onDelete={deleteTask} />)}
             </div>
             <div className="dm-foot">
@@ -1805,6 +2247,182 @@ export default function Page() {
           </div>
         </div>
       )}
+
+      {/* ─── new pre-inspection check ─── */}
+      {newCl && (
+        <div className="scrim" onClick={() => { if (!clBusy) { setNewCl(null); setClErr(null); } }}>
+          <div className="sheet" style={{ maxWidth: 480, maxHeight: "88vh" }} onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti"><b>New check</b><small>{newCl.eventTitle || projName}</small></div>
+              {!clBusy && <button className="sh-x" onClick={() => { setNewCl(null); setClErr(null); }}>✕</button>}
+            </div>
+            <div className="form-body">
+              <label className="ev-lbl">What&apos;s it for</label>
+              <div className="ev-kinds">
+                <button type="button" className={"ev-kind" + (newClKind === "inspection" ? " act" : "")} onClick={() => setNewClKind("inspection")}>An inspection</button>
+                <button type="button" className={"ev-kind" + (newClKind === "ccc" ? " act" : "")} onClick={() => setNewClKind("ccc")}>CCC evidence</button>
+              </div>
+
+              {newClKind === "inspection" ? (
+                <>
+                  <label className="ev-lbl">Which inspection</label>
+                  <select className="ev-in" value={newClCode} onChange={(e) => setNewClCode(e.target.value)}>
+                    <option value="">Pick the inspection type…</option>
+                    {clCodes.map((c) => <option key={c.code} value={c.code}>{c.name} ({c.code})</option>)}
+                  </select>
+                  <p className="page-sub" style={{ margin: "12px 0 0" }}>
+                    Soterra writes the check from three places: this site&apos;s drawings, the Building Code, and what your company has already been failed on. Every item says where it came from, and anything it can&apos;t back up gets left out.
+                  </p>
+                </>
+              ) : (
+                <p className="page-sub" style={{ margin: "12px 0 0" }}>
+                  The evidence a council wants before it&apos;ll issue the Code Compliance Certificate — energy work certificates, producer statements, LBP records of work, as-builts, truss documentation, cladding and waterproofing certificates. Start it early; the PS4 is usually the long pole.
+                </p>
+              )}
+
+              {clErr && <div className="ev-err">{clErr}</div>}
+
+              <div className="form-actions">
+                <button className="lg-btn primary" style={{ height: 46, margin: 0, flex: 1 }} disabled={clBusy || (newClKind === "inspection" && !newClCode)} onClick={createChecklist}>
+                  {clBusy ? "Reading your plans…" : "Build the check"}
+                </button>
+                <button className="lg-btn" style={{ height: 46, margin: 0, width: "auto", padding: "0 20px" }} disabled={clBusy} onClick={() => { setNewCl(null); setClErr(null); }}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── the check itself: ticked off on site ─── */}
+      {openChecklist && (
+        <div className="scrim" onClick={() => setOpenChecklist(null)}>
+          <div className="sheet" style={{ maxWidth: 560, maxHeight: "90vh" }} onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti">
+                <b>{openChecklist.checklist.title}</b>
+                <small>{openChecklist.items.filter((i) => i.status !== "pending").length} of {openChecklist.items.length} done{openChecklist.items.some((i) => i.status === "issue") ? ` · ${openChecklist.items.filter((i) => i.status === "issue").length} to fix` : ""}</small>
+              </div>
+              <button className="sh-x" onClick={() => setOpenChecklist(null)}>✕</button>
+            </div>
+            <div className="dm-body">
+              {clErr && <div className="ev-err" style={{ marginBottom: 12 }}>{clErr}</div>}
+              {openChecklist.items.map((it) => (
+                <div className={"ck" + (it.status !== "pending" ? " ck-" + it.status : "")} key={it.id}>
+                  <div className="ck-head">
+                    <div className="ck-txt">
+                      <b>{it.title}</b>
+                      {it.detail && <small>{it.detail}</small>}
+                      <div className="ck-meta">
+                        <span className={"src src-" + it.source}>{SRC_LABEL[it.source] ?? it.source}</span>
+                        {it.sourceRef && <span className="src-ref" title={it.sourceRef}>{it.sourceRef}</span>}
+                      </div>
+                    </div>
+                    {it.category && <span className="cat-dot" style={{ background: catColor(it.category) }} title={it.category} />}
+                  </div>
+
+                  <div className="ev-kinds ck-actions">
+                    <button type="button" className={"ev-kind" + (it.status === "ok" ? " act" : "")} onClick={() => setItemStatus(it.id, it.status === "ok" ? "pending" : "ok")}>✓ Good</button>
+                    <button type="button" className={"ev-kind" + (it.status === "issue" ? " act" : "")} onClick={() => setItemStatus(it.id, it.status === "issue" ? "pending" : "issue")}>Needs fixing</button>
+                    <button type="button" className={"ev-kind" + (it.status === "na" ? " act" : "")} onClick={() => setItemStatus(it.id, it.status === "na" ? "pending" : "na")}>N/A</button>
+                  </div>
+
+                  {(it.photos.length > 0 || it.note || noteFor === it.id) && (
+                    <div className="ck-extra">
+                      {it.note && noteFor !== it.id && <div className="ck-note" onClick={() => { setNoteFor(it.id); setNoteText(it.note || ""); }}>{it.note}</div>}
+                      {noteFor === it.id && (
+                        <div>
+                          <textarea className="ev-in" rows={2} autoFocus value={noteText} placeholder="What did you find?" onChange={(e) => setNoteText(e.target.value)} />
+                          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                            <button className="lg-btn primary" style={{ height: 36, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} onClick={() => saveNote(it.id)}>Save note</button>
+                            <button className="lg-btn" style={{ height: 36, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => { setNoteFor(null); setNoteText(""); }}>Cancel</button>
+                          </div>
+                        </div>
+                      )}
+                      {it.photos.length > 0 && (
+                        <div className="shots">
+                          {it.photos.map((p) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={p.id} className="shot" alt="Site photo" src={`/api/checklists/photo?path=${encodeURIComponent(p.url)}`} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="ck-tools">
+                    <button onClick={() => { photoForRef.current = it.id; photoInputRef.current?.click(); }}>📷 Photo</button>
+                    {noteFor !== it.id && <button onClick={() => { setNoteFor(it.id); setNoteText(it.note || ""); }}>{it.note ? "Edit note" : "＋ Note"}</button>}
+                    {it.checkedByName && <span className="ck-by">{it.checkedByName}</span>}
+                  </div>
+                </div>
+              ))}
+              {openChecklist.items.length === 0 && <div className="page-sub" style={{ marginBottom: 0 }}>This check has no items.</div>}
+            </div>
+            <div className="dm-foot">
+              <button className="lg-btn primary" style={{ height: 44, margin: 0, flex: 1 }} onClick={() => closeOutChecklist(openChecklist.checklist.status === "done" ? "open" : "done")}>
+                {openChecklist.checklist.status === "done" ? "Reopen" : "Mark this check done"}
+              </button>
+              <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 18px" }} onClick={() => deleteChecklist(openChecklist.checklist.id)}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Camera/gallery picker for checklist photos — one input, reused. */}
+      <input ref={photoInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (photoInputRef.current) photoInputRef.current.value = ""; if (f) onPhotoPicked(f); }} />
+
+      {/* ─── one past inspection, and what it picked up ─── */}
+      {openInspection && (
+        <div className="scrim" onClick={() => setOpenInspection(null)}>
+          <div className="sheet" style={{ maxWidth: 560, maxHeight: "88vh" }} onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti">
+                <b>{openInspection.inspection.inspectionType || openInspection.inspection.doc}</b>
+                <small>{[openInspection.inspection.inspectedOn, openInspection.inspection.projectName, OUTCOME_LABEL[openInspection.inspection.outcome]].filter(Boolean).join(" · ")}</small>
+              </div>
+              <button className="sh-x" onClick={() => setOpenInspection(null)}>✕</button>
+            </div>
+            <div className="dm-body">
+              {openInspection.items.length === 0 ? (
+                <div className="page-sub" style={{ marginBottom: 0 }}>Nothing was picked up on this one.</div>
+              ) : (
+                openInspection.items.map((it) => (
+                  <div className="ins-row" key={it.id}>
+                    <span className="cat-dot" style={{ background: catColor(it.category) }} />
+                    <div className="ins-body">
+                      <b>{it.title}</b>
+                      <small>{[it.category, it.location].filter(Boolean).join(" · ")}</small>
+                      {it.detail && <small className="ins-detail">{it.detail}</small>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── a saved pre-inspection check, in a list ── */
+function ChecklistRow({ c, onOpen }: { c: ChecklistHead; onOpen: () => void }) {
+  const total = c.total ?? 0;
+  const done = c.done ?? 0;
+  const issues = c.issues ?? 0;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  return (
+    <div className="ev" onClick={onOpen} style={{ cursor: "pointer" }}>
+      <div className="bar" style={{ background: issues ? "var(--amber)" : c.status === "done" ? "var(--green)" : "var(--brand)" }} />
+      <div className="body">
+        <b>{c.title}</b>
+        <small>{total ? `${done} of ${total} checked` : "no items"}{issues ? ` · ${issues} to fix` : ""}{c.createdByName ? ` · ${c.createdByName}` : ""}</small>
+        <span className="rank-track" style={{ display: "block", marginTop: 8, flex: "none", width: "100%" }}>
+          <span className="rank-fill" style={{ width: `${pct}%`, background: issues ? "var(--amber)" : "var(--brand)" }} />
+        </span>
+      </div>
+      <span className={"pill " + (c.status === "done" ? "pass" : issues ? "open" : "na")}>{c.status === "done" ? "Done" : issues ? `${issues} to fix` : `${pct}%`}</span>
     </div>
   );
 }
@@ -1815,6 +2433,9 @@ function SiteSetup(props: {
   mode: "create" | "join";
   setMode: (m: "create" | "join") => void;
   name: string; setName: (v: string) => void;
+  company: string; setCompany: (v: string) => void;
+  /** Only the first site names the company — later ones inherit it. */
+  showCompany: boolean;
   code: string; setCode: (v: string) => void;
   personName: string; setPersonName: (v: string) => void;
   title: string; setTitle: (v: string) => void;
@@ -1877,11 +2498,22 @@ function SiteSetup(props: {
 
               {p.mode === "create" ? (
                 <>
+                  {p.showCompany && (
+                    <>
+                      <label className="ev-lbl">Your company</label>
+                      <input className="ev-in" value={p.company} autoFocus onChange={(e) => p.setCompany(e.target.value)} placeholder="e.g. Kalmar Construction"
+                        onKeyDown={(e) => { if (e.key === "Enter") p.onCreate(); }} />
+                    </>
+                  )}
                   <label className="ev-lbl">Site name</label>
-                  <input className="ev-in" value={p.name} autoFocus onChange={(e) => p.setName(e.target.value)} placeholder="e.g. 12 Beach Road — Townhouses"
+                  <input className="ev-in" value={p.name} autoFocus={!p.showCompany} onChange={(e) => p.setName(e.target.value)} placeholder="e.g. 12 Beach Road — Townhouses"
                     onKeyDown={(e) => { if (e.key === "Enter") p.onCreate(); }} />
                   {who(p.onCreate, "e.g. Project Manager")}
-                  <p className="page-sub" style={{ margin: "10px 0 0" }}>You&apos;ll be the site admin and get an invite code to bring your crew on.</p>
+                  <p className="page-sub" style={{ margin: "10px 0 0" }}>
+                    {p.showCompany
+                      ? "You'll be the site admin and get an invite code to bring your crew on. Every site you add later sits under this company, so its inspection history builds up in one place."
+                      : "You'll be the site admin and get an invite code to bring your crew on."}
+                  </p>
                   {p.err && <div className="ev-err">{p.err}</div>}
                   <div className="form-actions" style={{ marginTop: 18 }}>
                     <button className="lg-btn primary" style={{ height: 48, margin: 0, flex: 1 }} disabled={p.busy} onClick={p.onCreate}>{p.busy ? "Creating…" : "Create site"}</button>
@@ -1955,6 +2587,31 @@ function fileToResizedJpegBase64(file: File): Promise<{ mediaType: string; data:
     img.src = url;
   });
 }
+// Same downscale, but returning a Blob for direct-to-storage upload (checklist
+// photos go to Blob, not into a chat message). A phone camera JPEG is 5-8 MB;
+// on site that's the difference between a photo landing and a spinner.
+function resizeImage(file: File, max = 1600, quality = 0.82): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      const m = Math.max(width, height);
+      if (m > max) { const s = max / m; width = Math.round(width * s); height = Math.round(height * s); }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { reject(new Error("Image processing unavailable.")); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't process that photo."))), "image/jpeg", quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That image couldn't be read.")); };
+    img.src = url;
+  });
+}
+
 // Turn a stored/streamed assistant reply into a renderable message: pull a
 // trailing "Source: …" line into a citation card, format the rest. Shared by
 // live sends and reloading a saved conversation.
@@ -2031,7 +2688,15 @@ function TodayGlance({ events, tasks, loaded, colorFor, onToggle, onOpen }: {
   );
 }
 
-function EventRow({ e, colorFor, onDelete }: { e: CalEvent; colorFor?: (id: string | null) => string | null; onDelete?: (e: CalEvent) => void }) {
+function EventRow({ e, colorFor, onDelete, checks, onOpenCheck, onNewCheck }: {
+  e: CalEvent;
+  colorFor?: (id: string | null) => string | null;
+  onDelete?: (e: CalEvent) => void;
+  /** Checks already attached to this event. Only passed where they're actionable. */
+  checks?: ChecklistHead[];
+  onOpenCheck?: (id: string) => void;
+  onNewCheck?: (e: CalEvent) => void;
+}) {
   const tag = kindTag(e.kind);
   const crew = e.assigneeId ? colorFor?.(e.assigneeId) : null;
   const bar = crew || barColor(e.kind);
@@ -2040,7 +2705,23 @@ function EventRow({ e, colorFor, onDelete }: { e: CalEvent; colorFor?: (id: stri
     <div className="ev">
       <div className="bar" style={{ background: bar }} />
       <div className="when">{fmtAgendaDay(e.startsAt)}<br /><span className="when-t">{fmtEventRange(e)}</span></div>
-      <div className="body"><b>{e.title}</b>{sub && <small>{sub}</small>}</div>
+      <div className="body">
+        <b>{e.title}</b>{sub && <small>{sub}</small>}
+        {/* An inspection IS a calendar event, so its check lives on the event —
+            booked here, walked here, and still here in two years' time. */}
+        {onNewCheck && (
+          <div className="ev-checks">
+            {(checks ?? []).map((c) => (
+              <button key={c.id} className="ev-check" onClick={() => onOpenCheck?.(c.id)}>
+                ✓ {c.title} · {c.done ?? 0}/{c.total ?? 0}{c.issues ? ` · ${c.issues} to fix` : ""}
+              </button>
+            ))}
+            {(checks ?? []).length === 0 && (
+              <button className="ev-check new" onClick={() => onNewCheck(e)}>＋ Build the pre-inspection check</button>
+            )}
+          </div>
+        )}
+      </div>
       {tag && <div className="tag" style={{ background: tag.bg, color: tag.fg }}>{tag.label}</div>}
       {onDelete && <button className="row-x" title="Delete" onClick={() => onDelete(e)}>✕</button>}
     </div>
