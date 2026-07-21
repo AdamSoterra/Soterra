@@ -77,12 +77,13 @@ Since 74% of cost is the retrieval payload, that's the only lever worth pulling.
 |---|---|---|
 | Baseline: 6 pages, 2,800 chars | **15/15** | current |
 | **4 pages**, 2,800 chars | **14/15** | ❌ **costs an answer. Don't.** |
-| 4 pages, 2,000 chars | not completed | untested |
-| **Haiku 4.5** instead of Sonnet ($1/$5 vs $3/$15, ~67% cheaper) | not completed | ⭐ **the lever worth testing** |
+| **Haiku 4.5** ($1/$5 vs $3/$15, ~67% cheaper) | untested | 🅿️ **PARKED - accuracy first** |
 
-**Cutting retrieval breadth is off the table** - dropping to 4 pages lost an answer, and accuracy is the product. The remaining idea worth real work is **model routing**: send simple lookups to Haiku 4.5 and keep Sonnet for RFI drafting and anything code-critical. That's a potential ~60% cut on the dominant cost with no reduction in what the model sees. Run `MODEL_ID=claude-haiku-4-5 npx tsx dev/audit-code.mts --excerpt` to test it.
+**Cutting retrieval breadth is off the table** - dropping to 4 pages lost an answer, and accuracy is the product.
 
-**The honest framing though: cost reduction is not the priority.** At NZ$13/month to serve a typical customer against NZ$99-149 revenue, shaving the AI bill is rounding-error optimisation. The margin risk is the uncapped ceiling (section 6), not the per-question price.
+**Model routing to Haiku is parked by decision, not by evidence.** Being mistake-free at launch is worth far more than trimming a rounding error; a wrong answer on a compliance question early would cost more reputation than the AI bill costs money. Revisit only once the code layer has a track record in real use, and only for demonstrably simple lookups - never for RFI drafting or anything code-critical. The harness is ready when we want it: `MODEL_ID=claude-haiku-4-5 npx tsx dev/audit-code.mts --excerpt`.
+
+**The honest framing: cost reduction is not the priority.** At NZ$26-42/month to serve even a busy 7-person school site against NZ$99-299 revenue, shaving the AI bill is rounding-error optimisation. The two things that actually matter are the **uncapped ceiling** (section 6) and the **large-plan-set slowness** (section 1g).
 
 ## 1d. 🔴 Operational: the API key ran out of credit mid-audit
 
@@ -128,6 +129,80 @@ I'm not your accountant and you should confirm this with them, but the structura
 | 25 | NZ$18,076/yr | NZ$28,876/yr |
 | 50 | NZ$36,711/yr | NZ$58,311/yr |
 | 100 | NZ$73,909/yr | NZ$117,109/yr |
+
+## 1g. Worked example: a school project, 7 crew (`dev/model-school.mts`)
+
+Cost per interaction type, built from measured token components:
+
+| Interaction | Cost (USD) |
+|---|---|
+| **Plan question** (8 pages + context, 1.3 rounds) | $0.0331 |
+| **Code question** (6 pages + context, 1.3 rounds) | $0.0269 |
+| **Calendar / task / reminder** (no retrieval, 2 API calls) | **$0.0081** |
+
+Calendar and reminder operations are the **cheapest** thing the assistant does - about a quarter of a plan question - because they carry no retrieval payload. They cost two API calls (one to emit the tool call, one to confirm) but send no pages. Adding scheduling to the product barely moves the bill.
+
+**7 crew on a school, 22 working days:**
+
+| Questions/person/day | Realistic mix (50/25/25) | Heavy plan use | Worst case (100% plan) |
+|---|---|---|---|
+| 4/day = 616/mo | **NZ$25.87** | NZ$30.35 | NZ$33.87 |
+| 5/day = 770/mo | **NZ$32.34** | NZ$37.94 | **NZ$42.34** |
+
+**Even at the deliberately high 5 questions per person per day, with every single one a plan lookup, a 7-person school site costs NZ$42/month to serve.** On the NZ$299 Builder tier that's 86% margin; on NZ$149 it's 72%.
+
+### Does a much bigger plan set cost more? No.
+
+A school will have thousands of sheets, not 120. **AI cost is flat regardless**, because retrieval always sends the top 8 pages no matter how big the corpus is. 120 sheets or 5,000 sheets, the model sees 8. Indexing is $0 and storage is trivial.
+
+### 🔴 But a big plan set makes the app SLOW - this is the real problem
+
+`getProjectIndex` (route line 40) loads **every page of the project from Neon on every single question**, then rebuilds the TF-IDF term map from scratch. Benchmarked locally:
+
+| Plan set | Data loaded per question | CPU per question |
+|---|---|---|
+| 120 sheets (Kauri Tower today) | 0.4 MB | 55 ms |
+| 571 pages (Arthur Road) | 1.4 MB | 299 ms |
+| 1,500 pages | 3.9 MB | 620 ms |
+| 2,500 pages (realistic school) | 6.4 MB | **1,201 ms** |
+| 5,000 pages | 12.7 MB | **1,965 ms** |
+
+That's pure compute, **before** the network time to pull 6-12 MB out of Neon and before the model has generated a single token. At school scale we'd be adding roughly **2-3 seconds of dead time to every answer**, and pulling ~4 GB/month out of the database.
+
+The dollar impact is small (it fits inside the Vercel and Neon allowances). **The product impact is not** - a builder standing in the rain waiting 6 seconds for an answer stops asking. The `code_pages` corpus is already cached per warm server (`CODE_CACHE`); the project index is not, because of the "a fresh upload must show up immediately" requirement. It needs the same treatment with invalidation on upload.
+
+**This is a scaling bug, not a pricing problem, and it should be fixed before selling to anyone with a big plan set.**
+
+## 1h. "How do we know how many people work there?"
+
+The concern: project size doesn't predict headcount. A $100M job might have 25 people from the main contractor, or 10.
+
+**Tested against the real numbers, and the concern doesn't break the model:**
+
+| Same $100M job | Crew | Questions/mo | AI cost | Margin on NZ$599 |
+|---|---|---|---|---|
+| Lean contractor | 10 | 880 | NZ$36.96 | **94%** |
+| Adam's actual job | 25 | 2,200 | NZ$92.40 | **85%** |
+| Very heavy | 40 | 3,520 | NZ$147.85 | **75%** |
+
+**The 10-vs-25 difference is NZ$55/month on a NZ$599 tier.** That's noise. You do not need to know the headcount, because at the top tier the price absorbs any plausible crew size.
+
+### Where headcount *would* hurt: a big crew on the cheap tier
+
+| Crew | Tier | AI cost | Margin |
+|---|---|---|---|
+| 7 | NZ$149 | NZ$25.87 | 83% |
+| 7 | NZ$99 | NZ$25.87 | 74% |
+| 15 | NZ$99 | NZ$55.44 | **44%** |
+| 25 | NZ$99 | NZ$92.40 | **7%** ⚠️ |
+| 25 | NZ$149 | NZ$92.40 | 38% ⚠️ |
+
+**The risk isn't "we can't count people". It's a 25-person operation sitting on the entry tier.** Two defences, neither requiring headcount tracking:
+
+1. **Turnover banding, self-declared at signup.** This is exactly what Buildertrend does - their pricing form asks you to pick your annual construction volume bracket. A 25-person contractor is not a sub-$5M-turnover business, so the band moves them up on its own.
+2. **The fair-use cap** catches anyone who slips through, without anyone having to audit a headcount.
+
+So: **band on turnover, never on people.** Turnover is declarable, verifiable enough, and it's what the whole NZ market already prices on (Procore's ACV, Buildertrend's volume brackets, Master Builders' own fee bands).
 
 ## 3b. NZ market benchmarks (verified from vendor pricing pages)
 
