@@ -2,6 +2,19 @@
 
 _Locked 2026-07-22. This is the spec for the next thread. Everything here is decided unless marked ❓._
 
+> ## ▶️ START HERE (new thread)
+>
+> **Build everything in this plan EXCEPT §3 (MBIE determinations).** Adam will download those manually when he's home; the automated route is blocked by Imperva. Nothing else depends on them.
+>
+> **Adam is away and wants this built autonomously.** Order is fixed:
+> **Step 0 (company layer) → 1 (history learner) → 2 (Insights page) → 3 (checklist engine) → 4 (CCC checklist).**
+>
+> Two things to bring to him rather than guess:
+> 1. The **category mapping** (council codes → the 12 groups) — draft it from the 27 real reports in `All inspection reports/Council/`, then have him check it. He'll spot in seconds what would take an hour to get wrong.
+> 2. **Company creation at signup vs first project** (❓ open item 3) — pick the sensible default (company at signup), build it, flag it.
+>
+> Deploy as you go: `cd soterra-web && npm run build && npx vercel deploy --prod --yes`, then verify the live URL. Commit after each piece.
+
 ---
 
 ## What we're building, in one line
