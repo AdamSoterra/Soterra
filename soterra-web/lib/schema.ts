@@ -1,5 +1,18 @@
 import { pgTable, text, timestamp, boolean, uuid, index, integer, uniqueIndex } from "drizzle-orm/pg-core";
 
+// ─── Companies: the BUSINESS a site belongs to, and the boundary that pooled
+//     failure history lives inside. Sites belong to a company; history and
+//     insights are aggregated across a company's sites and NEVER across
+//     companies. If one builder could see another's failure data the product is
+//     over, so companyId is always derived server-side from the caller's
+//     verified project membership (see lib/company.ts) — never from a header or
+//     a request body. ───
+export const companies = pgTable("companies", {
+  id: text("id").primaryKey(), // app-generated uuid
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Sites (projects): the top-level container. A PM signs up, creates a site,
 //     gets a join code; crew enter the code to join. Everything else (events,
 //     tasks, threads, plans, usage) is scoped to a projectId. ───
@@ -9,11 +22,17 @@ export const projects = pgTable(
     id: text("id").primaryKey(), // app-generated (uuid); the demo keeps "1-arthur-road"
     name: text("name").notNull(),
     code: text("code").notNull(), // invite/join code (XXXX-XXXX)
+    // The owning business. Not null: a site with no company would have history
+    // that belongs to nobody, and "belongs to nobody" is how it leaks.
+    companyId: text("company_id").notNull(),
     creatorId: text("creator_id").notNull(), // Clerk userId of the admin/PM
     timezone: text("timezone").default("Pacific/Auckland").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => ({ byCode: uniqueIndex("projects_code_idx").on(t.code) })
+  (t) => ({
+    byCode: uniqueIndex("projects_code_idx").on(t.code),
+    byCompany: index("projects_company_idx").on(t.companyId),
+  })
 );
 
 // ─── Site crew: one row per (site, user). Joining via code adds a member; the
@@ -168,6 +187,148 @@ export const codePages = pgTable(
   }
 );
 
+// ─── Inspection history — "The Brain", stripped back. One row per uploaded
+//     inspection report, plus one row per FAILED item on it. We deliberately do
+//     NOT store the passes: the product question is "what do we keep getting
+//     pulled up on", and a million little pass rows only bury the answer.
+//
+//     companyId is denormalised onto both tables so every read can filter on it
+//     directly, without having to remember to join through projects. ───
+export const inspections = pgTable(
+  "inspections",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    doc: text("doc").notNull(), // display name (usually the filename, extension stripped)
+    file: text("file"), // Blob pathname of the source PDF, when we kept it
+    // council = an Auckland-Council-style statutory checklist (IPL/ICA/IF2…),
+    // consultant = an engineer's / architect's site observation report.
+    source: text("source").default("council").notNull(),
+    inspectionCode: text("inspection_code"), // IPL, ICA, IF2… (council reports)
+    inspectionType: text("inspection_type"), // readable: "Post-line", "Cavity wrap", "Fire"
+    inspector: text("inspector"), // the ORGANISATION only (never a person — see anonymise())
+    outcome: text("outcome").default("unknown").notNull(), // pass | partial | fail | unknown
+    inspectedOn: text("inspected_on"), // YYYY-MM-DD, as printed on the report
+    // Optional link back to the calendar event this inspection was booked as.
+    eventId: uuid("event_id"),
+    itemCount: integer("item_count").default(0).notNull(), // failed items extracted
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byCompany: index("inspections_company_idx").on(t.companyId),
+    byProject: index("inspections_project_idx").on(t.projectId),
+    // Re-uploading the same report replaces it rather than double-counting.
+    uniqDoc: uniqueIndex("inspections_project_doc_idx").on(t.projectId, t.doc),
+  })
+);
+
+export const inspectionItems = pgTable(
+  "inspection_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    inspectionId: uuid("inspection_id").notNull(),
+    category: text("category").notNull(), // one of CATEGORIES (lib/categories.ts)
+    title: text("title").notNull(), // short label, e.g. "Passive fire stopping incomplete"
+    detail: text("detail"), // the report's own wording
+    location: text("location"), // "Level 2, unit 2/4" — when the report says
+    inspectionCode: text("inspection_code"), // denormalised from the parent, for grouping
+    inspectedOn: text("inspected_on"), // denormalised, for "last 12 months" filters
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byCompany: index("inspection_items_company_idx").on(t.companyId),
+    byInspection: index("inspection_items_inspection_idx").on(t.inspectionId),
+    byCompanyCategory: index("inspection_items_company_category_idx").on(t.companyId, t.category),
+  })
+);
+
+// ─── Checklists — an inspection IS a calendar event, so a checklist hangs off
+//     one. The assistant generates the items from this site's drawings, the
+//     Building Code and this company's own failure history; the crew ticks
+//     them off on a phone with photos, and it stays on the event forever. ───
+export const checklists = pgTable(
+  "checklists",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    eventId: uuid("event_id"), // the calendar event it belongs to (null = standalone)
+    kind: text("kind").default("inspection").notNull(), // inspection | ccc
+    title: text("title").notNull(),
+    // What the checklist is FOR: an inspection code (ICA, IPL…) or a CCC pack.
+    inspectionCode: text("inspection_code"),
+    status: text("status").default("open").notNull(), // open | done
+    createdBy: text("created_by"),
+    createdByName: text("created_by_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byCompany: index("checklists_company_idx").on(t.companyId),
+    byProject: index("checklists_project_idx").on(t.projectId),
+    byEvent: index("checklists_event_idx").on(t.eventId),
+  })
+);
+
+export const checklistItems = pgTable(
+  "checklist_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    checklistId: uuid("checklist_id").notNull(),
+    ord: integer("ord").default(0).notNull(),
+    category: text("category"),
+    title: text("title").notNull(),
+    detail: text("detail"), // what "good" looks like / the figure to check
+    // Where the item came from, and the citation that backs it. An item with no
+    // source is a guess, and a guess on a checklist is worse than no item.
+    source: text("source").default("manual").notNull(), // plans | code | history | ccc | manual
+    sourceRef: text("source_ref"), // the exact page label / determination / count
+    status: text("status").default("pending").notNull(), // pending | ok | issue | na
+    note: text("note"),
+    checkedBy: text("checked_by"),
+    checkedByName: text("checked_by_name"),
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byChecklist: index("checklist_items_checklist_idx").on(t.checklistId),
+    byCompany: index("checklist_items_company_idx").on(t.companyId),
+  })
+);
+
+// Site photos attached to a checklist item. Kept in their own table because one
+// item routinely needs three or four shots (the junction, the label, the wide).
+export const checklistPhotos = pgTable(
+  "checklist_photos",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    checklistId: uuid("checklist_id").notNull(),
+    itemId: uuid("item_id").notNull(),
+    url: text("url").notNull(), // Blob pathname (private — served through /api/checklists/photo)
+    caption: text("caption"),
+    takenBy: text("taken_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byItem: index("checklist_photos_item_idx").on(t.itemId),
+    byChecklist: index("checklist_photos_checklist_idx").on(t.checklistId),
+  })
+);
+
+export type Company = typeof companies.$inferSelect;
+export type Inspection = typeof inspections.$inferSelect;
+export type InspectionItem = typeof inspectionItems.$inferSelect;
+export type Checklist = typeof checklists.$inferSelect;
+export type ChecklistItem = typeof checklistItems.$inferSelect;
+export type ChecklistPhoto = typeof checklistPhotos.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type ProjectMember = typeof projectMembers.$inferSelect;
 export type Event = typeof events.$inferSelect;

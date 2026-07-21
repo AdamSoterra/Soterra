@@ -26,6 +26,7 @@ export async function listUserProjects(userId: string) {
       timezone: projects.timezone,
       role: projectMembers.role,
       creatorId: projects.creatorId,
+      companyId: projects.companyId,
     })
     .from(projectMembers)
     .innerJoin(projects, eq(projects.id, projectMembers.projectId))

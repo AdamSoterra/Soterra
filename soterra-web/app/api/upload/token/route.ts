@@ -45,9 +45,13 @@ export async function POST(request: Request) {
         // so one site can never write into — or later read — another's blobs.
         if (!pathname.startsWith(`${projectId}/`)) throw new Error("Bad upload path");
 
+        // Site photos on a checklist go up the same way as plans, so images are
+        // allowed too — but only under "<projectId>/checklists/", so a photo
+        // token can't be used to slip a JPEG into the plan set.
+        const isPhoto = pathname.startsWith(`${projectId}/checklists/`);
         return {
-          allowedContentTypes: ["application/pdf"],
-          maximumSizeInBytes: 100 * 1024 * 1024, // 100 MB — full drawing sets
+          allowedContentTypes: isPhoto ? ["image/jpeg", "image/png", "image/webp"] : ["application/pdf"],
+          maximumSizeInBytes: isPhoto ? 12 * 1024 * 1024 : 100 * 1024 * 1024, // 12 MB a photo, 100 MB a drawing set
           addRandomSuffix: true, // avoid collisions + make URLs unguessable
           tokenPayload: JSON.stringify({ uploadedBy: userId, projectId }),
         };

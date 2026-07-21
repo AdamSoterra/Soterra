@@ -11,8 +11,11 @@ import {
   addOneDay,
 } from "@/lib/date-tz";
 import { resolveProjectId, listMembers } from "@/lib/project";
-import { computeDf, excerpt, retrieve } from "@/lib/retrieve";
+import { excerpt, retrieve } from "@/lib/retrieve";
 import { DEMO_ID, getProjectIndex, type Page } from "@/lib/projectIndex";
+import { codeLabel, getCodeIndex } from "@/lib/codeIndex";
+import { companyIdForProject, type Scope } from "@/lib/company";
+import { searchHistory } from "@/lib/history";
 
 export const runtime = "nodejs";
 // 180, not 60: Montázs measured a ~50-item update_events_bulk streaming ~2000
@@ -40,22 +43,8 @@ function pageLabel(p: Page): string {
   return label;
 }
 
-// ── The shared Building Code corpus (universal, same for every site). Loaded
-//    once per warm server (it's static) and cached — the whole free MBIE set. ──
-type CodePage = { doc: string; file: string; page: number; npages: number; title: string | null; text: string };
-let CODE_CACHE: { pages: CodePage[]; df: Map<string, number> } | null = null;
-async function getCodeIndex(): Promise<{ pages: CodePage[]; df: Map<string, number> }> {
-  if (CODE_CACHE) return CODE_CACHE;
-  const rows = await db
-    .select({ doc: codePages.doc, file: codePages.file, page: codePages.page, npages: codePages.npages, title: codePages.title, text: codePages.text })
-    .from(codePages);
-  const pages: CodePage[] = rows.map((r) => ({ doc: r.doc, file: r.file, page: r.page, npages: r.npages, title: r.title, text: r.text }));
-  CODE_CACHE = { pages, df: computeDf(pages) };
-  return CODE_CACHE;
-}
-function codeLabel(p: CodePage): string {
-  return `${p.doc}${p.title ? " · " + p.title : ""} · page ${p.page} of ${p.npages}`;
-}
+// The shared Building Code corpus now lives in lib/codeIndex.ts, so the
+// checklist generator searches the same index rather than a second copy of it.
 
 type Card = {
   id: string;
@@ -131,6 +120,20 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
     input_schema: {
       type: "object",
       properties: { query: { type: "string", description: "The code question in plain English (e.g. 'minimum stair riser height', 'E2 cavity requirement for direct-fixed cladding')." } },
+      required: ["query"],
+    },
+  },
+  {
+    name: "search_history",
+    description:
+      "Search THIS COMPANY's own past inspection results — every failed item from every inspection report filed across all of this builder's sites. Call it for anything about what they have been pulled up on before: 'what failed on the last cavity wrap?', 'do we keep failing passive fire?', 'what did the council pick up at pre-line?'. Results are the company's own history, never anyone else's. Answer from the rows it returns, say how many times each thing came up, and name the site and date when it helps. NEVER use this for RFI drafting — a past answer may sit under a different plan revision or a different engineer's requirement, and surfacing it there is dangerous.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to look for, in plain English (e.g. 'cavity wrap flashings', 'passive fire penetrations')." },
+        code: { type: "string", description: "Optional council inspection code to limit to: IFO ISF IFG ICA ICL ITK IDT IPP IPB IPL IF1 IF2." },
+        category: { type: "string", description: "Optional category filter: Structural, Weathertightness / Cladding, Fire, Electrical, Plumbing & Drainage, Mechanical, Interior / Linings, Access & Barriers, Site / External, Acoustic, Seismic, Architect." },
+      },
       required: ["query"],
     },
   },
@@ -325,7 +328,7 @@ function eventParts(row: typeof events.$inferSelect) {
   };
 }
 
-type Ctx = { userId: string; creatorName: string | null; projectId: string; members: Member[] };
+type Ctx = { userId: string; creatorName: string | null; projectId: string; members: Member[]; scope: Scope | null };
 
 function eventInsertFromInput(input: Record<string, unknown>, ctx: Ctx) {
   const title = s(input.title)!;
@@ -521,6 +524,24 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         const top = retrieve(pages, df, q, 6);
         if (top.length === 0) return { content: JSON.stringify({ pages: [], note: "Nothing matched in the Building Code corpus." }), cards: [] };
         return { content: JSON.stringify({ pages: top.map((p) => ({ label: codeLabel(p), text: excerpt(p.text, q, 2800) })) }), cards: [] };
+      }
+
+      case "search_history": {
+        const q = s(input.query) ?? "";
+        if (!q) return { content: JSON.stringify({ error: "query required" }), cards: [] };
+        // ctx.scope carries the companyId derived from the caller's verified
+        // project. No scope (a legacy project with no company) → no history,
+        // rather than an unscoped query that could read across companies.
+        if (!ctx.scope) return { content: JSON.stringify({ items: [], note: "No inspection history is set up for this site yet." }), cards: [] };
+        const rows = await searchHistory(ctx.scope, q, { code: s(input.code), category: s(input.category), limit: 20 });
+        if (rows.length === 0) return { content: JSON.stringify({ items: [], note: "Nothing in this company's filed inspection history matched." }), cards: [] };
+        return {
+          content: JSON.stringify({
+            note: "These are THIS company's own past failed inspection items, across all its sites.",
+            items: rows.map((r) => ({ item: r.title, detail: r.detail, where: r.location, category: r.category, inspection: r.inspectionCode, date: r.inspectedOn, site: r.projectName })),
+          }),
+          cards: [],
+        };
       }
 
       case "create_event": {
@@ -733,7 +754,8 @@ const STATIC_PROMPT = `You are Soterra's site assistant — a sharp, experienced
 1) PLAN-READER — answer questions about THIS site's uploaded drawings & specifications. For any question about this project's plans/specs (materials, dimensions, fire ratings, schedules, finishes, "what does our spec say…") you MUST call search_plans, then answer ONLY from the page text it returns, finishing with a line: "Source: <the exact page label>". Never invent codes, ratings, products or numbers. If the answer isn't in the pages, say what's missing and which drawing set might have it. REVISIONS — the plans may hold more than one revision of the same sheet; each page label carries an "uploaded" date. The most recently uploaded page is the CURRENT revision. If two pages give different values for the same thing (e.g. a fire rating that was 30 min in an older upload and 60 min in a newer one), ALWAYS use the value from the latest-uploaded page, cite that page as the Source, and note that it supersedes the older figure. Never present a superseded value as current, and never average them.
 2) BUILDING-CODE — answer what the NZ Building Code REQUIRES by calling search_code (the free MBIE Acceptable Solutions, Verification Methods, Handbook, guidance). Use this for "what does the code require for…", clause requirements, acceptable solutions, minimum figures, weathertightness, egress, etc. Answer from the returned pages, make clear it's general Building-Code guidance (not this project's plans), finish with "Source: <page label>", and remind them to confirm against the current official document / their designer for anything safety-critical. Never invent a clause or number. (search_plans = THIS project's drawings; search_code = the universal Code. Pick the right one; for "does our design meet the code?" you may use both.)
 3) CONSTRUCTION EXPERT — general construction knowledge (methods, sequencing, materials, detailing, terminology, H&S, best practice) from your own expertise — no "Source:" line. Use web_search for current/specific external detail (latest product specs, standards) rather than guessing.
-4) CALENDAR & TASKS — create, find, change, delete events and to-dos using the tools.
+4) INSPECTION HISTORY — answer "what have we been pulled up on before?" by calling search_history. It searches THIS COMPANY's own filed inspection reports (all their sites, council and consultant). Use it for "what failed on the last cavity wrap?", "do we keep failing passive fire?", "what did the inspector pick up at pre-line last time?", and whenever someone is preparing for an inspection. Answer from the rows it returns — say how many times a thing has come up and when it last did, because the repeat count is the point. It is this builder's own data, so be direct about it. Never present it as a code requirement; it's what happened.
+5) CALENDAR & TASKS — create, find, change, delete events and to-dos using the tools.
 
 If the user attaches a photo or PDF, read it and answer about it.
 
@@ -754,7 +776,7 @@ TYPE is optional: set kind only when obvious. RELATIVE DATES: compute yourself, 
 
 BULK / RECURRING — ONE call: 3+ items or a recurring pattern → work out every date and use create_events_bulk / create_tasks_bulk in a SINGLE call (never 20 separate calls). Changing/deleting many → find_items first for the ids, then update_*_bulk / delete_*_bulk in ONE call. Confirm with the COUNT.
 
-RFIs — you draft and review them, and it's a core job. Asked to write one: search_plans for what the drawings actually show (and search_code if compliance is in question) BEFORE drafting, so the RFI cites real sheets, not guesses. Structure it: Subject · Reference (sheet + revision) · Background (what the documents show today, cited) · The question (ONE specific, closed question the consultant can answer) · Proposed solution / contractor's suggestion if you have a defensible one · Impact (programme/cost, only if the documents support it) · Response required by. Keep it short and factual — an RFI is a request, not an argument. NEVER invent a sheet number, revision, clause or dimension: if the drawings don't cover it, say so plainly, because that gap IS the reason for the RFI. Reviewing one: check it names a specific reference, asks one answerable question, and isn't already answered in the plans or code — say so if it is.
+RFIs — you draft and review them, and it's a core job. NEVER call search_history while drafting or reviewing an RFI, and never tell the user "we asked something like this before". An RFI goes to the consultant, and a previous answer may sit under a different plan revision or a different engineer's requirement — surfacing it there quietly steers people to the wrong answer. Asked to write one: search_plans for what the drawings actually show (and search_code if compliance is in question) BEFORE drafting, so the RFI cites real sheets, not guesses. Structure it: Subject · Reference (sheet + revision) · Background (what the documents show today, cited) · The question (ONE specific, closed question the consultant can answer) · Proposed solution / contractor's suggestion if you have a defensible one · Impact (programme/cost, only if the documents support it) · Response required by. Keep it short and factual — an RFI is a request, not an argument. NEVER invent a sheet number, revision, clause or dimension: if the drawings don't cover it, say so plainly, because that gap IS the reason for the RFI. Reviewing one: check it names a specific reference, asks one answerable question, and isn't already answered in the plans or code — say so if it is.
 
 REMINDERS — the 'reminder' field sets a real notification on a phone. It is available on create_event, create_task, update_event AND update_task, so when someone books something and asks to be reminded, set BOTH in the SAME create call — never create then update. "remind me an hour before" → work out the absolute time yourself and pass 'YYYY-MM-DD HH:MM' in site local time. It fires ONLY on the ASSIGNEE's phone; if you set a reminder without an assignee the speaker is auto-assigned so it still reaches someone. When you set one, say so plainly and say WHOSE phone it'll ring on. '' clears it.
 
@@ -810,7 +832,11 @@ export async function POST(req: Request) {
   const projectName = proj?.name ?? "this site";
   const memberRows = await listMembers(projectId);
   const members: Member[] = memberRows.map((m) => ({ userId: m.userId, name: m.name, title: m.title }));
-  const ctx: Ctx = { userId, creatorName, projectId, members };
+  // The company boundary for search_history. Derived from the project we just
+  // verified the caller belongs to — never from the request.
+  const companyId = await companyIdForProject(projectId, userId);
+  const scope: Scope | null = companyId ? { projectId, companyId, userId, role: "member" } : null;
+  const ctx: Ctx = { userId, creatorName, projectId, members, scope };
 
   // Resolve (or create) the thread — personal to this user + this site.
   let threadId = reqThreadId;

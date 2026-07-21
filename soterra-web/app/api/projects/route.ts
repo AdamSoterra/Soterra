@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { projects, projectMembers } from "@/lib/schema";
 import { listUserProjects, generateCode } from "@/lib/project";
+import { createCompany, existingCompanyForUser } from "@/lib/company";
 
 export const runtime = "nodejs";
 
@@ -63,6 +64,19 @@ export async function POST(req: Request) {
   const name = String(body.name ?? "").trim();
   if (!name) return Response.json({ error: "Give your site a name" }, { status: 400 });
 
+  // The COMPANY the site belongs to. Decision (BUILD-PLAN open item 3): a
+  // company is created the first time someone creates a site, and every later
+  // site that person creates joins that same company. Splitting one builder
+  // across two companies would split their own failure history in half, which
+  // is worse than useless — so we only ever create a second company for a
+  // genuinely new person.
+  let company = await existingCompanyForUser(userId);
+  if (!company) {
+    const companyName = String(body.companyName ?? "").trim();
+    if (!companyName) return Response.json({ error: "Enter your company name" }, { status: 400 });
+    company = await createCompany(companyName);
+  }
+
   const id = crypto.randomUUID();
   let code = generateCode();
   for (let i = 0; i < 5; i++) {
@@ -71,11 +85,11 @@ export async function POST(req: Request) {
     code = generateCode();
   }
 
-  await db.insert(projects).values({ id, name, code, creatorId: userId, timezone: "Pacific/Auckland" });
+  await db.insert(projects).values({ id, name, code, companyId: company.id, creatorId: userId, timezone: "Pacific/Auckland" });
   await db.insert(projectMembers).values({ projectId: id, userId, name: personName, title, role: "admin", colorIndex: 0 });
 
   return Response.json(
-    { project: { id, name, code, role: "admin", timezone: "Pacific/Auckland" } },
+    { project: { id, name, code, role: "admin", timezone: "Pacific/Auckland" }, company: { id: company.id, name: company.name } },
     { status: 201 }
   );
 }
