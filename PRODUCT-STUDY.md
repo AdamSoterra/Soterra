@@ -21,9 +21,11 @@ A wide parallel research sweep was run across NZ construction law, where builder
 | H&S + prequal market pricing | ✅ Verified, vendor sites |
 | Retentions regime | ✅ Verified (secondary/legal commentary) |
 | Competitive: Dalux, AU landscape | ✅ Verified |
+| Company-memory category + why past attempts failed | ✅ Verified, peer-reviewed + vendor sources |
+| AI trust, professional standards, insurance | ✅ Verified (RICS, Engineering NZ, Masterspec, Verisk) |
 | **Day-in-the-life of site roles** | ❌ **Not gathered** |
 | **Rework/dispute cost data** | ⚠️ Partial, mostly secondary |
-| **Why construction tech fails to get adopted** | ❌ **Not gathered — this is the most important gap** |
+| **Why construction tech fails to get adopted** | ⚠️ **Partly answered — see §4b** (knowledge-management slice only) |
 | **AI capability limits in construction** | ❌ Not gathered |
 
 Where something is an untested hypothesis, it says so. **The #1 recommendation rests on first-party data and does not depend on any of the missing streams.**
@@ -153,6 +155,59 @@ Soterra is already an evidence machine: cited answers, dated decisions, revision
 
 ---
 
+## 4b. ⭐ The history layer: the category is open, and the old failure has a fixable cause
+
+Adam's instinct to add company history is right, and better supported than expected.
+
+### Nobody is actually doing it for contractors
+
+Every funded construction AI vendor does retrieval over **one live project**, not across a firm's completed jobs:
+- **Trunk Tools** ($40M Series B, Insight Partners, Jul 2025) launched **Cortex** on 17 June 2026, marketed as *"the brain of construction"* and explicitly pitched at *"institutional knowledge that walks out the door with experienced workers."* **But the shipped scope is active projects** — it ingests from Procore, Autodesk, SharePoint, Box, Dropbox. Three sources checked; none claim completed-project retrieval. **They are marketing corporate memory without shipping it** — which tells you the demand narrative is validated and the build isn't done.
+- **Document Crunch** ($21.5M Series B) launched a *"project-level"* risk platform, June 2026. Note the name.
+- **Procore's** five AI agents (Deep Search, Submittal Reviewer, RFI, Daily Log, Contract Review) were still **private beta as of 21 June 2026** — "none of these agents are live for general customers yet."
+- Buildots, Bild, Aphex, Versatile: progress vision, takeoff, scheduling, sensors. Not memory.
+
+**The only shipping cross-project memory product is Synthesis** (Knowledge Architecture, 130+ firms) — but it serves **A/E design firms** and leans on Deltek/Unanet ERP records. Contractor-shaped memory is genuinely open.
+
+Horizontal enterprise-search vendors (Glean, Hebbia, Dashworks) have **no construction case studies**. Construction is not a served vertical.
+
+### The 30-year failure — and why the diagnosis is encouraging
+
+Lessons-learned systems have failed in construction since **Latham (1994)** and **Egan (1998)**. The evidence on *why*:
+
+**Debs & Hubbard (2023)**, *Construction Economics and Building* — 12 interviews + 39 questionnaires, US contractors:
+- **87%** of firms "rarely or never" share evaluation reports with designers/architects
+- Only **26%** make lessons-learned results available to all employees; **23%** report no availability at all
+- The two dominant capture channels are **email and meetings** — *"difficult to retrieve in the long term"*; information sits *"locked in archives"*
+- Cultural barrier: fear of *"airing your dirty laundry"*
+- Structural barrier: teams disperse immediately, so consolidation never happens
+
+**Carrillo, Ruikar & Fuller (2013)**, *IJPM* — the canonical citation. The binding constraint was never capture. It was delivering the lesson *"at the most appropriate time, in the most appropriate format"* — i.e. **retrieval at point of need**.
+
+**This matters commercially: the diagnosed cause is precisely what RAG fixes.** The old systems taxed you to *write a lesson into a form*, then failed because nobody could find it again. Retrieval over what already exists removes the capture tax, and semantic search removes the "you had to know the keyword" failure.
+
+⚠️ **Don't overclaim.** There is **no published study of RAG over a construction firm's historical archive**. And RAG makes messy data *searchable*; it does not make absent data *exist* — scanned drawings without OCR, superseded revisions with no version signal, and missing cost structure are still fatal. **This is the strongest available argument that this time is different. It is not proof.**
+
+**Which reinforces recommendation #3:** the RFI loop generates clean, structured, dated history as a by-product — sidestepping both the capture tax and the archive-quality problem.
+
+## 4c. ⭐ Trust is falling, and the professional bodies have written our spec for us
+
+**The single most important number for positioning: Autodesk's State of Design & Make shows trust in AI among construction respondents fell from 80% to 68% year on year — down 14 points.** RICS (n=2,200+, Sep 2025): **45% of organisations report no AI use at all; just 1% have scaled it.**
+
+**The trust curve inverted in 2025.** Selling "AI" is now a headwind. Selling *verifiable, cited, auditable answers* is the tailwind.
+
+Three bodies have effectively written Soterra's requirements spec:
+
+- **RICS — mandatory standard**, published 17 Nov 2025, **effective 9 March 2026**: *"The surveyor remains accountable for every piece of professional advice, regardless of the tools used."* Requires a **named qualified professional** accountable for output reliability, AI use disclosed in **Terms of Engagement**, and records sufficient to demonstrate compliance. Explicitly warns against **automation bias** — *"it must be true because the computer says it's true."*
+- **Engineering New Zealand** (July 2025): **never rely solely on AI for code compliance or safety assessments**; client consent before using AI on project data; and **a documentation trail showing which standard version and method was used.**
+- **Masterspec** (NZ's dominant spec platform), 23 April 2026, coined **"AI slop"**: *"content that looks professionally written but lacks reliable provenance, contains incorrect references, or reflects assumptions that do not align with New Zealand requirements."* Its proposed control set is **verification and traceability** — identify the source, confirm review by a qualified practitioner, demonstrate currency against NZ standards.
+
+**That is a description of what Soterra's audit already does.** Citation with version provenance has moved from nice-to-have to professional requirement.
+
+**Insurance is moving too, ahead of any evidence.** Verisk/ISO published generative-AI exclusion endorsements (CG 40 47, CG 40 48, CG 35 08) effective **1 January 2026**. Yet **no AI design claim has been reported anywhere** — Mills & Reeve (Apr 2025): *"there have been no reported judgments so far in relation to the use of AI in a professional indemnity context."* The exclusions are **anticipatory, written before any claims experience**, which is usually when they're broadest.
+
+➡️ **Product implication: build the audit trail in from day one and it's a moat; retrofit it and it's a liability.** Soterra already cites. What's missing is *version provenance* — recording which revision of the drawing and which edition of the code an answer came from. That's a small change with outsized commercial value.
+
 ## 5. Competitive position
 
 **Nobody does cited Q&A across drawings + specs + building code.** Verified across the AU/NZ landscape (Archistar, Assignar, Buildxact, Felix, EstimateOne, RIB CostX, Calcs.com, Matrak, Ynomia, ProcurePro, Uptick, Presien, Buildertrend, Procore ANZ) — the closest partial matches are Matrak's AI takeoff (materials from drawings) and ProcurePro's BidLevel (structures supplier quotes). **None do general cited Q&A over a full drawing + spec + code set.**
@@ -220,7 +275,7 @@ Give RFIs a record: number, status, sent/answered, response-due date in the cale
 
 ## 8. Open questions — answer before betting big
 
-1. 🔴 **Why does construction software fail to get adopted?** The most important unanswered question in this study. A gap is worthless if the workflow resists software. Re-run this first.
+1. ⚠️ **Why does construction software fail to get adopted?** **Partly answered for the knowledge-management slice** (§4b: the failure was retrieval, not capture — which RAG fixes). Still unanswered for *site tools generally*: does the workflow resist software? Re-run this first — a gap is worthless if nobody will use the fix.
 2. **Does a pre-inspection check change the outcome?** Test with one builder on one consent before building it out.
 3. **Do any NZ councils accept photo/remote inspection?** MBIE explicitly sanctions it (*"remotely using digital technology"*) — but which councils operationalise it decides whether photos have a regulatory role or only internal QA.
 4. **Verify the CCA payment-claim/schedule mechanics from primary source** before designing deadline tracking. `legislation.govt.nz` blocked every automated attempt.
