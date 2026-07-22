@@ -128,6 +128,42 @@ Ranked by value × probability. Every one is free to read and restricted to reus
 
 ---
 
+---
+
+## Manufacturer terms — verified individually
+
+15 technical PDFs downloaded and text-extracted, plus every website terms page reachable. **Check both places separately** — GIB and James Hardie both have restrictive-looking websites and a permissive grant that only appears elsewhere.
+
+| Company | Website terms | In-PDF terms | Class | Contact |
+|---|---|---|---|---|
+| **James Hardie NZ** | ⭐ *"The User is authorised to reproduce and distribute exact copies or exact extracts of the CAD drawings for the sole purpose of detailing, specifying, using and promoting the use of James Hardie Products and Systems."* Also: *"Extracts should not be relied upon without reference to the complete technical manual"* | Bare © line only. **No reproduction clause in any of 5 manuals (282pp)** | **A (partial) / B** | `literaturefeedback@jameshardie.co.nz` — printed inside the manuals |
+| **Rondo** | **No terms-of-use page exists.** Footer © only. The "Terms and Conditions" link is a *supply contract*, not website terms | **Zero copyright statements in 3 documents** | **B — cleanest** | `rondo@rondo.com.au` |
+| **Resene Paints** | *"personal, non-commercial transitory viewing only"*; bars use "for any commercial purpose". **But explicitly invites requests** | — | **C, open channel** | `update@resene.co.nz` — named on the terms page |
+| **Resene Construction Systems** | **No terms page at all** | *"CONFIDENTIALITY: No part of this publication may be reproduced or transmitted other than the intended use by Resene Construction Systems without written consent"* — **on all 245 pages** | **C** | No email published; (03) 338 6328 |
+| **Sika NZ** | *"may not be copied or distributed, in whole or in part, without the Company's express written consent"*; personal non-commercial download only | Liability disclaimer only, no copyright clause | **C** | Site owned by **Sika AG, Swiss law** — NZ subsidiary likely cannot grant |
+| **Bostik NZ** | *"Copies… may only be made for information purposes and solely for strictly private use… Any reproduction… for other purposes is expressly forbidden"* | No copyright clause in 3 TDS | **C — most absolute** | `nzsales@bostik.com`, but terms are **Arkema group, France** — no permission channel named |
+| **Hilti NZ** | *"in no event shall any User copy, reproduce, distribute, transmit, upload, download, **store**, alter, modify or display any content"* | No copyright clause in 2 documents | **C — names the exact act** | No NZ email published. **Not worth pursuing** |
+
+**James Hardie and GIB are now the same ask** — both already grant extract rights limited to CAD drawings, so both emails read "extend the existing grant to the manual body text". Write one, send two. Answer James Hardie's "read as a whole" clause directly: citing page number with a link back to the full manual meets that concern.
+
+**Two cross-cutting findings:**
+- ✅ **None of the 15 PDFs reproduces Standards NZ content under a company-specific licence.** The non-transferable-licence trap that affects Pryda (000925) and MiTek (000907) **does not arise with these six.**
+- ⚠️ **BRANZ Appraisals travel inside manufacturer literature** — found in Resene Construction and Bostik documents, explicitly "copyright of BRANZ". A manufacturer's permission will not cover those pages, and BRANZ is already a no. James Hardie's Linea spec similarly carries "© Copyright 2018 WORKING SPEC LTD" on seven pages. **Wholesale library ingestion pulls these in silently — needs page-level exclusion.**
+
+### Who else belongs on the manufacturer list
+
+Ranked against the real failure data, not brand size. Your own six are weighted to linings, fixings and sealants; the documented failures are passive fire, window flashings and building services.
+
+| Priority | Who | Why |
+|---|---|---|
+| **1** | **Window & Glass Association NZ** | ~213pp on window install and flashings. **"WANZ support bars" is named verbatim in the failed ICA report**, and their Barrier Design Guide covers the IF2 barrier-height fail. All silent on reuse; named staff publish emails |
+| **2** | **Promat, Trafalgar Fire, BOSS Fire** | Passive fire caused 3 of 4 council fails. All Class B. Trafalgar has ~130 manuals behind one open endpoint. C/AS2 makes their manual the compliance benchmark |
+| **3** | **FPANZ** | The register the inspector refused a product against. Route named in their clause: via the Chief Executive |
+| **4** | **Elephant Plasterboard** | Write alongside GIB, not instead. NZ-owned, already grants narrow reuse rights, would value visibility against GIB |
+| **5** | **ARDEX** (386pp waterproofing), **Thermakraft/Kingspan**, **Masons** | Class B, silent on reuse. ARDEX is relevant to the membrane-upstand fail |
+| — | **NZ Metal Roofing (NZMRM)** | **Don't spend an email.** Already attribution-only — usable now. A courtesy note asking for quarterly revision notices is enough |
+| — | **Simpson Strong-Tie** | Skip. Restricts commercial use by name; a negotiation, not an email |
+
 ## The gap money can't close
 
 | Category | Your failures | Answerable free | Why |
