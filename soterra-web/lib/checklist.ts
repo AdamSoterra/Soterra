@@ -212,7 +212,11 @@ export async function generateChecklistItems(
     // decides whether the inspection can happen at all, and getting it wrong
     // is a wasted fee plus a re-book.
     const blockers = blockersFor(opts.inspectionCode).map((b) => ({
-      title: `${b.needs} must have passed first`,
+      // A commercial-only rule gets labelled, not asserted. The council draws
+      // membranes-before-cladding on the commercial chart only, and the same
+      // booking code (ICL) covers both — so saying it flatly on a house would
+      // be putting words in the council's mouth.
+      title: `${b.needs} must have passed first${b.scope === "commercial" ? " (commercial jobs)" : ""}`,
       detail: b.note,
       source: "code",
       sourceRef: "Auckland Council · Building consents booklet AC1229 V13 · typical order of notifiable inspections",
