@@ -130,39 +130,76 @@ Ranked by value × probability. Every one is free to read and restricted to reus
 
 ---
 
-## Manufacturer terms — verified individually
+## Manufacturer literature — ~60 brands verified
 
-15 technical PDFs downloaded and text-extracted, plus every website terms page reachable. **Check both places separately** — GIB and James Hardie both have restrictive-looking websites and a permissive grant that only appears elsewhere.
+Website terms **and** the wording inside the actual PDFs, checked separately. That split is essential: GIB, James Hardie, Carter Holt and Expol all have restrictive-looking websites and no restriction at all in their documents.
 
-| Company | Website terms | In-PDF terms | Class | Contact |
-|---|---|---|---|---|
-| **James Hardie NZ** | ⭐ *"The User is authorised to reproduce and distribute exact copies or exact extracts of the CAD drawings for the sole purpose of detailing, specifying, using and promoting the use of James Hardie Products and Systems."* Also: *"Extracts should not be relied upon without reference to the complete technical manual"* | Bare © line only. **No reproduction clause in any of 5 manuals (282pp)** | **A (partial) / B** | `literaturefeedback@jameshardie.co.nz` — printed inside the manuals |
-| **Rondo** | **No terms-of-use page exists.** Footer © only. The "Terms and Conditions" link is a *supply contract*, not website terms | **Zero copyright statements in 3 documents** | **B — cleanest** | `rondo@rondo.com.au` |
-| **Resene Paints** | *"personal, non-commercial transitory viewing only"*; bars use "for any commercial purpose". **But explicitly invites requests** | — | **C, open channel** | `update@resene.co.nz` — named on the terms page |
-| **Resene Construction Systems** | **No terms page at all** | *"CONFIDENTIALITY: No part of this publication may be reproduced or transmitted other than the intended use by Resene Construction Systems without written consent"* — **on all 245 pages** | **C** | No email published; (03) 338 6328 |
-| **Sika NZ** | *"may not be copied or distributed, in whole or in part, without the Company's express written consent"*; personal non-commercial download only | Liability disclaimer only, no copyright clause | **C** | Site owned by **Sika AG, Swiss law** — NZ subsidiary likely cannot grant |
-| **Bostik NZ** | *"Copies… may only be made for information purposes and solely for strictly private use… Any reproduction… for other purposes is expressly forbidden"* | No copyright clause in 3 TDS | **C — most absolute** | `nzsales@bostik.com`, but terms are **Arkema group, France** — no permission channel named |
-| **Hilti NZ** | *"in no event shall any User copy, reproduce, distribute, transmit, upload, download, **store**, alter, modify or display any content"* | No copyright clause in 2 documents | **C — names the exact act** | No NZ email published. **Not worth pursuing** |
+### The pattern worth knowing
 
-**James Hardie and GIB are now the same ask** — both already grant extract rights limited to CAD drawings, so both emails read "extend the existing grant to the manual body text". Write one, send two. Answer James Hardie's "read as a whole" clause directly: citing page number with a link back to the full manual meets that concern.
+**Three companies publish an address specifically for permission requests.** They are invitations, not walls, and they should be written to first:
+- **Autex** — cl 15.2: *"Enquiries and permission requests may be sent to us at enquiries@autex.co.nz."*
+- **NZ Steel** — *"Requests and enquires concerning the reproduction of Material on this Site... should be sent by email to info@nzsteel.co.nz."*
+- **Resene Paints** — *"If you would like to use any material from the Resene website, please contact Resene Marketing... update@resene.co.nz."*
 
-**Two cross-cutting findings:**
-- ✅ **None of the 15 PDFs reproduces Standards NZ content under a company-specific licence.** The non-transferable-licence trap that affects Pryda (000925) and MiTek (000907) **does not arise with these six.**
-- ⚠️ **BRANZ Appraisals travel inside manufacturer literature** — found in Resene Construction and Bostik documents, explicitly "copyright of BRANZ". A manufacturer's permission will not cover those pages, and BRANZ is already a no. James Hardie's Linea spec similarly carries "© Copyright 2018 WORKING SPEC LTD" on seven pages. **Wholesale library ingestion pulls these in silently — needs page-level exclusion.**
+**And three already grant what Soterra needs, in writing:**
+- **James Hardie / GIB** — *"The User is authorised to reproduce and distribute exact copies or exact extracts of the CAD drawings for the sole purpose of detailing, specifying, using and promoting the use of [X] Products and Systems."* Scoped to CAD drawings; the ask is to extend it to manual body text.
+- **Dimond Roofing** — on nearly every page of 400+ pages: *"You may copy this document solely for the Permitted Purpose"*, where that purpose is *"designing or building a roof or roofing system solely using products supplied or approved by Dimond."* An inspector querying a Dimond roof is inside it.
+- **Juken (JNL)** — the only unconditional grant found: *"Details may be reproduced provided they are reproduced in full and used in context."*
 
-### Who else belongs on the manufacturer list
+⚠️ **That CAD-grant clause family appears only among CAD-library/system suppliers.** It is absent from every timber, concrete and steel company checked, and from every envelope and services company. One template will not cover the list.
 
-Ranked against the real failure data, not brand size. Your own six are weighted to linings, fixings and sealants; the documented failures are passive fire, window flashings and building services.
+### Email running order
 
-| Priority | Who | Why |
-|---|---|---|
-| **1** | **Window & Glass Association NZ** | ~213pp on window install and flashings. **"WANZ support bars" is named verbatim in the failed ICA report**, and their Barrier Design Guide covers the IF2 barrier-height fail. All silent on reuse; named staff publish emails |
-| **2** | **Promat, Trafalgar Fire, BOSS Fire** | Passive fire caused 3 of 4 council fails. All Class B. Trafalgar has ~130 manuals behind one open endpoint. C/AS2 makes their manual the compliance benchmark |
-| **3** | **FPANZ** | The register the inspector refused a product against. Route named in their clause: via the Chief Executive |
-| **4** | **Elephant Plasterboard** | Write alongside GIB, not instead. NZ-owned, already grants narrow reuse rights, would value visibility against GIB |
-| **5** | **ARDEX** (386pp waterproofing), **Thermakraft/Kingspan**, **Masons** | Class B, silent on reuse. ARDEX is relevant to the membrane-upstand fail |
-| — | **NZ Metal Roofing (NZMRM)** | **Don't spend an email.** Already attribution-only — usable now. A courtesy note asking for quarterly revision notices is enough |
-| — | **Simpson Strong-Tie** | Skip. Restricts commercial use by name; a negotiation, not an email |
+| # | Who | Contact | Why it ranks here |
+|---|---|---|---|
+| 1 | **James Hardie** | `literaturefeedback@jameshardie.co.nz` | Existing grant, no restriction in any of 5 manuals (282pp), and the contact is printed *inside* the documents so it lands with literature staff, not legal |
+| 2 | **Carter Holt Harvey** (Futurebuild LVL, Ecoply) | `info@futurebuild.co.nz` | Biggest structural literature set in NZ residential framing. **All four flagship PDFs — 152pp — carry no copyright statement whatsoever.** Only the website restricts |
+| 3 | **Dimond Roofing** | `rooftech@dimond.co.nz` | Already grants copying for a defined purpose Soterra sits inside. 400+pp open (228pp Technical Manual, 93pp Structural, 80pp Installers) |
+| 4 | **GIB / Winstone Wallboards** | `info@gib.co.nz` | Same email as #1. Noise Control (132pp) and Fire Rated (152pp) answer the acoustic and passive-fire failures |
+| 5 | **Autex** | `enquiries@autex.co.nz` | Terms nominate that address for permission requests. Directly answers the acoustic-lagging failures |
+| 6 | **APL Window Solutions** (Altherm, First, Vantage) | `espcloudsupport@aplnz.co.nz` | Dominant NZ window supplier, and **they already run a partner integrations API** — licensing data to a third party is a conversation they have. BPIRs are silent; website is restrictive |
+| 7 | **Window & Glass Association NZ** | named staff publish emails | ~213pp. **"WANZ support bars" is named verbatim in the failed ICA report**; their Barrier Design Guide covers the IF2 barrier-height fail |
+| 8 | **Juken (JNL)** | `info@jnl.co.nz` | Unconditional grant. ⚠️ **Exclude BRANZ Appraisals 481 and 593, ~pp100–120 of the Triboard manual** — not JNL's to grant. Say so yourself in the email |
+| 9 | **NZ Steel / Colorsteel** | `info@nzsteel.co.nz` | Named reproduction-request channel. Also the upstream substrate for Dimond, Metalcraft and Steel & Tube literature — one yes strengthens several |
+| 10 | **Promat · Trafalgar Fire · BOSS Fire** | technical contacts | Passive fire caused 3 of 4 council fails. Trafalgar has ~130 manuals behind one open endpoint |
+| 11 | **Allproof Industries** | contact form | **No terms page, no copyright page, no disclaimer — verified against their full sitemap.** Cheapest yes on the list, and drainage fittings sit on the failure data |
+| 12 | **Herman Pacific** | `technical@hermpac.co.nz` | Large open detail library (PDF + REVIT + DWG + DXF), no copyright line in the specs. Website terms are aggressive, so ask |
+| 13 | **Expol** | `tech@expol.co.nz` | **42-page technical guide, no copyright statement anywhere.** Website restrictive |
+| 14 | **Equus Industries** | `central@equus.nz` | Membrane and tanking failures. Terms name technical documents explicitly and downloads are 403-blocked — you have to ask |
+| 15 | **Nelson Pine** | `LVL@nelsonpine.co.nz` | No terms page, no copyright in the PDFs. Small corpus but core LVL data. Near-formality |
+| 16 | **Rondo** | `rondo@rondo.com.au` | No terms-of-use page at all, zero copyright statements. A courtesy note |
+| 17 | **Resene Paints** | `update@resene.co.nz` | Invites requests. ⚠️ **Name Resene Construction Systems separately** — its 245pp manual is stamped on every page and will not be covered |
+| 18 | **NK Windows** | `info@nkwindows.co.nz` | Explicit prohibition but squarely on the failing item. ⚠️ much of the library is image-only vector CAD — one file yields 3 characters of text. Would need OCR even with permission |
+| 19 | **Timber Unlimited** (NZ Wood Design Guides) | contact form | 16 chapters, 50–80pp each, no copyright clause in any checked. Blocked by one line: *"You may not commercially exploit this site or its contents."* **But the IP is MPI-owned Crown material**, which grants far more readily than a manufacturer |
+| 20 | **Concrete NZ** | `admin@concretenz.org.nz` | ⚠️ **Non-negotiable carve-out: CP 01 Section 4.6 (Masonry Veneer) is NZS 4229 content under Standards NZ licence 001006 issued to them by name.** Raise it yourself. Do not write to CCANZ — the domain is dead |
+| 21 | **FPANZ** | via the Chief Executive | The register the inspector refused a product against |
+| 22 | **Elephant Plasterboard** | `info@epb.co.nz` | Write alongside GIB, not instead. NZ-owned, already grants narrow reuse rights |
+| 23 | **Techlam · Stahlton · Metalcraft · XLam · Mammoth** | see notes | Bare-notice-or-nothing, no reuse restriction. Cheap yeses, modest corpora — batch them once a template works. ⚠️ verify mammoth.co.nz resolves first |
+| 24 | **ARDEX · Thermakraft/Kingspan · Masons · Ramset · JSC Timber** | — | Class B, silent on reuse |
+
+### Skip — and why
+
+| Who | Reason |
+|---|---|
+| **Hilti** | Access Agreement bars users from **"store"**-ing content — names the exact act. Portal-gated, no NZ email |
+| **Knauf** | *"All rights reserved, including those of... **storage in electronic media**."* Group-level German notice |
+| **Metro Performance Glass** | Bars material being **"stored in a retrieval system"** |
+| **Steel & Tube** | The only explicit **anti-scraping** clause found anywhere. Literature is downstream of COLORSTEEL and BHP — licence NZ Steel instead |
+| **HERA** | Publications *are* the revenue (NZ$271/guide) and they already have a published AI policy. A paid negotiation |
+| **Simpson Strong-Tie** | Restricts commercial use by name |
+| **Sika · Bostik · Holcim** | European parents, no permission channel named |
+| **Cirtex** | Has a grant, but *"non-commercial use within your organization only"*. Drawings carry almost no text anyway |
+| **NZTPC · WPMA** | No corpus at all — HTML only. Treatment levels live in NZS 3602 and B2/AS1, already covered |
+| **Red Stag** | Thin free literature; the valuable span tables are login-gated |
+| **Fairview** | Login-gated — you would be asking for access *and* permission |
+| **RX Plastics/Aliaxis · Rosenfeld Kidson · Gripset · Wolfin · Envirospec · Dux** | No usable corpus, no NZ entity, or compliance paperwork only |
+
+### Two rules for the ingest pipeline, both now confirmed as patterns
+
+**1. BRANZ Appraisals travel inside manufacturer literature.** Confirmed verbatim in BRANZ Appraisal 871: the appraisal *"is copyright of BRANZ"*. Juken embeds two in full; Resene Construction and Bostik carry them; Equus and Mapei host entire appraisal libraries. **Index the manufacturer's own literature, never the appraisal — even when the manufacturer distributes it.** BRANZ is already a hard no, so a wholesale library pull would quietly import exactly what we ruled out.
+
+**2. Standards content arrives under licences issued to the publisher by name, and cannot be passed on.** Confirmed: Concrete NZ CP 01 §4.6 under Standards NZ licence **001006**; Pryda under **000925**; MiTek under **000907**. Needs page-level exclusion, not document-level. Also watch Golden Bay's safety data sheets — those are **Datachem's** copyright, not Golden Bay's to grant.
+
 
 ## The gap money can't close
 
