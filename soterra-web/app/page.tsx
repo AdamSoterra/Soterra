@@ -1129,17 +1129,25 @@ export default function Page() {
     const notPdf = all.length - pdfs.length;
     if (notPdf > 0) setRepItems((prev) => [{ name: `${notPdf} file${notPdf === 1 ? "" : "s"} skipped`, ok: false, note: "not a PDF" }, ...prev]);
     if (!pdfs.length) return;
-    for (const f of pdfs) {
-      setRepCurrent({ name: f.name, phase: "Uploading", pct: 0 });
+
+    // Reading a report takes 20-60s, almost all of it waiting on the model.
+    // One at a time, a folder of 30 is half an hour of watching a bar — which
+    // no site manager is going to do. They run four at a time instead, so the
+    // wall clock is roughly a quarter of the sum. Four, not forty: each one
+    // holds a serverless function, and the model has rate limits.
+    const LANES = 4;
+    let done = 0;
+    const total = pdfs.length;
+    setRepCurrent({ name: `${total} report${total === 1 ? "" : "s"}`, phase: "Reading", pct: 0 });
+
+    const readOne = async (f: File) => {
       try {
         const blob = await upload(`${pid}/${f.name}`, f, {
           access: "private",
           handleUploadUrl: "/api/upload/token",
           clientPayload: JSON.stringify({ projectId: pid }),
           contentType: "application/pdf",
-          onUploadProgress: (p) => setRepCurrent({ name: f.name, phase: "Uploading", pct: Math.round(p.percentage) }),
         });
-        setRepCurrent({ name: f.name, phase: "Reading the report", pct: 100 });
         const res = await apiFetch("/api/inspections", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1153,8 +1161,28 @@ export default function Page() {
         setRepItems((prev) => [{ name: f.name, ok: true, note }, ...prev]);
       } catch (e) {
         setRepItems((prev) => [{ name: f.name, ok: false, note: e instanceof Error ? e.message : "upload failed" }, ...prev]);
+      } finally {
+        done++;
+        setRepCurrent({ name: `${done} of ${total} read`, phase: "Reading", pct: Math.round((done / total) * 100) });
+        // Fill the page in as results land, rather than making them wait for
+        // the whole batch to finish before anything appears.
+        if (done % LANES === 0 || done === total) loadInsights(catFilter);
       }
-    }
+    };
+
+    // A shared queue, so a slow 23-page report doesn't hold up a whole lane's
+    // worth of quick ones behind it.
+    const queue = [...pdfs];
+    await Promise.all(
+      Array.from({ length: Math.min(LANES, queue.length) }, async () => {
+        for (;;) {
+          const next = queue.shift();
+          if (!next) return;
+          await readOne(next);
+        }
+      })
+    );
+
     setRepCurrent(null);
     setInsightsLoaded(false);
     loadInsights(catFilter);
@@ -1570,6 +1598,10 @@ export default function Page() {
           {menuOpen && (
             <div className="menu">
               <div className="mrow"><span className="mi">🏗️</span><div><b>{projName}</b><br /><small>{curProject?.role === "admin" ? "You're the admin" : (members.find((m) => m.isMe)?.title || "Crew member")}</small></div></div>
+              {/* Past chats lives here now. It used to be a button floating
+                  over the top-left of the assistant screen, which sat on top
+                  of the Today card and covered its heading. */}
+              <div className="mrow" onClick={() => { setMenuOpen(false); setTab("assistant"); setRailOpen(true); loadThreads(); }}><span className="mi">💬</span> Past chats</div>
               <div className="mrow" onClick={() => { setCrewOpen(true); setMenuOpen(false); loadMembers(); }}><span className="mi">👥</span> Crew &amp; invite code</div>
               <div className="mrow" onClick={() => { setMenuOpen(false); window.open("/install", "_blank"); }}><span className="mi">📱</span> Put it on a phone</div>
               <div className="mrow sep" onClick={() => clerk.signOut()}><span className="mi">↩️</span> Sign out</div>
@@ -1620,7 +1652,6 @@ export default function Page() {
                 </>
               )}
             </aside>
-            <button className="chat-fab" onClick={() => setRailOpen(true)} aria-label="Past conversations">☰ Chats</button>
           <div className="assistant">
             {messages.length === 0 ? (
               <div className="hero-full home">
@@ -1637,10 +1668,15 @@ export default function Page() {
                     onToggle={toggleTask}
                     onOpen={() => setTab("calendar")}
                   />
+                  {/* A gap either side centres the greeting in whatever space
+                      the day leaves. Both collapse to their minimum on a busy
+                      day, so a long list pushes the greeting down rather than
+                      squashing it. */}
                   <div className="home-gap" />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img className="hero-logo home-logo" src="/logo-mark.png" alt="Soterra" />
                   <h1 className="home-greet">Hi <b className="grad">{firstName}</b>, how can I help?</h1>
+                  <div className="home-gap" />
                 </div>
                 <div className="hero-composer">{cbox}</div>
               </div>
@@ -1964,7 +2000,7 @@ export default function Page() {
                     : "Drop in the council and consultant reports you've already had — Soterra reads each one, keeps only what failed, and tags it. After a handful you can see what your crew actually gets pulled up on, and the assistant can build a check from it."}
                 </p>
                 {repCurrent ? (
-                  <div className="upbar"><div className="upbar-fill" style={{ width: `${repCurrent.phase === "Uploading" ? repCurrent.pct || 4 : 100}%` }} /></div>
+                  <div className="upbar"><div className="upbar-fill" style={{ width: `${Math.max(repCurrent.pct, 4)}%` }} /></div>
                 ) : (
                   <span className="soon">Choose reports</span>
                 )}
@@ -2074,7 +2110,7 @@ export default function Page() {
                 >
                   <b>{repCurrent ? `${repCurrent.phase}…` : "Drop in another inspection report"}</b>
                   <p>{repCurrent ? repCurrent.name : "Council checklists or a consultant's site observation report — PDF with real text, not a scan."}</p>
-                  {repCurrent && <div className="upbar"><div className="upbar-fill" style={{ width: `${repCurrent.phase === "Uploading" ? repCurrent.pct || 4 : 100}%` }} /></div>}
+                  {repCurrent && <div className="upbar"><div className="upbar-fill" style={{ width: `${Math.max(repCurrent.pct, 4)}%` }} /></div>}
                 </div>
               </>
             )}
