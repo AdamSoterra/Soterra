@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { anonymiseField, anonymiseText } from "./anonymise";
-import { CATEGORIES, INSPECTION_CODES, classify, codeName, type Category } from "./categories";
+import { CATEGORIES, classify, codeName, inspectionType, type Category } from "./categories";
 
 // ─── The history learner ─────────────────────────────────────────────────
 //
@@ -116,8 +116,12 @@ const ITEM_SCHEMA = {
       description: "False if this document is not an inspection/observation report at all (a fee proposal, a scope of work, a specification, a drawing). If false, return an empty items array.",
     },
     source: { type: "string", enum: ["council", "consultant"] },
-    inspection_code: { type: "string", description: "The council inspection code if the report has one (ICA, IPL, IF2…), else empty string." },
-    inspection_type: { type: "string", description: "What kind of inspection this was, in the report's own words (\"Cavity wrap\", \"Fire\", \"Site observation\"). Empty string if unclear." },
+    inspection_code: {
+      type: "string",
+      description:
+        "For a COUNCIL report: its own inspection code (IFO ISF IPF IBF IFG ICA ICL ITK IRF IDT IDP IPP IPB IPL IF1 IF2 IME IMV). For a CONSULTANT report: the discipline it covers — FIRE, ELEC, MECH, HYD (hydraulic/plumbing), STRU (structural), ARCH (architectural), ACOU (acoustic), SEIS (seismic), or SERV when one report covers electrical + hydraulic + mechanical together. Empty string if you genuinely can't tell.",
+    },
+    inspection_type: { type: "string", description: "What kind of inspection this was, in the report's own words (\"Cavity wrap\", \"Fire\", \"Building services site inspection\"). Empty string if unclear." },
     inspector_org: { type: "string", description: "The ORGANISATION that inspected (\"Auckland Council\", the consultancy's name). NEVER a person's name. Empty string if unclear." },
     outcome: { type: "string", enum: ["pass", "partial", "fail", "unknown"] },
     inspected_on: { type: "string", description: "Date of the inspection as YYYY-MM-DD, or empty string if the report doesn't state one." },
@@ -227,8 +231,11 @@ ${trimForModel(clean)}`,
         : "the assistant couldn't be reached";
   }
 
-  const inspectionCode = (str(modelOut.inspection_code) || header.code || fromName.code || null)?.toUpperCase() ?? null;
-  const known = inspectionCode ? INSPECTION_CODES[inspectionCode] : undefined;
+  // The council's own header and filename beat the model when they exist —
+  // they're printed, not inferred. The model only fills the gap, which on a
+  // consultant report (no code anywhere) is the discipline.
+  const inspectionCode = (header.code || fromName.code || str(modelOut.inspection_code) || null)?.toUpperCase() ?? null;
+  const known = inspectionType(inspectionCode);
 
   // Merge: deterministic checklist fails first (they're exact), then anything
   // the model found that isn't already covered.
@@ -262,7 +269,7 @@ ${trimForModel(clean)}`,
     isInspectionReport: modelOut.is_inspection_report !== false,
     degraded,
     degradedReason,
-    source: str(modelOut.source) === "consultant" ? "consultant" : inspectionCode || header.code ? "council" : "consultant",
+    source: known?.group === "council" ? "council" : known?.group === "consultant" ? "consultant" : str(modelOut.source) === "council" ? "council" : "consultant",
     inspectionCode,
     inspectionType: str(modelOut.inspection_type) || codeName(inspectionCode) || known?.name || header.typeName || null,
     // Organisations only — anonymiseField turns a bare "Firstname Lastname" into

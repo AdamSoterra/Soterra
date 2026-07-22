@@ -478,3 +478,9 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
   .rank-lbl{font-size:13.5px}
   .rank-row{gap:9px;padding:9px 6px}
 }
+
+/* Sub-heading under a .pg-k section — "Council", "Fire", "Electrical"… */
+.sub-k{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--slate);margin:16px 2px 9px}
+.sub-k:first-child{margin-top:2px}
+.sub-k span{font-size:11px;font-weight:700;color:var(--mut);background:rgba(146,166,190,.14);border-radius:20px;padding:2px 8px}
+.sub-k::after{content:"";flex:1;height:1px;background:var(--line2)}

@@ -40,8 +40,20 @@ export function isCategory(v: unknown): v is Category {
   return typeof v === "string" && (CATEGORIES as readonly string[]).includes(v);
 }
 
-// ─── Council inspection codes ────────────────────────────────────────────
-// The council is still the dominant inspector, so its own codes are primary.
+// ─── Inspection types ────────────────────────────────────────────────────
+//
+// Two families, and they are genuinely different documents:
+//
+//   COUNCIL (BCA) — a statutory checklist with its own code (IPL, ICA, IF2…),
+//   a Pass/Partial/Fail outcome, and the same template every time.
+//
+//   CONSULTANT — the engineer's, fire designer's or architect's site
+//   observation report. No shared template, no overall pass/fail, and the
+//   discipline is the thing that identifies it: Electrical, Fire, Mechanical,
+//   Hydraulic, Structural, Architectural, Acoustic, Seismic. Adam's own
+//   folders are exactly this split, and on his set the consultants outnumber
+//   the council 69 to 27.
+//
 // `category` is only a FALLBACK for an item whose wording matched no rule —
 // several inspections (pre-line, post-line, final) legitimately produce fails
 // across half the categories, which is exactly why the item wording wins.
@@ -66,10 +78,48 @@ export const INSPECTION_CODES: Record<string, { name: string; category: Category
   IMV: { name: "Minor variation", category: "Other" },
 };
 
-/** Readable name for a council code — "ICA" → "Cavity wrap". */
-export function codeName(code: string | null | undefined): string | null {
+/** The consultant disciplines. No leading "I", so these can never collide with
+ *  a council code. `query` is what actually finds the right pages in a drawing
+ *  set — "ELEC" matches nothing, "switchboard cable tray seismic restraint"
+ *  matches the details. */
+export const CONSULTANT_TYPES: { code: string; name: string; category: Category; query: string }[] = [
+  { code: "FIRE", name: "Fire", category: "Fire", query: "passive fire stopping penetration collar fire rated wall ceiling door damper sprinkler alarm exit sign emergency lighting" },
+  { code: "ELEC", name: "Electrical", category: "Electrical", query: "electrical switchboard distribution cable tray conduit earthing bonding lighting power outlet comms containment seismic restraint" },
+  { code: "MECH", name: "Mechanical", category: "Mechanical", query: "mechanical ventilation ductwork extract fan air conditioning heat pump damper commissioning air balance" },
+  { code: "HYD", name: "Hydraulic / plumbing", category: "Plumbing & Drainage", query: "hydraulic plumbing water supply pipework drainage foul storm gradient gully trap vent hot water cylinder backflow" },
+  { code: "STRU", name: "Structural", category: "Structural", query: "structural steel connection weld bolt reinforcing bracing beam column slab foundation tie down engineer producer statement" },
+  { code: "ARCH", name: "Architectural", category: "Architect", query: "architectural setout finish cladding junction detail joinery interior lining tolerance as per architectural detail" },
+  { code: "ACOU", name: "Acoustic", category: "Acoustic", query: "acoustic insulation intertenancy sound rating STC IIC seal penetration acoustic separation" },
+  { code: "SEIS", name: "Seismic", category: "Seismic", query: "seismic restraint bracing services sway brace clearance movement joint seismic gap" },
+  // The 18004.2 "Building Services Site Inspection" reports are one document
+  // covering electrical, hydraulic AND mechanical — which is why they're filed
+  // three times in Adam's folders. They deserve their own type.
+  { code: "SERV", name: "Building services (combined)", category: "Mechanical", query: "building services electrical hydraulic mechanical containment penetration coordination riser plant room" },
+];
+
+const CONSULTANT_BY_CODE = new Map(CONSULTANT_TYPES.map((t) => [t.code, t]));
+
+/** Every inspection type, council and consultant, in one lookup. */
+export function inspectionType(code: string | null | undefined): { name: string; category: Category; group: "council" | "consultant" } | null {
   if (!code) return null;
-  return INSPECTION_CODES[code.toUpperCase()]?.name ?? null;
+  const c = code.toUpperCase();
+  const council = INSPECTION_CODES[c];
+  if (council) return { ...council, group: "council" };
+  const consultant = CONSULTANT_BY_CODE.get(c);
+  if (consultant) return { name: consultant.name, category: consultant.category, group: "consultant" };
+  return null;
+}
+
+/** Readable name for a code — "ICA" → "Cavity wrap", "ELEC" → "Electrical". */
+export function codeName(code: string | null | undefined): string | null {
+  return inspectionType(code)?.name ?? null;
+}
+
+/** The retrieval query for a type, used to find the right drawing and Code
+ *  pages when the assistant writes a checklist. */
+export function typeQuery(code: string | null | undefined): string | null {
+  if (!code) return null;
+  return CONSULTANT_BY_CODE.get(code.toUpperCase())?.query ?? null;
 }
 
 // ─── Item wording → category ─────────────────────────────────────────────
@@ -142,8 +192,8 @@ export function classify(opts: {
   const byRule = categoryFromText(opts.title) ?? categoryFromText(opts.detail ?? "");
   if (byRule) return { category: byRule, by: "rule" };
   if (isCategory(opts.suggested) && opts.suggested !== "Other") return { category: opts.suggested, by: "model" };
-  const code = opts.inspectionCode ? INSPECTION_CODES[opts.inspectionCode.toUpperCase()] : undefined;
-  if (code) return { category: code.category, by: "code" };
+  const type = inspectionType(opts.inspectionCode);
+  if (type) return { category: type.category, by: "code" };
   return { category: "Other", by: "fallback" };
 }
 

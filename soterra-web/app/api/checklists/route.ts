@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { events } from "@/lib/schema";
 import { resolveScope } from "@/lib/company";
 import {
-  CHECKLIST_CODES,
+  CHECKLIST_TYPES,
   addChecklistItem,
   addChecklistPhoto,
   createChecklist,
@@ -47,7 +47,7 @@ export async function GET(req: Request) {
 
   const eventId = url.searchParams.get("eventId");
   const rows = await listChecklists(scope, { eventId });
-  return Response.json({ checklists: rows, codes: CHECKLIST_CODES });
+  return Response.json({ checklists: rows, types: CHECKLIST_TYPES });
 }
 
 // POST /api/checklists

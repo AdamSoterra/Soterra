@@ -3,8 +3,8 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "./db";
 import { checklistItems, checklistPhotos, checklists } from "./schema";
 import type { Scope } from "./company";
-import { CATEGORIES, INSPECTION_CODES, codeName, isCategory } from "./categories";
-import { historyForCode, searchHistory } from "./history";
+import { CATEGORIES, CONSULTANT_TYPES, INSPECTION_CODES, codeName, inspectionType, isCategory, typeQuery } from "./categories";
+import { historyForCode, searchHistory, topItems } from "./history";
 import { getProjectIndex } from "./projectIndex";
 import { getCodeIndex, codeLabel } from "./codeIndex";
 import { excerpt, retrieve } from "./retrieve";
@@ -118,7 +118,9 @@ const CODE_QUERIES: Record<string, string> = {
 };
 
 function queryFor(code: string | null, title: string): string {
-  const c = code ? CODE_QUERIES[code.toUpperCase()] : null;
+  // Council codes have their own query table; consultant disciplines carry
+  // theirs on the type itself (lib/categories.ts).
+  const c = code ? CODE_QUERIES[code.toUpperCase()] ?? typeQuery(code) : null;
   return [c, title].filter(Boolean).join(" ");
 }
 
@@ -143,12 +145,21 @@ export async function generateChecklistItems(
 
   const q = queryFor(opts.inspectionCode, opts.title);
 
+  // Where "what we personally keep failing" comes from. A council code matches
+  // history on the code itself; a consultant discipline matches on its
+  // category, because a fire engineer's report and a council post-line
+  // inspection both produce Fire items and both are worth surfacing.
+  const type = inspectionType(opts.inspectionCode);
+  const historyQuery = !opts.inspectionCode
+    ? searchHistory(scope, opts.title, { limit: 10 }).then((rows) => rows.map((r) => ({ title: r.title, category: r.category, count: 1, lastSeen: r.inspectedOn })))
+    : type?.group === "consultant"
+      ? topItems(scope, { category: type.category, limit: 10 })
+      : historyForCode(scope, opts.inspectionCode, 10);
+
   const [projectIdx, codeIdx, history] = await Promise.all([
     getProjectIndex(scope.projectId),
     getCodeIndex(),
-    opts.inspectionCode
-      ? historyForCode(scope, opts.inspectionCode, 10)
-      : searchHistory(scope, opts.title, { limit: 10 }).then((rows) => rows.map((r) => ({ title: r.title, category: r.category, count: 1, lastSeen: r.inspectedOn }))),
+    historyQuery,
   ]);
 
   const planPages = retrieve(projectIdx.pages, projectIdx.df, q, 6);
@@ -419,7 +430,13 @@ export async function photoIsOurs(scope: Scope, pathname: string): Promise<boole
   return !!row;
 }
 
-/** Inspection codes a user can pick when creating a checklist by hand. */
-export const CHECKLIST_CODES = Object.entries(INSPECTION_CODES)
-  .filter(([code]) => !["IME", "IMV"].includes(code))
-  .map(([code, v]) => ({ code, name: v.name }));
+/** What you can build a check for, grouped the way the inspections actually
+ *  arrive: the council's statutory ones, then the consultants' disciplines.
+ *  IME (site meeting) and IMV (minor variation) are dropped — there's nothing
+ *  to walk the job with on either. */
+export const CHECKLIST_TYPES = {
+  council: Object.entries(INSPECTION_CODES)
+    .filter(([code]) => !["IME", "IMV"].includes(code))
+    .map(([code, v]) => ({ code, name: v.name })),
+  consultant: CONSULTANT_TYPES.map((t) => ({ code: t.code, name: t.name })),
+};

@@ -55,6 +55,32 @@ type ChecklistHead = {
 };
 type ChecklistFull = { checklist: ChecklistHead; items: ChecklistItem[] };
 
+// Consultant discipline codes → readable names (mirrors lib/categories.ts
+// CONSULTANT_TYPES). Council codes come back on the row already named.
+const DISCIPLINE: Record<string, string> = {
+  FIRE: "Fire", ELEC: "Electrical", MECH: "Mechanical", HYD: "Hydraulic / plumbing",
+  STRU: "Structural", ARCH: "Architectural", ACOU: "Acoustic", SEIS: "Seismic",
+  SERV: "Building services",
+};
+
+// Past inspections, grouped the way they arrive: all the council ones together
+// (they're one statutory series), then a heading per consultant discipline.
+function groupInspections(rows: InspectionRow[]): { key: string; label: string; rows: InspectionRow[] }[] {
+  const groups = new Map<string, { key: string; label: string; rows: InspectionRow[] }>();
+  for (const r of rows) {
+    const isCouncil = r.source === "council";
+    const key = isCouncil ? "council" : r.inspectionCode && DISCIPLINE[r.inspectionCode] ? r.inspectionCode : "other";
+    const label = isCouncil ? "Council" : DISCIPLINE[key] ?? "Other consultant";
+    const g = groups.get(key) ?? { key, label, rows: [] };
+    g.rows.push(r);
+    groups.set(key, g);
+  }
+  // Council first, then the biggest disciplines, "Other consultant" last.
+  return [...groups.values()].sort((a, b) =>
+    a.key === "council" ? -1 : b.key === "council" ? 1 : a.key === "other" ? 1 : b.key === "other" ? -1 : b.rows.length - a.rows.length
+  );
+}
+
 // Category colours — must match lib/categories.ts CATEGORY_COLOR.
 const CAT_COLOR: Record<string, string> = {
   Fire: "#EF4444",
@@ -419,7 +445,9 @@ export default function Page() {
 
   // ─── Checklists (attached to a calendar event) ───
   const [checklists, setChecklists] = useState<ChecklistHead[]>([]);
-  const [clCodes, setClCodes] = useState<{ code: string; name: string }[]>([]);
+  // Inspection types you can build a check for, grouped the way they actually
+  // arrive: the council's statutory ones, then the consultants' disciplines.
+  const [clTypes, setClTypes] = useState<{ council: { code: string; name: string }[]; consultant: { code: string; name: string }[] }>({ council: [], consultant: [] });
   const [openChecklist, setOpenChecklist] = useState<ChecklistFull | null>(null);
   const [clBusy, setClBusy] = useState(false);
   const [clErr, setClErr] = useState<string | null>(null);
@@ -511,7 +539,7 @@ export default function Page() {
       const res = await apiFetch("/api/checklists");
       const data = await res.json();
       if (Array.isArray(data.checklists)) setChecklists(data.checklists);
-      if (Array.isArray(data.codes)) setClCodes(data.codes);
+      if (data.types && Array.isArray(data.types.council)) setClTypes(data.types);
     } catch {
       /* ignore */
     }
@@ -1980,7 +2008,12 @@ export default function Page() {
                 )}
 
                 <div className="pg-k" style={{ marginTop: 22 }}>Past inspections</div>
-                {insights!.inspections.map((r) => (
+                {/* Grouped the way they arrive: the council's statutory checks,
+                    then each consultant discipline under its own heading. */}
+                {groupInspections(insights!.inspections).map((g) => (
+                  <div key={g.key}>
+                    <div className="sub-k">{g.label}<span>{g.rows.length}</span></div>
+                    {g.rows.map((r) => (
                   <div className="doc" key={r.id} onClick={async () => {
                     const res = await apiFetch(`/api/inspections?id=${encodeURIComponent(r.id)}`);
                     const data = await res.json();
@@ -1995,6 +2028,8 @@ export default function Page() {
                     </div>
                     <span className={"pill " + (OUTCOME_PILL[r.outcome] ?? "na")}>{OUTCOME_LABEL[r.outcome] ?? "—"}</span>
                     <div className="arr">›</div>
+                  </div>
+                    ))}
                   </div>
                 ))}
 
@@ -2268,7 +2303,12 @@ export default function Page() {
                   <label className="ev-lbl">Which inspection</label>
                   <select className="ev-in" value={newClCode} onChange={(e) => setNewClCode(e.target.value)}>
                     <option value="">Pick the inspection type…</option>
-                    {clCodes.map((c) => <option key={c.code} value={c.code}>{c.name} ({c.code})</option>)}
+                    <optgroup label="Council (BCA)">
+                      {clTypes.council.map((c) => <option key={c.code} value={c.code}>{c.name} ({c.code})</option>)}
+                    </optgroup>
+                    <optgroup label="Consultant">
+                      {clTypes.consultant.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+                    </optgroup>
                   </select>
                   <p className="page-sub" style={{ margin: "12px 0 0" }}>
                     Soterra writes the check from three places: this site&apos;s drawings, the Building Code, and what your company has already been failed on. Every item says where it came from, and anything it can&apos;t back up gets left out.
