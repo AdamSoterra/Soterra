@@ -1600,7 +1600,14 @@ export default function Page() {
             <span className="dot" /> {projName}
             {isDemo && <small>· demo</small>}
           </div>
-          <button className="avatar" onClick={() => setMenuOpen((o) => !o)}>{initials}</button>
+          {/* Desktop shows the initials; on a phone the round gradient circle
+              was the widest thing in the header and pushed the whole page off
+              the screen, so it collapses to a plain ☰ — which also reads as
+              "menu", which is what it actually is. */}
+          <button className="avatar" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu">
+            <span className="av-ini">{initials}</span>
+            <svg className="av-bars" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
           {menuOpen && (
             <div className="menu">
               <div className="mrow"><span className="mi">🏗️</span><div><b>{projName}</b><br /><small>{curProject?.role === "admin" ? "You're the admin" : (members.find((m) => m.isMe)?.title || "Crew member")}</small></div></div>
@@ -1679,12 +1686,17 @@ export default function Page() {
                       day, so a long list pushes the greeting down rather than
                       squashing it. */}
                   <div className="home-gap" />
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img className="hero-logo home-logo" src="/logo-mark.png" alt="Soterra" />
-                  <h1 className="home-greet">Hi <b className="grad">{firstName}</b>, how can I help?</h1>
+                  {/* Logo, greeting and the box you type in are one block, so
+                      they stay together: centred on a quiet day, pushed down
+                      by a busy one. */}
+                  <div className="home-ask">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img className="hero-logo home-logo" src="/logo-mark.png" alt="Soterra" />
+                    <h1 className="home-greet">Hi <b className="grad">{firstName}</b>, how can I help?</h1>
+                    <div className="hero-composer">{cbox}</div>
+                  </div>
                   <div className="home-gap" />
                 </div>
-                <div className="hero-composer">{cbox}</div>
               </div>
             ) : (
               <>
