@@ -136,5 +136,9 @@ export async function POST(req: Request) {
     inspectedOn: extracted.inspectedOn,
     items: extracted.items.length,
     categories: [...new Set(extracted.items.map((i) => i.category))],
+    // Surfaced so the row can say "read 2 of ~25" rather than quietly
+    // implying that report only had two things wrong with it.
+    underRead: extracted.underRead,
+    expectedItems: extracted.expectedItems,
   });
 }

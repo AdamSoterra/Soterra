@@ -44,6 +44,12 @@ export type ExtractedInspection = {
    *  MUST say so rather than quietly filing a flattering history. */
   degraded: boolean;
   degradedReason?: string;
+  /** The document's own register says there are far more open items than came
+   *  back, even after a retry. Filed anyway — some data beats none — but the
+   *  count is understated and the row says so. */
+  underRead: boolean;
+  /** What the document's register suggested, for the "read N of ~M" message. */
+  expectedItems: number;
   source: "council" | "consultant";
   inspectionCode: string | null;
   inspectionType: string | null;
@@ -175,6 +181,24 @@ PRIVACY: never put a person's name, email address or phone number into any field
 
 FIDELITY: use the report's own words. Never invent a defect, a clause, a figure or a location that isn't there. If nothing needs fixing, return an empty items array — that is a valid and useful answer.`;
 
+/**
+ * Roughly how many open items a report contains, counted from the page itself
+ * rather than asked of a model. Consultant templates mark them in one of two
+ * ways: an "Open" status column (Mesh, PlanGrid) or a numbered item register
+ * (#21, #66…). Neither is universal, so this returns 0 when it can't tell.
+ *
+ * It exists because of a real miss: on Adam's 12 services reports the model
+ * tracked this count almost exactly on ten of them (44 markers → 47 items,
+ * 38 → 35, 20 → 18) and then returned 1 item for a report with 50 markers and
+ * 2 for one with 25. Silent, and it made the history look far cleaner than the
+ * job was. So we now tell the model the number up front, and check afterwards.
+ */
+export function expectedItemCount(text: string): number {
+  const open = (text.match(/\bOpen\b/g) || []).length;
+  const numbered = new Set(text.match(/#\d+/g) || []).size;
+  return Math.max(open, numbered);
+}
+
 /** Cut a very long report down to what the extractor actually needs. Reports
  *  run to 23 pages, but the defect content is always in the checklist summary
  *  and the free-text sections — the header boilerplate repeats per page. */
@@ -214,48 +238,79 @@ export async function extractInspection(opts: {
   const header = parseCouncilHeader(clean);
   const deterministic = parseCouncilFails(clean);
 
+  // Count the open items ourselves first, so we can both tell the model what
+  // to aim for and check what it came back with.
+  const expected = opts.scanned ? 0 : expectedItemCount(clean);
+
   const anthropic = new Anthropic({ maxRetries: 3 });
   let modelOut: Record<string, unknown> = {};
   let degraded = false;
   let degradedReason: string | undefined;
-  try {
+  let underRead = false;
+
+  const userContent = (insist: boolean) => {
+    const countHint = expected >= 5
+      ? `\n\nThis document's own status column / item register shows about ${expected} OPEN items. Return every one of them. If you genuinely find fewer, that's fine — but do not stop early, and do not summarise a long register down to a handful.`
+      : "";
+    const insistHint = insist
+      ? `\n\nYOUR PREVIOUS ATTEMPT RETURNED FAR TOO FEW. Work through the document from the first page to the last and list EVERY open item in order. Do not skip a table because it is long, and do not treat a defect register as a progress narrative.`
+      : "";
+    if (opts.scanned && opts.pdf) {
+      return [
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: Buffer.from(opts.pdf).toString("base64") } },
+        {
+          type: "text",
+          text: `Filename: ${opts.filename}
+${fromName.code ? `The filename says this is a ${fromName.code} inspection with outcome "${fromName.outcome}" on ${fromName.date}.` : ""}
+
+This report has no usable text layer — it is scanned or photo-based. READ THE PAGES ABOVE, including handwriting, stamps, mark-ups and annotations drawn onto photographs. Numbered balloons or callouts pointing at a photo are items. If a page is genuinely unreadable, leave those items out rather than guessing at them.${insistHint}`,
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ] as any;
+    }
+    return `Filename: ${opts.filename}
+${fromName.code ? `The filename says this is a ${fromName.code} inspection with outcome "${fromName.outcome}" on ${fromName.date}.` : ""}${countHint}${insistHint}
+
+REPORT TEXT
+${trimForModel(clean)}`;
+  };
+
+  const runPass = async (insist: boolean) => {
     const resp = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 16000,
+      // A 40-page register of 50 items is a lot of JSON, and adaptive thinking
+      // spends from the same budget. 16k truncated real reports; 32k doesn't.
+      max_tokens: 32000,
       thinking: { type: "adaptive" },
       output_config: { effort: "high", format: { type: "json_schema", schema: ITEM_SCHEMA as unknown as Record<string, unknown> } },
       system: SYSTEM,
-      messages: [
-        {
-          role: "user",
-          // Scanned report → hand over the PDF and let the model read the
-          // pages. Text report → hand over the extracted text, which is
-          // cheaper and more faithful.
-          content: opts.scanned && opts.pdf
-            ? ([
-                {
-                  type: "document",
-                  source: { type: "base64", media_type: "application/pdf", data: Buffer.from(opts.pdf).toString("base64") },
-                },
-                {
-                  type: "text",
-                  text: `Filename: ${opts.filename}
-${fromName.code ? `The filename says this is a ${fromName.code} inspection with outcome "${fromName.outcome}" on ${fromName.date}.` : ""}
-
-This report has no usable text layer — it is scanned or photo-based. READ THE PAGES ABOVE, including handwriting, stamps, mark-ups and annotations drawn onto photographs. Numbered balloons or callouts pointing at a photo are items. If a page is genuinely unreadable, leave those items out rather than guessing at them.`,
-                },
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              ] as any)
-            : `Filename: ${opts.filename}
-${fromName.code ? `The filename says this is a ${fromName.code} inspection with outcome "${fromName.outcome}" on ${fromName.date}.` : ""}
-
-REPORT TEXT
-${trimForModel(clean)}`,
-        },
-      ],
+      messages: [{ role: "user", content: userContent(insist) }],
     });
+    // Hitting the ceiling means the JSON is cut off mid-register. Treat it as a
+    // failure rather than parsing whatever survived.
+    if (resp.stop_reason === "max_tokens") throw new Error("response hit the token ceiling");
     const text = resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
-    modelOut = JSON.parse(text);
+    return JSON.parse(text) as Record<string, unknown>;
+  };
+
+  const countOf = (o: Record<string, unknown>) => (Array.isArray(o.items) ? o.items.length : 0);
+
+  try {
+    modelOut = await runPass(false);
+    // Ten of Adam's twelve services reports tracked the marker count almost
+    // exactly; two came back with 1 and 2 items against registers of 50 and 25.
+    // One retry costs a few cents. Being quietly wrong about a builder's
+    // failure history costs the product.
+    if (expected >= 8 && countOf(modelOut) < expected * 0.5) {
+      console.warn(`under-read: ${countOf(modelOut)} of ~${expected} on ${opts.filename}; retrying`);
+      try {
+        const second = await runPass(true);
+        if (countOf(second) > countOf(modelOut)) modelOut = second;
+      } catch (e) {
+        console.error("retry failed:", e);
+      }
+      underRead = countOf(modelOut) < expected * 0.5;
+    }
   } catch (e) {
     console.error("inspection extraction failed:", e);
     // Fall through: the deterministic pass below still produces a usable row —
@@ -305,6 +360,8 @@ ${trimForModel(clean)}`,
     isInspectionReport: modelOut.is_inspection_report !== false,
     degraded,
     degradedReason,
+    underRead,
+    expectedItems: expected,
     source: known?.group === "council" ? "council" : known?.group === "consultant" ? "consultant" : str(modelOut.source) === "council" ? "council" : "consultant",
     inspectionCode,
     inspectionType: str(modelOut.inspection_type) || codeName(inspectionCode) || known?.name || header.typeName || null,

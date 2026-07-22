@@ -37,7 +37,9 @@ type InspectionRow = {
 };
 type Insights = {
   company: { name: string | null; sites: number };
-  summary: { inspections: number; failedItems: number; cleanPasses: number; returnVisits: number };
+  // `graded` = inspections that actually carry a pass/partial/fail. Consultant
+  // site visits don't, so the pass rate is only meaningful over this subset.
+  summary: { inspections: number; failedItems: number; graded: number; cleanPasses: number; returnVisits: number };
   categories: CategoryCount[];
   topItems: TopItem[];
   inspections: InspectionRow[];
@@ -1155,10 +1157,14 @@ export default function Page() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "couldn't read that report");
-        const note = data.items === 0
-          ? `${OUTCOME_LABEL[data.outcome] ?? "Filed"} — nothing outstanding`
-          : `${data.items} item${data.items === 1 ? "" : "s"} · ${data.categories.slice(0, 2).join(", ")}${data.categories.length > 2 ? "…" : ""}`;
-        setRepItems((prev) => [{ name: f.name, ok: true, note }, ...prev]);
+        const note = data.underRead
+          // Say it plainly. A report whose register lists 25 open items and
+          // came back with 2 is not a clean report, it's a bad read.
+          ? `only read ${data.items} of about ${data.expectedItems} — check this one`
+          : data.items === 0
+            ? `${OUTCOME_LABEL[data.outcome] ?? "Filed"} — nothing outstanding`
+            : `${data.items} item${data.items === 1 ? "" : "s"} · ${data.categories.slice(0, 2).join(", ")}${data.categories.length > 2 ? "…" : ""}`;
+        setRepItems((prev) => [{ name: f.name, ok: !data.underRead, note }, ...prev]);
       } catch (e) {
         setRepItems((prev) => [{ name: f.name, ok: false, note: e instanceof Error ? e.message : "upload failed" }, ...prev]);
       } finally {
@@ -2007,16 +2013,29 @@ export default function Page() {
               </div>
             ) : (
               <>
+                {/* Only the council grades an inspection pass/partial/fail. A
+                    consultant's site observation report has no verdict, so a
+                    pass rate over ALL reports is a made-up number — show the
+                    item count instead until there's something graded. */}
                 <div className="idx" style={{ marginTop: 4 }}>
-                  <div>
-                    <div className="big">{Math.round(((insights!.summary.cleanPasses || 0) / Math.max(insights!.summary.inspections, 1)) * 100)}%</div>
-                    <small>passed first time</small>
-                  </div>
+                  {insights!.summary.graded > 0 ? (
+                    <div>
+                      <div className="big">{Math.round((insights!.summary.cleanPasses / insights!.summary.graded) * 100)}%</div>
+                      <small>passed first time</small>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="big">{insights!.summary.failedItems}</div>
+                      <small>items to fix</small>
+                    </div>
+                  )}
                   <div style={{ flex: 1 }}>
                     <small>
-                      {insights!.summary.inspections} inspection{insights!.summary.inspections === 1 ? "" : "s"} filed · {insights!.summary.failedItems} item{insights!.summary.failedItems === 1 ? "" : "s"} picked up · {insights!.summary.returnVisits} needed the inspector back.
+                      {insights!.summary.graded > 0
+                        ? `${insights!.summary.inspections} inspection${insights!.summary.inspections === 1 ? "" : "s"} filed · ${insights!.summary.failedItems} item${insights!.summary.failedItems === 1 ? "" : "s"} picked up · ${insights!.summary.returnVisits} needed the inspector back.`
+                        : `Across ${insights!.summary.inspections} report${insights!.summary.inspections === 1 ? "" : "s"}. None of them carry a pass/fail — consultants don't grade a site visit, so there's no first-time-pass rate until a council inspection goes in.`}
                     </small>
-                    <span className="grn">● Every failed item below came off one of your own reports</span>
+                    <span className="grn">● Every item below came off one of your own reports</span>
                   </div>
                 </div>
 

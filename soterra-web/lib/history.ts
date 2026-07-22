@@ -239,15 +239,23 @@ export async function historyForCode(scope: Scope, code: string, limit = 12): Pr
   return rows.map((r) => ({ title: r.title, category: r.category as Category, count: r.count, lastSeen: r.lastSeen }));
 }
 
-/** Headline numbers for the top of the Insights page. */
+/** Headline numbers for the top of the Insights page.
+ *
+ *  `graded` is the one that matters: a consultant's site observation report
+ *  carries no overall pass/fail, so its outcome is 'unknown'. Counting those in
+ *  the denominator produced a "0% passed first time" headline off twelve
+ *  reports that were never graded in the first place — a made-up number in the
+ *  largest text on the page. The pass rate is now only ever computed over
+ *  inspections that actually have a verdict. */
 export async function historySummary(scope: Scope) {
   const [row] = await db
     .select({
       inspections: sql<number>`(select count(*)::int from ${inspections} where ${inspections.companyId} = ${scope.companyId})`,
       failedItems: sql<number>`(select count(*)::int from ${inspectionItems} where ${inspectionItems.companyId} = ${scope.companyId})`,
+      graded: sql<number>`(select count(*)::int from ${inspections} where ${inspections.companyId} = ${scope.companyId} and ${inspections.outcome} in ('pass','partial','fail'))`,
       cleanPasses: sql<number>`(select count(*)::int from ${inspections} where ${inspections.companyId} = ${scope.companyId} and ${inspections.outcome} = 'pass')`,
       returnVisits: sql<number>`(select count(*)::int from ${inspections} where ${inspections.companyId} = ${scope.companyId} and ${inspections.outcome} in ('fail','partial'))`,
     })
     .from(sql`(select 1) as _`);
-  return row ?? { inspections: 0, failedItems: 0, cleanPasses: 0, returnVisits: 0 };
+  return row ?? { inspections: 0, failedItems: 0, graded: 0, cleanPasses: 0, returnVisits: 0 };
 }
