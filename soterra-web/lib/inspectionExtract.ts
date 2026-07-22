@@ -185,11 +185,29 @@ function trimForModel(text: string, limit = 60000): string {
   return `${head}\n…[middle of report omitted]…\n${tail}`;
 }
 
+/**
+ * Is there enough readable text to work from? Some real reports — seismic site
+ * sheets, a facade engineer's mark-ups — are photographs of a page with an
+ * annotation layer, and `unpdf` returns a couple of hundred characters of
+ * nothing. Below this bar we send the PDF itself to the model instead of the
+ * extracted text: Claude reads the pages directly, which is the OCR.
+ */
+export function hasUsableText(text: string, pages: number): boolean {
+  return text.length >= 400 && text.length / Math.max(pages, 1) >= 250;
+}
+
 export async function extractInspection(opts: {
   text: string;
   filename: string;
+  /** The PDF itself. Supplied so a scan can be read as pages when the text
+   *  layer is empty. Optional — the text path never needs it. */
+  pdf?: Uint8Array;
+  /** Set when the text layer was too thin to use; the PDF is read instead. */
+  scanned?: boolean;
 }): Promise<ExtractedInspection> {
   // Anonymise BEFORE the text goes anywhere — including into the prompt.
+  // NB on the scanned path there is barely any text to scrub, and the PDF
+  // pages themselves are not redacted — see the note in the ingest route.
   const clean = anonymiseText(opts.text);
 
   const fromName = parseCouncilFilename(opts.filename);
@@ -210,7 +228,25 @@ export async function extractInspection(opts: {
       messages: [
         {
           role: "user",
-          content: `Filename: ${opts.filename}
+          // Scanned report → hand over the PDF and let the model read the
+          // pages. Text report → hand over the extracted text, which is
+          // cheaper and more faithful.
+          content: opts.scanned && opts.pdf
+            ? ([
+                {
+                  type: "document",
+                  source: { type: "base64", media_type: "application/pdf", data: Buffer.from(opts.pdf).toString("base64") },
+                },
+                {
+                  type: "text",
+                  text: `Filename: ${opts.filename}
+${fromName.code ? `The filename says this is a ${fromName.code} inspection with outcome "${fromName.outcome}" on ${fromName.date}.` : ""}
+
+This report has no usable text layer — it is scanned or photo-based. READ THE PAGES ABOVE, including handwriting, stamps, mark-ups and annotations drawn onto photographs. Numbered balloons or callouts pointing at a photo are items. If a page is genuinely unreadable, leave those items out rather than guessing at them.`,
+                },
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              ] as any)
+            : `Filename: ${opts.filename}
 ${fromName.code ? `The filename says this is a ${fromName.code} inspection with outcome "${fromName.outcome}" on ${fromName.date}.` : ""}
 
 REPORT TEXT

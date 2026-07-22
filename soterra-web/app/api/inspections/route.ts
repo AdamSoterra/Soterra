@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { get } from "@vercel/blob";
 import { extractText, getDocumentProxy } from "unpdf";
 import { resolveScope } from "@/lib/company";
-import { extractInspection } from "@/lib/inspectionExtract";
+import { extractInspection, hasUsableText } from "@/lib/inspectionExtract";
 import { listInspections, saveInspection, inspectionDetail } from "@/lib/history";
 
 // Inspection reports in → this COMPANY's failure history out. Same upload
@@ -79,19 +79,33 @@ export async function POST(req: Request) {
     return Response.json({ error: "Couldn't read that PDF — make sure it's a real PDF, not a scan or a photo." }, { status: 422 });
   }
 
-  // Low-text guard. Some real reports (facade photo mark-ups, seismic site
-  // sheets) are entirely images with a text layer of a few hundred characters.
-  // Without this the extractor happily returns zero items and the report looks
-  // clean — the worst possible failure for a history that's meant to be honest.
-  if (text.length < 400 || text.length / Math.max(pages, 1) < 250) {
+  // Some real reports — seismic site sheets, a facade engineer's mark-ups —
+  // are photographs of a page with an annotation layer, and the text layer is
+  // a few hundred characters of nothing. Rather than refuse them, hand the PDF
+  // straight to the model and let it read the pages. That IS the OCR: no
+  // separate engine, no native dependency on a serverless function.
+  const scanned = !hasUsableText(text, pages);
+  // A scan still has to be a plausible report, not a 400-page photo album.
+  if (scanned && pages > 30) {
     return Response.json(
-      { error: "That report is mostly images — there's not enough readable text to pull the items out. A text PDF (not a scan) works; photo-only reports need to be entered by hand for now." },
+      { error: `That looks like a scan with ${pages} pages, which is too big to read as images. Split it, or use a text PDF.` },
+      { status: 422 }
+    );
+  }
+  // The document block has a hard 32 MB request ceiling.
+  if (scanned && buf.byteLength > 24 * 1024 * 1024) {
+    return Response.json(
+      { error: "That scan is too large to read as images — try a smaller or compressed copy." },
       { status: 422 }
     );
   }
 
   const doc = filename.replace(/\.pdf$/i, "");
-  const extracted = await extractInspection({ text, filename });
+  // ⚠️ On the scanned path the pages go to the model as images, so the text
+  // anonymiser can't reach names printed on them. Extracted FIELDS are still
+  // scrubbed (anonymiseField) and the prompt forbids returning people, so
+  // nothing personal is stored — but the pages themselves are seen in full.
+  const extracted = await extractInspection({ text, filename, pdf: scanned ? buf : undefined, scanned });
 
   if (!extracted.isInspectionReport) {
     return Response.json(

@@ -27,7 +27,7 @@ if (!dir || !projectId) {
 const { db } = await import("../lib/db.ts");
 const { projects } = await import("../lib/schema.ts");
 const { unsafeScopeForTest } = await import("../lib/company.ts");
-const { extractInspection } = await import("../lib/inspectionExtract.ts");
+const { extractInspection, hasUsableText } = await import("../lib/inspectionExtract.ts");
 const { saveInspection, categoryCounts, historySummary } = await import("../lib/history.ts");
 const { eq } = await import("drizzle-orm");
 const { extractText, getDocumentProxy } = await import("unpdf");
@@ -51,13 +51,18 @@ for (const f of files) {
     const out = await extractText(pdf, { mergePages: true });
     const text = String(out.text).replace(/\s+/g, " ").trim();
 
-    if (text.length < 400 || text.length / Math.max(out.totalPages, 1) < 250) {
-      console.log(`  skip  ${doc} — mostly images (${text.length} chars over ${out.totalPages} pages)`);
-      skipped++;
-      continue;
+    // No text layer → hand the PDF to the model and let it read the pages.
+    const scanned = !hasUsableText(text, out.totalPages);
+    if (scanned) {
+      if (out.totalPages > 30 || bytes.byteLength > 24 * 1024 * 1024) {
+        console.log(`  skip  ${doc} — scan too big to read as images (${out.totalPages}pp, ${Math.round(bytes.byteLength / 1024 / 1024)}MB)`);
+        skipped++;
+        continue;
+      }
+      console.log(`  scan  ${doc} — no text layer (${text.length} chars over ${out.totalPages} pages), reading the pages`);
     }
 
-    const extracted = await extractInspection({ text, filename: f });
+    const extracted = await extractInspection({ text, filename: f, pdf: scanned ? bytes : undefined, scanned });
     if (extracted.degraded) {
       console.log(`  FAIL  ${doc} — ${extracted.degradedReason}; only the deterministic parse ran, so this was NOT filed`);
       skipped++;

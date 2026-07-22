@@ -442,6 +442,7 @@ export default function Page() {
   const reportFileRef = useRef<HTMLInputElement>(null);
   const [repCurrent, setRepCurrent] = useState<{ name: string; phase: string; pct: number } | null>(null);
   const [repItems, setRepItems] = useState<{ name: string; ok: boolean; note: string }[]>([]);
+  const [repDragOver, setRepDragOver] = useState(false);
 
   // ─── Checklists (attached to a calendar event) ───
   const [checklists, setChecklists] = useState<ChecklistHead[]>([]);
@@ -1119,8 +1120,15 @@ export default function Page() {
   // ─── inspection reports → this company's failure history ───
   const onReportFiles = async (fileList: FileList | File[]) => {
     const pid = projRef.current;
-    if (!pid || repCurrent) return;
-    const pdfs = Array.from(fileList).filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    if (repCurrent) return;
+    if (!pid) { setRepItems((prev) => [{ name: "No site selected", ok: false, note: "pick a site first" }, ...prev]); return; }
+    const all = Array.from(fileList);
+    const pdfs = all.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    // Say so rather than dropping them on the floor — silence here is exactly
+    // the "nothing happened" that made this feel broken in the first place.
+    const notPdf = all.length - pdfs.length;
+    if (notPdf > 0) setRepItems((prev) => [{ name: `${notPdf} file${notPdf === 1 ? "" : "s"} skipped`, ok: false, note: "not a PDF" }, ...prev]);
+    if (!pdfs.length) return;
     for (const f of pdfs) {
       setRepCurrent({ name: f.name, phase: "Uploading", pct: 0 });
       try {
@@ -1150,6 +1158,20 @@ export default function Page() {
     setRepCurrent(null);
     setInsightsLoaded(false);
     loadInsights(catFilter);
+  };
+
+  // Drag-and-drop for the report zones, same as the plan uploader. Worth having
+  // both routes in: dropping a whole folder of reports beats picking them one
+  // at a time, and it's the route that doesn't depend on a file dialog.
+  const reportDropProps = {
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); if (!repCurrent) setRepDragOver(true); },
+    onDragLeave: () => setRepDragOver(false),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      setRepDragOver(false);
+      if (repCurrent) return;
+      void filesFromDrop(e.dataTransfer).then((fs) => { if (fs.length) onReportFiles(fs); });
+    },
   };
 
   // ─── checklists ───
@@ -1849,11 +1871,11 @@ export default function Page() {
                 : `Load ${projName}'s plans — drop the whole set at once. Soterra reads & indexes every page (private to your site).`}
             </div>
             <input ref={planFileRef} type="file" accept="application/pdf" multiple style={{ display: "none" }}
-              onChange={(e) => { const fs = e.target.files; if (planFileRef.current) planFileRef.current.value = ""; if (fs && fs.length) onPlanFiles(fs); }} />
+              onChange={(e) => { const fs = filesFrom(e.target); if (planFileRef.current) planFileRef.current.value = ""; if (fs.length) onPlanFiles(fs); }} />
             {/* Folder picker: returns the whole tree (subfolders included). No `accept`
                 here — webkitdirectory ignores it, so onPlanFiles filters to PDFs. */}
             <input ref={planFolderRef} type="file" multiple style={{ display: "none" }}
-              onChange={(e) => { const fs = e.target.files; if (planFolderRef.current) planFolderRef.current.value = ""; if (fs && fs.length) onPlanFiles(fs); }} />
+              onChange={(e) => { const fs = filesFrom(e.target); if (planFolderRef.current) planFolderRef.current.value = ""; if (fs.length) onPlanFiles(fs); }} />
             <div
               className="drop"
               onClick={() => { if (!upCurrent) planFileRef.current?.click(); }}
@@ -1918,12 +1940,17 @@ export default function Page() {
             </div>
 
             <input ref={reportFileRef} type="file" accept="application/pdf" multiple style={{ display: "none" }}
-              onChange={(e) => { const fs = e.target.files; if (reportFileRef.current) reportFileRef.current.value = ""; if (fs && fs.length) onReportFiles(fs); }} />
+              onChange={(e) => { const fs = filesFrom(e.target); if (reportFileRef.current) reportFileRef.current.value = ""; if (fs.length) onReportFiles(fs); }} />
 
             {!insightsLoaded ? (
               <div className="page-sub" style={{ marginTop: 18 }}>Loading…</div>
             ) : (insights?.summary.inspections ?? 0) === 0 ? (
-              <div className="drop" style={{ marginTop: 18, cursor: repCurrent ? "default" : "pointer" }} onClick={() => { if (!repCurrent) reportFileRef.current?.click(); }}>
+              <div
+                className="drop"
+                style={{ marginTop: 18, cursor: repCurrent ? "default" : "pointer", outline: repDragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
+                onClick={() => { if (!repCurrent) reportFileRef.current?.click(); }}
+                {...reportDropProps}
+              >
                 <div className="ic">📋</div>
                 <b>{repCurrent ? `${repCurrent.phase}…` : "Add your inspection reports"}</b>
                 <p>
@@ -2034,7 +2061,12 @@ export default function Page() {
                 ))}
 
                 <div className="pg-k" style={{ marginTop: 22 }}>Add more reports</div>
-                <div className="drop" style={{ padding: "26px 20px", cursor: repCurrent ? "default" : "pointer" }} onClick={() => { if (!repCurrent) reportFileRef.current?.click(); }}>
+                <div
+                  className="drop"
+                  style={{ padding: "26px 20px", cursor: repCurrent ? "default" : "pointer", outline: repDragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
+                  onClick={() => { if (!repCurrent) reportFileRef.current?.click(); }}
+                  {...reportDropProps}
+                >
                   <b>{repCurrent ? `${repCurrent.phase}…` : "Drop in another inspection report"}</b>
                   <p>{repCurrent ? repCurrent.name : "Council checklists or a consultant's site observation report — PDF with real text, not a scan."}</p>
                   {repCurrent && <div className="upbar"><div className="upbar-fill" style={{ width: `${repCurrent.phase === "Uploading" ? repCurrent.pct || 4 : 100}%` }} /></div>}
@@ -2410,7 +2442,7 @@ export default function Page() {
 
       {/* Camera/gallery picker for checklist photos — one input, reused. */}
       <input ref={photoInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-        onChange={(e) => { const f = e.target.files?.[0]; if (photoInputRef.current) photoInputRef.current.value = ""; if (f) onPhotoPicked(f); }} />
+        onChange={(e) => { const f = filesFrom(e.target)[0]; if (photoInputRef.current) photoInputRef.current.value = ""; if (f) onPhotoPicked(f); }} />
 
       {/* ─── one past inspection, and what it picked up ─── */}
       {openInspection && (
@@ -2594,6 +2626,16 @@ function fmt(str: string): string {
     .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
     .replace(/\n+/g, "<br/>");
 }
+// Copy a file input's selection into a plain array BEFORE anything resets the
+// input. `input.files` is a LIVE FileList: setting `input.value = ""` (which
+// every one of these handlers does, so picking the same file twice still
+// fires onChange) empties the reference you already captured. The old code
+// read `const fs = e.target.files` and then reset — by the time it checked
+// `fs.length` it was 0, so choosing a file did nothing at all, silently.
+function filesFrom(input: HTMLInputElement): File[] {
+  return Array.from(input.files || []);
+}
+
 // Read a file to a base64 string (no data: prefix).
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
