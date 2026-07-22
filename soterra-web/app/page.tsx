@@ -1624,10 +1624,11 @@ export default function Page() {
           <div className="assistant">
             {messages.length === 0 ? (
               <div className="hero-full home">
+                {/* What's on today comes FIRST — it's the thing you open the
+                    app to see. The greeting sits at the bottom, next to the
+                    box you're about to type in, and gets pushed down further
+                    the more you have on. */}
                 <div className="home-scroll">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img className="hero-logo home-logo" src="/logo-mark.png" alt="Soterra" />
-                  <h1 className="home-greet">Hi <b className="grad">{firstName}</b>, how can I help?</h1>
                   <TodayGlance
                     events={eventsByDay.get(todayKey()) ?? []}
                     tasks={(tasksByDay.get(todayKey()) ?? []).filter((t) => !t.done)}
@@ -1636,6 +1637,10 @@ export default function Page() {
                     onToggle={toggleTask}
                     onOpen={() => setTab("calendar")}
                   />
+                  <div className="home-gap" />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img className="hero-logo home-logo" src="/logo-mark.png" alt="Soterra" />
+                  <h1 className="home-greet">Hi <b className="grad">{firstName}</b>, how can I help?</h1>
                 </div>
                 <div className="hero-composer">{cbox}</div>
               </div>
@@ -2743,7 +2748,7 @@ function TodayGlance({ events, tasks, loaded, colorFor, onToggle, onOpen }: {
       {!loaded ? (
         <div className="glance-empty">Loading your day…</div>
       ) : empty ? (
-        <div className="glance-empty">Nothing booked for today. Ask me to schedule something, or just start below.</div>
+        <div className="glance-empty">No events or tasks today. Ask me to book something in.</div>
       ) : (
         <div className="glance-list">
           {events.map((e) => {
