@@ -102,19 +102,21 @@ RULES
  *  right pages. "ICA" finds nothing in a drawing set; "cavity batten building
  *  wrap flashing membrane upstand" finds the details. */
 const CODE_QUERIES: Record<string, string> = {
-  IFO: "foundation footing reinforcing depth bearing pile",
-  ISF: "floor slab reinforcing mesh damp proof membrane thickness pour",
-  IFG: "timber steel framing stud lintel bracing top plate bottom plate fixing",
+  IFO: "foundation strip bored pile footing reinforcing depth bearing NZS3604",
+  ISF: "concrete floor slab reinforcing mesh damp proof membrane thickness cover pour",
+  ICB: "concrete block masonry reinforcing bond beam grout cast in situ panel column wall pour",
+  IFG: "timber steel framing stud lintel bracing top plate bottom plate fixing roof truss",
   ICA: "cavity batten building wrap rigid air barrier flashing membrane upstand saddle deck balcony",
   ICL: "cladding fixing junction clearance ground level flashing coating system",
-  ITK: "waterproofing membrane tanking upstand fall wet area shower",
-  IRF: "roof underlay fixing flashing pitch penetration gutter",
-  IDT: "drainage foul water storm water gradient pipe gully vent as-built",
-  IPP: "plumbing water supply pipe backflow hot water cylinder tempering valve",
+  ITK: "waterproofing membrane tanking below ground upstand fall wet area shower deck roof",
+  IDT: "drainage surface water foul water gradient pipe gully vent as-built plan",
+  IPP: "plumbing underslab pre-line water supply pipe backflow hot water cylinder tempering valve",
   IPB: "pre-line insulation R-value framing notches holes fire lining passive fire moisture content joinery air seal",
-  IPL: "post-line bracing sheet fixing wet area lining passive fire penetration diaphragm ceiling stopping",
-  IF1: "final barrier handrail stair safety glass ventilation smoke alarm wet area hot water",
+  IPL: "post-line bracing sheet fixing wet area lining passive fire penetration diaphragm ceiling stopping fire rated",
+  IF1: "final barrier handrail stair safety glass ventilation smoke alarm wet area hot water solid fuel appliance",
   IF2: "final commercial fire door exit sign emergency lighting sprinkler barrier glazing manifestation accessible",
+  CPU: "public access egress exit route barrier handrail signage separation from building work temporary protection",
+  SWP: "pool fence barrier height gap latch self closing gate climbable NZS8500 F9",
 };
 
 function queryFor(code: string | null, title: string): string {
@@ -432,11 +434,11 @@ export async function photoIsOurs(scope: Scope, pathname: string): Promise<boole
 
 /** What you can build a check for, grouped the way the inspections actually
  *  arrive: the council's statutory ones, then the consultants' disciplines.
- *  IME (site meeting) and IMV (minor variation) are dropped — there's nothing
- *  to walk the job with on either. */
+ *  IME and IRM are dropped — both are minuted meetings, so there's nothing to
+ *  walk the job with. */
 export const CHECKLIST_TYPES = {
   council: Object.entries(INSPECTION_CODES)
-    .filter(([code]) => !["IME", "IMV"].includes(code))
+    .filter(([code]) => !["IME", "IRM"].includes(code))
     .map(([code, v]) => ({ code, name: v.name })),
   consultant: CONSULTANT_TYPES.map((t) => ({ code: t.code, name: t.name })),
 };

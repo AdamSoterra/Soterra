@@ -57,25 +57,30 @@ export function isCategory(v: unknown): v is Category {
 // `category` is only a FALLBACK for an item whose wording matched no rule —
 // several inspections (pre-line, post-line, final) legitimately produce fails
 // across half the categories, which is exactly why the item wording wins.
+// Verified 2026-07-22 against Auckland Council's own published "Types of
+// building inspections" page. Three of my earlier guesses were wrong and are
+// gone: IBF (it's ICB), plus IPF, IRF, IDP and IMV, which don't exist — a code
+// that isn't real is worse than a missing one, because it silently never
+// matches anything.
 export const INSPECTION_CODES: Record<string, { name: string; category: Category }> = {
   IFO: { name: "Foundation", category: "Structural" },
-  ISF: { name: "Slab / floor", category: "Structural" },
+  ISF: { name: "Concrete floor slab", category: "Structural" },
+  ICB: { name: "Concrete block / reinforcing", category: "Structural" },
   IFG: { name: "Framing", category: "Structural" },
-  IBF: { name: "Block fill", category: "Structural" },
-  IPF: { name: "Pre-pour / reinforcing", category: "Structural" },
   ICA: { name: "Cavity wrap", category: "Weathertightness / Cladding" },
   ICL: { name: "Cladding", category: "Weathertightness / Cladding" },
-  ITK: { name: "Waterproofing / tanking", category: "Weathertightness / Cladding" },
-  IRF: { name: "Roofing", category: "Weathertightness / Cladding" },
+  ITK: { name: "Waterproofing membrane", category: "Weathertightness / Cladding" },
   IDT: { name: "Drainage", category: "Plumbing & Drainage" },
-  IDP: { name: "Drainage pre-cover", category: "Plumbing & Drainage" },
-  IPP: { name: "Plumbing", category: "Plumbing & Drainage" },
+  // One code covers both the underslab and the pre-line plumbing inspection.
+  IPP: { name: "Plumbing (underslab / pre-line)", category: "Plumbing & Drainage" },
   IPB: { name: "Pre-line building", category: "Interior / Linings" },
-  IPL: { name: "Post-line", category: "Interior / Linings" },
-  IF1: { name: "Final (residential)", category: "Interior / Linings" },
-  IF2: { name: "Final (commercial)", category: "Interior / Linings" },
+  IPL: { name: "Post-line building", category: "Interior / Linings" },
+  IF1: { name: "Residential final", category: "Interior / Linings" },
+  IF2: { name: "Commercial final", category: "Interior / Linings" },
+  CPU: { name: "Certificate for Public Use", category: "Access & Barriers" },
+  SWP: { name: "Swimming pool fencing", category: "Access & Barriers" },
   IME: { name: "Site meeting", category: "Other" },
-  IMV: { name: "Minor variation", category: "Other" },
+  IRM: { name: "Reclad pre-construction meeting", category: "Other" },
 };
 
 /** The consultant disciplines. No leading "I", so these can never collide with

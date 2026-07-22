@@ -25,30 +25,33 @@ Against the 259 real checklist lines, the rules alone match **255 (98.5%)**. The
 
 ## Council code → readable name + fallback category
 
+**✅ Q1 CLOSED 2026-07-22** — checked against Auckland Council's own published "Types of building inspections" page. Three of my guesses were wrong and are gone: `IBF` (the real code is **ICB**), plus `IPF`, `IRF`, `IDP` and `IMV`, which don't exist. Three real ones were missing and are now in: **CPU**, **SWP**, **IRM**. All 17 below match the council page exactly, no extras, none missing.
+
 | Code | Name | Fallback category |
 |---|---|---|
 | IFO | Foundation | Structural |
-| ISF | Slab / floor | Structural |
-| IPF | Pre-pour / reinforcing | Structural |
-| IBF | Block fill | Structural |
+| ISF | Concrete floor slab | Structural |
+| ICB | Concrete block / reinforcing | Structural |
 | IFG | Framing | Structural |
 | ICA | Cavity wrap | Weathertightness / Cladding |
 | ICL | Cladding | Weathertightness / Cladding |
-| ITK | Waterproofing / tanking | Weathertightness / Cladding |
-| IRF | Roofing | Weathertightness / Cladding |
+| ITK | Waterproofing membrane | Weathertightness / Cladding |
 | IDT | Drainage | Plumbing & Drainage |
-| IDP | Drainage pre-cover | Plumbing & Drainage |
-| IPP | Plumbing | Plumbing & Drainage |
+| IPP | Plumbing (underslab / pre-line) | Plumbing & Drainage |
 | IPB | Pre-line building | Interior / Linings |
-| IPL | Post-line | Interior / Linings |
-| IF1 | Final (residential) | Interior / Linings |
-| IF2 | Final (commercial) | Interior / Linings |
+| IPL | Post-line building | Interior / Linings |
+| IF1 | Residential final | Interior / Linings |
+| IF2 | Commercial final | Interior / Linings |
+| CPU | Certificate for Public Use | Access & Barriers |
+| SWP | Swimming pool fencing | Access & Barriers |
 | IME | Site meeting | Other |
-| IMV | Minor variation | Other |
+| IRM | Reclad pre-construction meeting | Other |
 
-**❓ Q1 — are IFO/ISF/IPF/IBF/IRF/IDP/ICL/ITK the right letters?** I only had IPL, IPP, IME, IPB, IFG, ICA, IF2 and IDT in your 27 reports; the rest came from the build plan or from guessing the pattern. A wrong letter means that inspection type just never matches.
+One code, **IPP**, covers both the underslab and the pre-line plumbing inspection — that's the council's own doing, not a merge on our side.
 
-The fallback only fires when nothing in the item's wording matched, which is 1.5% of the time — so a wrong fallback on IPB/IPL/IF1/IF2 barely matters. Those four legitimately produce fails across half the categories anyway, which is exactly why the wording wins.
+The fallback only fires when nothing in the item's wording matched, which is 1.5% of the time — so a debatable fallback on IPB/IPL/IF1/IF2 barely matters. Those four legitimately produce fails across half the categories anyway, which is exactly why the wording wins.
+
+**Consultant disciplines** sit alongside these, with their own codes so they can never collide: FIRE, ELEC, MECH, HYD, STRU, ARCH, ACOU, SEIS and SERV (one report covering electrical + hydraulic + mechanical together).
 
 ---
 
@@ -69,7 +72,7 @@ The fallback only fires when nothing in the item's wording matched, which is 1.5
 | Site / External | 0 | — |
 | Architect | 0 | — |
 
-**❓ Q2 — your prediction was that the top electrical item would be seismic clearances. The council data can't confirm or deny it: there is essentially no electrical content in a council checklist (1 line), and only one seismic line ("HWC: Seismic restraints").** Electrical goes to the electrician's certificate, not the BCA. I'd expect your prediction to show up once the *consultant* reports go in — the Electrical folder has 12 files and cable-tray seismic restraint is a classic. Worth re-checking after those are loaded.
+**❓ Q2 — still open, by design.** Your prediction was that the top electrical item would be seismic clearances. Council data can't confirm or deny it: there's essentially no electrical content in a council checklist (1 line out of 259), and one seismic line ("HWC: Seismic restraints"). Your call on 2026-07-22: *"this will come to light once I finally upload the electrical inspections, council could not care less about that."* Agreed — the Electrical folder is 12 files and cable-tray seismic restraint is a classic. Re-check this table once they're in.
 
 ---
 

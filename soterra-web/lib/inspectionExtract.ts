@@ -119,7 +119,7 @@ const ITEM_SCHEMA = {
     inspection_code: {
       type: "string",
       description:
-        "For a COUNCIL report: its own inspection code (IFO ISF IPF IBF IFG ICA ICL ITK IRF IDT IDP IPP IPB IPL IF1 IF2 IME IMV). For a CONSULTANT report: the discipline it covers — FIRE, ELEC, MECH, HYD (hydraulic/plumbing), STRU (structural), ARCH (architectural), ACOU (acoustic), SEIS (seismic), or SERV when one report covers electrical + hydraulic + mechanical together. Empty string if you genuinely can't tell.",
+        "For a COUNCIL report: its own inspection code — one of exactly these (Auckland Council's published list): IFO ISF ICB IFG ICA ICL ITK IDT IPP IPB IPL IF1 IF2 CPU SWP IME IRM. Never invent one. For a CONSULTANT report: the discipline it covers — FIRE, ELEC, MECH, HYD (hydraulic/plumbing), STRU (structural), ARCH (architectural), ACOU (acoustic), SEIS (seismic), or SERV when one report covers electrical + hydraulic + mechanical together. Empty string if you genuinely can't tell.",
     },
     inspection_type: { type: "string", description: "What kind of inspection this was, in the report's own words (\"Cavity wrap\", \"Fire\", \"Building services site inspection\"). Empty string if unclear." },
     inspector_org: { type: "string", description: "The ORGANISATION that inspected (\"Auckland Council\", the consultancy's name). NEVER a person's name. Empty string if unclear." },
