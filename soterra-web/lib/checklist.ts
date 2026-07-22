@@ -8,6 +8,7 @@ import { historyForCode, searchHistory, topItems } from "./history";
 import { getProjectIndex } from "./projectIndex";
 import { getCodeIndex, codeLabel } from "./codeIndex";
 import { excerpt, retrieve } from "./retrieve";
+import { blockersFor } from "./inspectionOrder";
 
 // ─── The checklist engine ────────────────────────────────────────────────
 //
@@ -205,6 +206,20 @@ export async function generateChecklistItems(
         category: isCategory(r.category) ? r.category : "Other",
       }))
       .filter((r) => r.title.length > 2);
+    // The council's own hard dependencies go FIRST, ahead of anything the
+    // model found. "Pre-line building cannot be approved until pre-line
+    // plumbing has been completed" isn't a detail to check on the wall — it
+    // decides whether the inspection can happen at all, and getting it wrong
+    // is a wasted fee plus a re-book.
+    const blockers = blockersFor(opts.inspectionCode).map((b) => ({
+      title: `${b.needs} must have passed first`,
+      detail: b.note,
+      source: "code",
+      sourceRef: "Auckland Council · Building consents booklet AC1229 V13 · typical order of notifiable inspections",
+      category: "Other" as const,
+    }));
+    if (blockers.length) items.unshift(...blockers);
+
     if (!items.length) {
       return {
         ok: false,
