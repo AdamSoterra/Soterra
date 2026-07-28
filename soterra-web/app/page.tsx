@@ -24,9 +24,13 @@ type AsstCard = {
   visibility: "team" | "private";
   assigneeName?: string | null;
 };
+// A manufacturer document we hold, from /api/manufacturer-docs. Drives reliable
+// manufacturer citations (card, page image, verify link) independent of what the
+// model writes in its answer.
+type MfrDoc = { manufacturer: string; doc: string; sourceUrl: string | null; npages: number };
 type Msg =
   | { role: "u"; text: string; att?: string }
-  | { role: "a"; src?: string; text: string; raw?: string; cite?: Cite; cards?: AsstCard[]; pending?: boolean };
+  | { role: "a"; src?: string; text: string; raw?: string; full?: string; cite?: Cite; cards?: AsstCard[]; pending?: boolean };
 type Attachment = { kind: "image" | "pdf"; mediaType: string; data: string; name: string };
 
 // ─── Sites (projects) + crew ───
@@ -388,6 +392,26 @@ export default function Page() {
   // so a previous render error or spinner doesn't carry over.
   const [docImg, setDocImg] = useState<"loading" | "ok" | "error">("loading");
   useEffect(() => { setDocImg("loading"); }, [sheet]);
+
+  // The manufacturer documents we hold, so a "Source: GIB · …" line resolves to
+  // a real card, page image and link even when the model doesn't paste the URL.
+  const [mfrDocs, setMfrDocs] = useState<MfrDoc[]>([]);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/manufacturer-docs")
+      .then((r) => (r.ok ? r.json() : { docs: [] }))
+      .then((d) => { if (live && Array.isArray(d.docs)) setMfrDocs(d.docs); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+  // If any answers rendered before the document list arrived, re-parse them now
+  // so their citation cards and links appear without a resend.
+  useEffect(() => {
+    if (!mfrDocs.length) return;
+    setMessages((prev) =>
+      prev.map((m) => (m.role === "a" && m.full && !m.pending ? assistantMsg(m.full, m.cards, mfrDocs) : m)),
+    );
+  }, [mfrDocs]);
   const [menuOpen, setMenuOpen] = useState(false);
   // App-mode: installed PWA / launched with ?app=1 → login-first instead of marketing.
   const [appMode, setAppMode] = useState(false);
@@ -622,7 +646,7 @@ export default function Page() {
       if (Array.isArray(data.messages)) {
         setMessages(
           data.messages.map((m: { role: string; content: string }) =>
-            m.role === "assistant" ? assistantMsg(m.content) : ({ role: "u", text: m.content } as Msg)
+            m.role === "assistant" ? assistantMsg(m.content, undefined, mfrDocs) : ({ role: "u", text: m.content } as Msg)
           )
         );
         setThreadId(id);
@@ -1001,7 +1025,7 @@ export default function Page() {
       const data = await res.json();
       const ans = String(data.answer || data.error || "Sorry, something went wrong.");
       const cards: AsstCard[] = Array.isArray(data.cards) ? data.cards : [];
-      setMessages((prev) => [...prev.slice(0, -1), assistantMsg(ans, cards)]);
+      setMessages((prev) => [...prev.slice(0, -1), assistantMsg(ans, cards, mfrDocs)]);
       if (data.threadId) setThreadId(data.threadId);
       // Refresh the sidebar (new thread appears, or title/order updates).
       loadThreads();
@@ -2824,20 +2848,24 @@ function resizeImage(file: File, max = 1600, quality = 0.82): Promise<Blob> {
 // Turn a stored/streamed assistant reply into a renderable message: pull a
 // trailing "Source: …" line into a citation card, format the rest. Shared by
 // live sends and reloading a saved conversation.
-function assistantMsg(content: string, cards?: AsstCard[]): Msg {
+//
+// `mfrDocs` is the list of manufacturer documents we hold (fetched once per
+// session). It's what makes a manufacturer citation reliable: we resolve the
+// "GIB · <doc> · page 14" line to the actual document and its URL from OUR data,
+// rather than trusting the model to have pasted the link into its answer (which
+// it doesn't always do). The full `content` is stashed on the message so it can
+// be re-parsed once mfrDocs loads, in case an answer rendered before it arrived.
+function assistantMsg(content: string, cards?: AsstCard[], mfrDocs?: MfrDoc[]): Msg {
   const sm = content.match(/\n*\s*Source:\s*([^\n]+)\s*$/i);
   let body = sm ? content.slice(0, sm.index).trim() : content;
 
-  // A manufacturer answer carries a public PDF link (the "Full document: …"
-  // line the model adds). Pull it out and hide it from the rendered text — the
-  // app shows the page in the viewer and offers the link there, so the raw URL
-  // shouldn't sit in the answer. Plan/Code answers never carry a PDF URL, so the
-  // presence of one alongside a Source line is what marks this as manufacturer.
+  // If the model did paste the PDF link, hide it from the rendered text — the
+  // app supplies the link itself, so the raw URL shouldn't sit in the answer.
   const um = body.match(/https?:\/\/\S+\.pdf\b/i);
-  const url = um ? um[0] : undefined;
+  const echoedUrl = um ? um[0] : undefined;
   if (um) body = body.replace(/\n*\s*(?:Full document:\s*)?https?:\/\/\S+\.pdf\b\S*/gi, "").trim();
 
-  const cite = sm ? makeCite(sm[1].trim(), body, url) : undefined;
+  const cite = sm ? makeCite(sm[1].trim(), body, echoedUrl, mfrDocs) : undefined;
   return {
     role: "a",
     src: cite
@@ -2847,6 +2875,7 @@ function assistantMsg(content: string, cards?: AsstCard[]): Msg {
       : undefined,
     text: fmt(body),
     raw: body,
+    full: content,
     cite,
     cards: cards && cards.length ? cards : undefined,
   };
@@ -2857,14 +2886,36 @@ function daySummary(ev: number, tk: number): string {
   if (tk) parts.push(`${tk} task${tk > 1 ? "s" : ""}`);
   return parts.length ? parts.join(" · ") : "Empty day";
 }
-function makeCite(sourceLine: string, body: string, mfrUrl?: string): Cite {
+// Match a "GIB · <document> · page 14 of 32" source line to a document we hold,
+// tolerating small differences in how the model wrote the document name. Returns
+// the CANONICAL name and URL from our data — which the image endpoint and the
+// verify link both depend on being exact.
+function resolveMfrDoc(parts: string[], mfrDocs?: MfrDoc[]): MfrDoc | null {
+  if (!mfrDocs?.length || parts.length < 2) return null;
+  const mfrTok = parts[0].toLowerCase();
+  const docTok = parts[1].toLowerCase();
+  const cands = mfrDocs.filter((d) => d.manufacturer.toLowerCase() === mfrTok);
+  if (!cands.length) return null;
+  return (
+    cands.find((d) => d.doc.toLowerCase() === docTok) ||
+    cands.find((d) => d.doc.toLowerCase().startsWith(docTok) || docTok.startsWith(d.doc.toLowerCase())) ||
+    cands.find((d) => d.doc.toLowerCase().includes(docTok) || docTok.includes(d.doc.toLowerCase())) ||
+    null
+  );
+}
+
+function makeCite(sourceLine: string, body: string, echoedUrl?: string, mfrDocs?: MfrDoc[]): Cite {
   const parts = sourceLine.split("·").map((x) => x.trim()).filter(Boolean);
 
   // Manufacturer citation. The label the tool produces is
-  // "GIB · <document> · page 14 of 32": brand, document, page(s).
-  if (mfrUrl && parts.length >= 2) {
-    const mfr = parts[0];
-    const docName = parts[1];
+  // "GIB · <document> · page 14 of 32": brand, document, page(s). Resolve it
+  // against our own document list first (reliable), and fall back to a URL the
+  // model happened to paste only if that didn't match.
+  const hit = resolveMfrDoc(parts, mfrDocs);
+  const url = hit?.sourceUrl || echoedUrl;
+  if (hit || (echoedUrl && parts.length >= 2)) {
+    const mfr = hit?.manufacturer || parts[0];
+    const docName = hit?.doc || parts[1];
     const pageSeg = parts.find((p) => /^page\s/i.test(p)) || "";
     const pageNum = pageSeg.match(/\d+/);
     return {
@@ -2877,7 +2928,7 @@ function makeCite(sourceLine: string, body: string, mfrUrl?: string): Cite {
       mfr,
       doc: docName,
       page: pageNum ? parseInt(pageNum[0], 10) : 1,
-      url: mfrUrl,
+      url: url || undefined,
     };
   }
 
