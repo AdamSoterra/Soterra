@@ -50,18 +50,6 @@
    "exclude": []
   },
   {
-   "file": "GIB Fire Rated Systems Supplement.pdf",
-   "title": "GIB Fire Rated Systems Supplement",
-   "url": "https://www.gib.co.nz/assets/Uploads/GIB0112-GIB-Fire-Rated-Systems-Supplement_WEB_2510.pdf",
-   "exclude": [
-    30,
-    49,
-    50,
-    51,
-    52
-   ]
-  },
-  {
    "file": "GIB Fire Rated Systems.pdf",
    "title": "GIB Fire Rated Systems",
    "url": "https://www.gib.co.nz/assets/Uploads/GIB-Fire-Rated-Systems-Web-1124.pdf",
