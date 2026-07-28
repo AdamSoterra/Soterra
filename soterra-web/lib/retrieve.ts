@@ -54,18 +54,39 @@ export function computeDf(pages: { text: string }[]): Map<string, number> {
   return df;
 }
 
+const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export function retrieve<T extends { text: string }>(pages: T[], df: Map<string, number>, q: string, k = 6): T[] {
   const terms = expand(q);
   const N = pages.length || 1;
   const idf = (t: string) => Math.log((N + 1) / ((df.get(t) || 0) + 1)) + 1;
+
+  // The literal words the user typed, in order, before synonym expansion. Used
+  // for the adjacency bonus below — synonyms must not take part, or "screw
+  // fastener" would count as a phrase the user never wrote.
+  const literal = (q.toLowerCase().match(/[a-z0-9-]+/g) || []).filter((t) => t.length > 1);
+
   const scored = pages
     .map((p) => {
       const low = p.text.toLowerCase();
       let s = 0;
       for (const t of terms) {
-        const c = (low.match(new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "g")) || []).length;
+        const c = (low.match(new RegExp(`\\b${esc(t)}`, "g")) || []).length;
         if (c) s += (1 + Math.log(c)) * idf(t);
       }
+
+      // Adjacency bonus. Bag-of-words scoring ranks a page that LISTS fifty
+      // system codes above the page that IS one of them, because the list
+      // repeats the common token ("gbsa") more often. But builders ask by
+      // identifier — "what's the spec for GBSA 90f?" — and the index/summary
+      // page is the wrong answer. So pay for consecutive query words appearing
+      // adjacent in the text. Weighted by idf, which keeps it near-silent for
+      // ordinary phrases and decisive for a rare code.
+      for (let i = 0; i < literal.length - 1; i++) {
+        const [a, b] = [literal[i], literal[i + 1]];
+        if (new RegExp(`\\b${esc(a)}[\\s\\-]?${esc(b)}\\b`).test(low)) s += 2 * Math.min(idf(a), idf(b));
+      }
+
       return { s, p };
     })
     .filter((x) => x.s > 0)

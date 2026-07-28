@@ -24,6 +24,7 @@ const QUESTIONS = [
   "handling and storage of plasterboard sheets on site",
   "control joints in a long wall",
   "GIB Weatherline rigid air barrier fixing",
+  "GBSA 90f double steel frame wall STC rating",
 ];
 
 const { pages, df } = await getManufacturerIndex();

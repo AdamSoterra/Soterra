@@ -42,7 +42,14 @@ if (!manifestPath) {
   process.exit(1);
 }
 
-type Doc = { file: string; title: string; url?: string; exclude?: number[]; dir?: string };
+/**
+ * `overrides` supplies the text for a page whose PDF text layer is unusable —
+ * body copy saved as vector outlines, which pdftotext reads as an empty page.
+ * Those pages ingest as blanks and the assistant then can't answer on them,
+ * silently, which is worse than a visible gap. Transcribed by hand from a
+ * high-resolution render and keyed by page number.
+ */
+type Doc = { file: string; title: string; url?: string; exclude?: number[]; dir?: string; overrides?: Record<string, string> };
 type Manifest = { manufacturer: string; licence?: string; dir?: string; docs: Doc[] };
 
 const manifest: Manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
@@ -80,18 +87,30 @@ for (const d of manifest.docs) {
       if (p < 1 || p > out.totalPages) problems.push(`BAD EXCLUSION  ${d.title}: page ${p} of ${out.totalPages}`);
     }
 
+    const overrides = d.overrides ?? {};
+    for (const p of Object.keys(overrides)) {
+      const n = Number(p);
+      if (!Number.isInteger(n) || n < 1 || n > out.totalPages) problems.push(`BAD OVERRIDE  ${d.title}: page ${p} of ${out.totalPages}`);
+    }
+
+    let overridden = 0;
     const rows = texts
-      .map((t, i) => ({
-        manufacturer: manifest.manufacturer,
-        doc: d.title,
-        file: path.basename(full),
-        page: i + 1,
-        npages: out.totalPages,
-        title: null as string | null,
-        text: (t || "").replace(/\s+/g, " ").trim(),
-        sourceUrl: d.url ?? null,
-        licence,
-      }))
+      .map((t, i) => {
+        const page = i + 1;
+        const manual = overrides[String(page)];
+        if (manual) overridden++;
+        return {
+          manufacturer: manifest.manufacturer,
+          doc: d.title,
+          file: path.basename(full),
+          page,
+          npages: out.totalPages,
+          title: null as string | null,
+          text: (manual ?? t ?? "").replace(/\s+/g, " ").trim(),
+          sourceUrl: d.url ?? null,
+          licence,
+        };
+      })
       .filter((r) => {
         if (excluded.has(r.page)) {
           dropped++;
@@ -106,7 +125,8 @@ for (const d of manifest.docs) {
     }
 
     const excludedNote = excluded.size ? `, ${excluded.size} excluded as third-party` : "";
-    console.log(`  ${dry ? "would" : "ok   "}  ${d.title} — ${rows.length} of ${out.totalPages} pages${excludedNote}`);
+    const overrideNote = overridden ? `, ${overridden} transcribed by hand` : "";
+    console.log(`  ${dry ? "would" : "ok   "}  ${d.title} — ${rows.length} of ${out.totalPages} pages${excludedNote}${overrideNote}`);
 
     if (!dry) {
       // Replace this document rather than duplicating it, so a newer edition
