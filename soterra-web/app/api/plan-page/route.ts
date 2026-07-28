@@ -38,11 +38,27 @@ export async function GET(req: Request) {
     .limit(1);
   if (!member) return new Response("Forbidden", { status: 403 });
 
-  const [row] = await db
+  let [row] = await db
     .select({ file: planPages.file })
     .from(planPages)
     .where(and(eq(planPages.projectId, project), eq(planPages.doc, doc), eq(planPages.page, p)))
     .limit(1);
+
+  // The cited page may be a default (1) or slightly off in a long answer. Rather
+  // than show nothing, fall back to the sheet's first available page.
+  let renderPage = p;
+  if (!row?.file) {
+    const [alt] = await db
+      .select({ file: planPages.file, page: planPages.page })
+      .from(planPages)
+      .where(and(eq(planPages.projectId, project), eq(planPages.doc, doc)))
+      .orderBy(planPages.page)
+      .limit(1);
+    if (alt?.file) {
+      row = { file: alt.file };
+      renderPage = alt.page;
+    }
+  }
   if (!row?.file) return new Response("Not found", { status: 404 });
 
   try {
@@ -51,7 +67,7 @@ export async function GET(req: Request) {
     const bytes = new Uint8Array(await new Response(got.stream).arrayBuffer());
 
     const { renderPageAsImage } = await import("unpdf");
-    const png = await renderPageAsImage(bytes, p, {
+    const png = await renderPageAsImage(bytes, renderPage, {
       scale: 2,
       canvasImport: () => import("@napi-rs/canvas"),
     });

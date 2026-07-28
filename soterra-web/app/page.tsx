@@ -2982,7 +2982,11 @@ function makeCite(sourceLine: string, body: string, mfrDocs?: MfrDoc[]): Cite {
   const pageNum = pageSeg.match(/\d+/);
   return {
     code, title: rest || doc, sub: doc, ans: fmt(body), hlTag: code,
-    doc, page: pageNum ? parseInt(pageNum[0], 10) : undefined,
+    // Default to page 1 when the model cited a sheet without a page number (it
+    // does in long multi-source answers). Almost every drawing is a single page,
+    // and the endpoint falls back to the sheet's first page if page 1 is wrong,
+    // so this renders the actual sheet instead of the placeholder.
+    doc, page: pageNum ? parseInt(pageNum[0], 10) : 1,
   };
 }
 
