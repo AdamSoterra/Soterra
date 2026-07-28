@@ -526,6 +526,34 @@ function computeTaskUpdateFields(existing: typeof tasks.$inferSelect, input: Rec
   return fields;
 }
 
+// GIB name their systems with short codes (GBTL 90, GBS 60, GFS 520, GBSA 90f).
+// Plain keyword search buries these — the code token is tiny next to common words
+// like "wall" and "fire" — so a code question can miss the one page that DEFINES
+// the code, or grab a look-alike (GBQSA 90 for GBTL 90). When the query carries a
+// code, surface the pages that actually contain that exact code FIRST, so the
+// model reads the right system. Codes are written uppercase and (for GIB) start
+// with G, which stops this firing on ordinary words. Normalising out spaces and
+// hyphens makes "GBTL 90" match "GBTL90"; requiring an exact token stops "GBTL90"
+// matching "GBTLA90".
+function codeHits<T extends { text: string }>(pages: T[], query: string, k = 4): T[] {
+  const norm = (t: string) => t.toUpperCase().replace(/[\s-]/g, "");
+  // Case-insensitive so a lowercased "gbtl 90" still resolves; a false match on
+  // an ordinary word simply finds no page and adds nothing.
+  const codes = [...query.matchAll(/\bG[A-Z]{1,4}\s?-?\s?\d{1,3}[a-z]?\b/gi)].map((m) => norm(m[0]));
+  if (codes.length === 0) return [];
+  return pages
+    .map((p) => {
+      const hay = norm(p.text);
+      let hits = 0;
+      for (const c of codes) hits += hay.split(c).length - 1;
+      return { p, hits };
+    })
+    .filter((x) => x.hits > 0)
+    .sort((a, b) => b.hits - a.hits)
+    .slice(0, k)
+    .map((x) => x.p);
+}
+
 async function executeTool(name: string, input: Record<string, unknown>, ctx: Ctx): Promise<{ content: string; cards: Card[] }> {
   const { userId, projectId, members } = ctx;
   // Visible to the caller = team OR their own OR assigned to them.
@@ -603,7 +631,18 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         if (!q) return { content: JSON.stringify({ error: "query required" }), cards: [] };
         const { pages, df } = await getManufacturerIndex();
         if (pages.length === 0) return { content: JSON.stringify({ pages: [], note: "No manufacturer literature is loaded yet." }), cards: [] };
-        const top = retrieve(pages, df, q, 6);
+        // Exact-code pages first (so "GBTL 90" reaches the page that defines it),
+        // then keyword relevance, deduped.
+        const exact = codeHits(pages, q, 4);
+        const seenP = new Set<string>();
+        const top: typeof pages = [];
+        for (const p of [...exact, ...retrieve(pages, df, q, 6)]) {
+          const key = `${p.doc}|${p.page}`;
+          if (seenP.has(key)) continue;
+          seenP.add(key);
+          top.push(p);
+          if (top.length >= 8) break;
+        }
         if (top.length === 0) return { content: JSON.stringify({ pages: [], note: "Nothing matched in the manufacturer literature we hold." }), cards: [] };
         return {
           content: JSON.stringify({
