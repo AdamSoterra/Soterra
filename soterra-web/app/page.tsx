@@ -392,6 +392,9 @@ export default function Page() {
   // so a previous render error or spinner doesn't carry over.
   const [docImg, setDocImg] = useState<"loading" | "ok" | "error">("loading");
   useEffect(() => { setDocImg("loading"); }, [sheet]);
+  // The full-screen page image (null = closed). Just shows the already-rendered
+  // image bigger — no new render, no cost.
+  const [zoomImg, setZoomImg] = useState<string | null>(null);
 
   // The manufacturer documents we hold, so a "Source: GIB · …" line resolves to
   // a real card, page image and link even when the model doesn't paste the URL.
@@ -2213,69 +2216,72 @@ export default function Page() {
               <div className="ti"><b>{sheet.code}</b><small>{sheet.title}</small></div>
               <button className="sh-x" onClick={() => setSheet(null)}>✕</button>
             </div>
-            {sheet.kind === "manufacturer" ? (
-              <>
-                <div className="sh-canvas">
-                  {docImg !== "error" && (
-                    <img
-                      className="sh-doc"
-                      style={{ opacity: docImg === "ok" ? 1 : 0 }}
-                      src={`/api/doc-page?m=${encodeURIComponent(sheet.mfr || "")}&doc=${encodeURIComponent(sheet.doc || "")}&p=${sheet.page || 1}`}
-                      alt={`${sheet.doc} page ${sheet.page}`}
-                      onLoad={() => setDocImg("ok")}
-                      onError={() => setDocImg("error")}
-                    />
-                  )}
-                  {docImg === "loading" && <div className="sh-msg">Loading the page from {sheet.mfr}…</div>}
-                  {docImg === "error" && (
-                    <div className="sh-msg">
-                      Couldn&apos;t load the page preview.
-                      {sheet.url && <><br /><a href={sheet.url} target="_blank" rel="noopener noreferrer">Open the full manual ↗</a></>}
-                    </div>
-                  )}
-                </div>
-                <div className="sh-ans">
-                  <div className="src">📕 FROM {(sheet.mfr || "THE MANUFACTURER").toUpperCase()}’S MANUAL</div>
-                  <p dangerouslySetInnerHTML={{ __html: sheet.ans }} />
-                  {sheet.url && (
-                    <a className="sh-open" href={sheet.url} target="_blank" rel="noopener noreferrer">
-                      Open the full manual on {hostOf(sheet.url)} ↗
-                    </a>
-                  )}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="sh-canvas">
-                  {(() => {
-                    const canRender = !!(projectId && sheet.doc && sheet.page);
-                    return (
-                      <>
-                        {canRender && docImg !== "error" && (
-                          <img
-                            className="sh-doc"
-                            style={{ opacity: docImg === "ok" ? 1 : 0 }}
-                            src={`/api/plan-page?project=${encodeURIComponent(projectId!)}&doc=${encodeURIComponent(sheet.doc!)}&p=${sheet.page}`}
-                            alt={`${sheet.doc} page ${sheet.page}`}
-                            onLoad={() => setDocImg("ok")}
-                            onError={() => setDocImg("error")}
-                          />
-                        )}
-                        {canRender && docImg === "loading" && <div className="sh-msg">Loading the sheet…</div>}
-                        {(!canRender || docImg === "error") && (
-                          <div className="sheetpaper">
-                            <div className="frame" /><div className="hl" /><div className="hltag">{sheet.hlTag}</div>
-                            <div className="tb"><b>{sheet.code}</b><span>{sheet.title}</span><br /><span style={{ color: "#9AA7B4" }}>{projName}</span></div>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-                <div className="sh-ans"><div className="src">📐 ANSWER FROM THIS SHEET</div><p dangerouslySetInnerHTML={{ __html: sheet.ans }} /></div>
-              </>
-            )}
+            {(() => {
+              // The rendered page image URL for whichever kind this is, or null
+              // when there's nothing to render (a Code citation, or missing bits).
+              const docSrc =
+                sheet.kind === "manufacturer"
+                  ? sheet.mfr && sheet.doc && sheet.page
+                    ? `/api/doc-page?m=${encodeURIComponent(sheet.mfr)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}`
+                    : null
+                  : projectId && sheet.doc && sheet.page
+                    ? `/api/plan-page?project=${encodeURIComponent(projectId)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}`
+                    : null;
+              const isMfr = sheet.kind === "manufacturer";
+              return (
+                <>
+                  <div className="sh-canvas">
+                    {docSrc && docImg !== "error" && (
+                      <img
+                        className="sh-doc"
+                        style={{ opacity: docImg === "ok" ? 1 : 0 }}
+                        src={docSrc}
+                        alt={`${sheet.doc} page ${sheet.page}`}
+                        onLoad={() => setDocImg("ok")}
+                        onError={() => setDocImg("error")}
+                      />
+                    )}
+                    {/* Expand to full screen — same image, bigger. Free. */}
+                    {docSrc && docImg === "ok" && (
+                      <button className="sh-expand" title="View full screen" onClick={() => setZoomImg(docSrc)}>⛶</button>
+                    )}
+                    {docSrc && docImg === "loading" && (
+                      <div className="sh-msg">Loading the {isMfr ? "page" : "sheet"}{isMfr ? ` from ${sheet.mfr}` : ""}…</div>
+                    )}
+                    {docSrc && docImg === "error" && (
+                      <div className="sh-msg">
+                        Couldn&apos;t load the {isMfr ? "page" : "sheet"} preview.
+                        {isMfr && sheet.url && <><br /><a href={sheet.url} target="_blank" rel="noopener noreferrer">Open the full manual ↗</a></>}
+                      </div>
+                    )}
+                    {!docSrc && (
+                      <div className="sheetpaper">
+                        <div className="frame" /><div className="hl" /><div className="hltag">{sheet.hlTag}</div>
+                        <div className="tb"><b>{sheet.code}</b><span>{sheet.title}</span><br /><span style={{ color: "#9AA7B4" }}>{projName}</span></div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="sh-ans">
+                    <div className="src">{isMfr ? `📕 FROM ${(sheet.mfr || "THE MANUFACTURER").toUpperCase()}’S MANUAL` : "📐 ANSWER FROM THIS SHEET"}</div>
+                    <p dangerouslySetInnerHTML={{ __html: sheet.ans }} />
+                    {isMfr && sheet.url && (
+                      <a className="sh-open" href={sheet.url} target="_blank" rel="noopener noreferrer">
+                        Open the full manual on {hostOf(sheet.url)} ↗
+                      </a>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
+        </div>
+      )}
+
+      {/* ─── full-screen page image ─── */}
+      {zoomImg && (
+        <div className="zoomscrim" onClick={() => setZoomImg(null)}>
+          <img className="zoomimg" src={zoomImg} alt="Full page" onClick={(e) => e.stopPropagation()} />
+          <button className="zoomx" onClick={() => setZoomImg(null)}>✕</button>
         </div>
       )}
 
