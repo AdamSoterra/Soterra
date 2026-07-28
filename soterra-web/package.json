@@ -16,6 +16,7 @@
     "@capacitor/local-notifications": "^8.2.1",
     "@capacitor/status-bar": "^8.0.3",
     "@clerk/nextjs": "^6.39.5",
+    "@napi-rs/canvas": "^0.1.100",
     "@neondatabase/serverless": "^0.9.5",
     "@vercel/blob": "^2.4.0",
     "drizzle-orm": "^0.34.1",

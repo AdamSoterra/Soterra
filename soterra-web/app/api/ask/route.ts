@@ -552,7 +552,7 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
             // Spelled out for the model rather than left implied: the excerpt is
             // a fragment of a licensed document, and the citation plus link is
             // the condition we're using it under, not a formatting preference.
-            note: "This is the manufacturer's own published literature, used with permission. Quote only what you need, always end with 'Source: <label>', and give the link so the user can open the full current document.",
+            note: "This is the manufacturer's own published literature, used with permission. Quote only what you need. End your answer with two lines and nothing after them: first 'Source: <the exact label>', then on the next line the document's full link exactly as given. The app turns those into an in-app view of the actual page and a verify link, so both lines must be present and exact for a manufacturer answer.",
             pages: top.map((p) => ({ label: manufacturerLabel(p), link: p.sourceUrl, text: excerpt(p.text, q, 2800) })),
           }),
           cards: [],

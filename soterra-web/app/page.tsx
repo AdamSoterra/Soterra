@@ -5,7 +5,14 @@ import { upload } from "@vercel/blob/client";
 import Landing from "./landing";
 
 type Tab = "assistant" | "calendar" | "tasks" | "plans" | "upload" | "insights";
-type Cite = { code: string; title: string; sub: string; ans: string; hlTag: string };
+type Cite = {
+  code: string; title: string; sub: string; ans: string; hlTag: string;
+  // Set when the answer came from a manufacturer's manual (e.g. GIB) rather than
+  // the customer's own plans. Drives a different card, a different viewer (the
+  // real page rendered as an image) and a link to the manufacturer's own PDF.
+  kind?: "manufacturer";
+  mfr?: string; doc?: string; page?: number; url?: string;
+};
 type AsstCard = {
   id: string;
   itemType: "event" | "task";
@@ -316,10 +323,19 @@ function AppLogin({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted
       <p style={{ fontSize: 12.5, color: "#94A6BE", marginTop: 22, maxWidth: 300, lineHeight: 1.5 }}>
         Got a site code from your PM? Log in, then enter it to join your site.
       </p>
-      {/* On-site crew live on their phones — make installing findable without
-          needing to know which browser menu to hunt through. */}
-      <a href="/install" style={{ fontSize: 13, color: "#0E8FE6", marginTop: 16, fontWeight: 600, textDecoration: "none" }}>
-        📱 Put Soterra on your phone
+      {/* This screen only shows in the installed app, so "put it on your phone"
+          read as circular. Reframed for the real job: setting a crew member or a
+          new site owner up on THEIR phone. /install detects their device. */}
+      <a
+        href="/install"
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 7,
+          marginTop: 18, padding: "11px 18px", borderRadius: 12,
+          border: "1px solid #CFE4F7", background: "#F3F9FE",
+          color: "#0E8FE6", fontSize: 14, fontWeight: 700, textDecoration: "none",
+        }}
+      >
+        📱 Install on another phone →
       </a>
     </div>
   );
@@ -368,6 +384,10 @@ export default function Page() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState<Cite | null>(null);
+  // Reset the manufacturer-page image state each time a different source opens,
+  // so a previous render error or spinner doesn't carry over.
+  const [docImg, setDocImg] = useState<"loading" | "ok" | "error">("loading");
+  useEffect(() => { setDocImg("loading"); }, [sheet]);
   const [menuOpen, setMenuOpen] = useState(false);
   // App-mode: installed PWA / launched with ?app=1 → login-first instead of marketing.
   const [appMode, setAppMode] = useState(false);
@@ -1717,8 +1737,8 @@ export default function Page() {
                               )}
                               {m.cite && (
                                 <div className="cite" onClick={() => setSheet(m.cite!)}>
-                                  <div className="cic">📐</div>
-                                  <div className="ct"><b>{m.cite.code} · {m.cite.title}</b><small>{m.cite.sub}</small></div>
+                                  <div className="cic">{m.cite.kind === "manufacturer" ? "📕" : "📐"}</div>
+                                  <div className="ct"><b>{m.cite.code}{m.cite.title ? ` · ${m.cite.title}` : ""}</b><small>{m.cite.sub}</small></div>
                                   <div className="ca">›</div>
                                 </div>
                               )}
@@ -2169,13 +2189,48 @@ export default function Page() {
               <div className="ti"><b>{sheet.code}</b><small>{sheet.title}</small></div>
               <button className="sh-x" onClick={() => setSheet(null)}>✕</button>
             </div>
-            <div className="sh-canvas">
-              <div className="sheetpaper">
-                <div className="frame" /><div className="hl" /><div className="hltag">{sheet.hlTag}</div>
-                <div className="tb"><b>{sheet.code}</b><span>{sheet.title}</span><br /><span style={{ color: "#9AA7B4" }}>43 Kauri Rd</span></div>
-              </div>
-            </div>
-            <div className="sh-ans"><div className="src">📐 ANSWER FROM THIS SHEET</div><p dangerouslySetInnerHTML={{ __html: sheet.ans }} /></div>
+            {sheet.kind === "manufacturer" ? (
+              <>
+                <div className="sh-canvas">
+                  {docImg !== "error" && (
+                    <img
+                      className="sh-doc"
+                      style={{ opacity: docImg === "ok" ? 1 : 0 }}
+                      src={`/api/doc-page?m=${encodeURIComponent(sheet.mfr || "")}&doc=${encodeURIComponent(sheet.doc || "")}&p=${sheet.page || 1}`}
+                      alt={`${sheet.doc} page ${sheet.page}`}
+                      onLoad={() => setDocImg("ok")}
+                      onError={() => setDocImg("error")}
+                    />
+                  )}
+                  {docImg === "loading" && <div className="sh-msg">Loading the page from {sheet.mfr}…</div>}
+                  {docImg === "error" && (
+                    <div className="sh-msg">
+                      Couldn&apos;t load the page preview.
+                      {sheet.url && <><br /><a href={sheet.url} target="_blank" rel="noopener noreferrer">Open the full manual ↗</a></>}
+                    </div>
+                  )}
+                </div>
+                <div className="sh-ans">
+                  <div className="src">📕 FROM {(sheet.mfr || "THE MANUFACTURER").toUpperCase()}’S MANUAL</div>
+                  <p dangerouslySetInnerHTML={{ __html: sheet.ans }} />
+                  {sheet.url && (
+                    <a className="sh-open" href={sheet.url} target="_blank" rel="noopener noreferrer">
+                      Open the full manual on {hostOf(sheet.url)} ↗
+                    </a>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="sh-canvas">
+                  <div className="sheetpaper">
+                    <div className="frame" /><div className="hl" /><div className="hltag">{sheet.hlTag}</div>
+                    <div className="tb"><b>{sheet.code}</b><span>{sheet.title}</span><br /><span style={{ color: "#9AA7B4" }}>{projName}</span></div>
+                  </div>
+                </div>
+                <div className="sh-ans"><div className="src">📐 ANSWER FROM THIS SHEET</div><p dangerouslySetInnerHTML={{ __html: sheet.ans }} /></div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -2771,11 +2826,25 @@ function resizeImage(file: File, max = 1600, quality = 0.82): Promise<Blob> {
 // live sends and reloading a saved conversation.
 function assistantMsg(content: string, cards?: AsstCard[]): Msg {
   const sm = content.match(/\n*\s*Source:\s*([^\n]+)\s*$/i);
-  const body = sm ? content.slice(0, sm.index).trim() : content;
-  const cite = sm ? makeCite(sm[1].trim(), body) : undefined;
+  let body = sm ? content.slice(0, sm.index).trim() : content;
+
+  // A manufacturer answer carries a public PDF link (the "Full document: …"
+  // line the model adds). Pull it out and hide it from the rendered text — the
+  // app shows the page in the viewer and offers the link there, so the raw URL
+  // shouldn't sit in the answer. Plan/Code answers never carry a PDF URL, so the
+  // presence of one alongside a Source line is what marks this as manufacturer.
+  const um = body.match(/https?:\/\/\S+\.pdf\b/i);
+  const url = um ? um[0] : undefined;
+  if (um) body = body.replace(/\n*\s*(?:Full document:\s*)?https?:\/\/\S+\.pdf\b\S*/gi, "").trim();
+
+  const cite = sm ? makeCite(sm[1].trim(), body, url) : undefined;
   return {
     role: "a",
-    src: cite ? "📐 FROM YOUR PLANS" : undefined,
+    src: cite
+      ? cite.kind === "manufacturer"
+        ? `📕 FROM ${(cite.mfr || "the manufacturer").toUpperCase()}’S MANUAL`
+        : "📐 FROM YOUR PLANS"
+      : undefined,
     text: fmt(body),
     raw: body,
     cite,
@@ -2788,12 +2857,40 @@ function daySummary(ev: number, tk: number): string {
   if (tk) parts.push(`${tk} task${tk > 1 ? "s" : ""}`);
   return parts.length ? parts.join(" · ") : "Empty day";
 }
-function makeCite(sourceLine: string, body: string): Cite {
+function makeCite(sourceLine: string, body: string, mfrUrl?: string): Cite {
   const parts = sourceLine.split("·").map((x) => x.trim()).filter(Boolean);
+
+  // Manufacturer citation. The label the tool produces is
+  // "GIB · <document> · page 14 of 32": brand, document, page(s).
+  if (mfrUrl && parts.length >= 2) {
+    const mfr = parts[0];
+    const docName = parts[1];
+    const pageSeg = parts.find((p) => /^page\s/i.test(p)) || "";
+    const pageNum = pageSeg.match(/\d+/);
+    return {
+      code: docName,
+      title: pageSeg,
+      sub: `${mfr} manual`,
+      ans: fmt(body),
+      hlTag: pageSeg || docName,
+      kind: "manufacturer",
+      mfr,
+      doc: docName,
+      page: pageNum ? parseInt(pageNum[0], 10) : 1,
+      url: mfrUrl,
+    };
+  }
+
   const doc = parts[0] || "Source";
   const code = parts.find((p, i) => i > 0 && /[A-Z]/.test(p) && /\d/.test(p)) || doc;
   const rest = parts.filter((p) => p !== doc && p !== code).join(" · ");
   return { code, title: rest || doc, sub: doc, ans: fmt(body), hlTag: code };
+}
+
+// "https://www.gib.co.nz/…/x.pdf" → "gib.co.nz", for the "open the full manual
+// on <site>" link in the document viewer.
+function hostOf(u: string): string {
+  try { return new URL(u).host.replace(/^www\./, ""); } catch { return "the manufacturer's site"; }
 }
 
 // One event row — used in the week strip, agenda, and day modal. Bar colour is
