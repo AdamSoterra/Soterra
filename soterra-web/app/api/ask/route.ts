@@ -11,7 +11,7 @@ import {
   addOneDay,
 } from "@/lib/date-tz";
 import { resolveProjectId, listMembers } from "@/lib/project";
-import { excerpt, retrieve } from "@/lib/retrieve";
+import { excerpt, expand, retrieve } from "@/lib/retrieve";
 import { DEMO_ID, getProjectIndex, type Page } from "@/lib/projectIndex";
 import { codeLabel, getCodeIndex } from "@/lib/codeIndex";
 import { getManufacturerIndex, manufacturerLabel } from "@/lib/manufacturerIndex";
@@ -113,6 +113,20 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
       type: "object",
       properties: { query: { type: "string", description: "What to look up, in plain English." } },
       required: ["query"],
+    },
+  },
+  {
+    name: "review_plans",
+    description:
+      "Read ACROSS THE WHOLE uploaded plan set at once. Use this INSTEAD of search_plans whenever a question needs completeness rather than a single fact: 'are there any clashes or discrepancies worth an RFI?', 'is anything missing or contradictory across the drawings?', 'do the schedules match the details?', 'check the set before we order/line/fabricate'. search_plans only returns the few pages matching a keyword, so it can miss a clash that lives in two documents it didn't rank; review_plans returns the FULL text of every page (optionally narrowed with `focus`) so you can cross-compare and catch inconsistencies no keyword search would surface. It reads more, so it costs more — use it only when the question genuinely needs the whole picture, and use search_plans for a specific lookup. Cite every finding with its 'Source: <page label>'. If the set is too big to read in one pass it tells you what it left out; then narrow with `focus` and call again, and never claim the review is complete when it isn't.",
+    input_schema: {
+      type: "object",
+      properties: {
+        focus: {
+          type: "string",
+          description: "Optional topic to narrow the review to the relevant documents (e.g. 'doors and door hardware', 'wet area lining', 'windows and glazing', 'fire rating'). Omit to read the ENTIRE set — do that for an open 'any clashes anywhere?' question.",
+        },
+      },
     },
   },
   {
@@ -530,6 +544,50 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         return { content: JSON.stringify({ note: "If the same detail differs between pages, the one with the LATEST 'uploaded' date is the current revision — use it.", pages: top.map((p) => ({ label: pageLabel(p), text: excerpt(p.text, q, 2800) })) }), cards: [] };
       }
 
+      case "review_plans": {
+        const focus = s(input.focus) ?? "";
+        const { pages } = await getProjectIndex(projectId);
+        if (pages.length === 0) return { content: JSON.stringify({ pages: [], note: "No plans are uploaded for this site yet." }), cards: [] };
+
+        // Narrow to the focus if given (match on document name OR page text, with
+        // the same synonym expansion search uses), else read the whole set. A
+        // focus that matches nothing falls back to everything rather than
+        // answering from an empty set.
+        let selected = pages;
+        if (focus) {
+          // Drop stopwords/short words so a focus like "doors and door hardware"
+          // narrows on "door"/"hardware" and doesn't match every page via "and".
+          const STOP = new Set(["and", "the", "for", "with", "from", "this", "that", "these", "those", "all", "any", "are", "was", "were", "our", "your", "have"]);
+          const terms = expand(focus).filter((t) => t.length >= 3 && !STOP.has(t));
+          const hit = terms.length === 0 ? [] : pages.filter((p) => {
+            const hay = ((p.doc || "") + " " + p.text).toLowerCase();
+            return terms.some((t) => hay.includes(t));
+          });
+          if (hit.length) selected = hit;
+        }
+
+        // Read pages in full, up to a budget that leaves room for the prompt,
+        // the conversation and the answer inside the model's context window. A
+        // single very dense sheet is capped so it can't crowd out the rest.
+        const CHAR_BUDGET = 420_000; // ~105k tokens of page text
+        const PER_PAGE_CAP = 9_000;
+        const out: { label: string; text: string }[] = [];
+        let used = 0;
+        let dropped = 0;
+        for (const p of selected) {
+          const t = p.text.length > PER_PAGE_CAP ? p.text.slice(0, PER_PAGE_CAP) + " …[page truncated]" : p.text;
+          if (used + t.length > CHAR_BUDGET) { dropped++; continue; }
+          out.push({ label: pageLabel(p), text: t });
+          used += t.length;
+        }
+
+        const scope = focus ? `the documents matching "${focus}"` : "the uploaded set";
+        const note = dropped > 0
+          ? `Read ${out.length} of ${selected.length} pages of ${scope}. ${dropped} pages did NOT fit in one pass. Answer only for what you read here, tell the user which part you covered, and suggest narrowing with a 'focus' (by discipline or topic) to cover the rest. Do NOT imply the review was complete.`
+          : `Complete pass: read ALL ${out.length} pages of ${scope} in full. You have the whole ${focus ? "subset" : "set"} — cross-compare freely.`;
+        return { content: JSON.stringify({ note, pages: out }), cards: [] };
+      }
+
       case "search_code": {
         const q = s(input.query) ?? "";
         if (!q) return { content: JSON.stringify({ error: "query required" }), cards: [] };
@@ -784,7 +842,7 @@ ${tkList}`;
 }
 
 const STATIC_PROMPT = `You are Soterra's site assistant — a sharp, experienced construction professional helping the crew on a specific construction SITE. You help five ways:
-1) PLAN-READER — answer questions about THIS site's uploaded drawings & specifications. For any question about this project's plans/specs (materials, dimensions, fire ratings, schedules, finishes, "what does our spec say…") you MUST call search_plans, then answer ONLY from the page text it returns, finishing with a line: "Source: <the exact page label>". Never invent codes, ratings, products or numbers. If the answer isn't in the pages, say what's missing and which drawing set might have it. REVISIONS — the plans may hold more than one revision of the same sheet; each page label carries an "uploaded" date. The most recently uploaded page is the CURRENT revision. If two pages give different values for the same thing (e.g. a fire rating that was 30 min in an older upload and 60 min in a newer one), ALWAYS use the value from the latest-uploaded page, cite that page as the Source, and note that it supersedes the older figure. Never present a superseded value as current, and never average them.
+1) PLAN-READER — answer questions about THIS site's uploaded drawings & specifications. For any question about this project's plans/specs (materials, dimensions, fire ratings, schedules, finishes, "what does our spec say…") you MUST call search_plans, then answer ONLY from the page text it returns, finishing with a line: "Source: <the exact page label>". Never invent codes, ratings, products or numbers. If the answer isn't in the pages, say what's missing and which drawing set might have it. REVISIONS — the plans may hold more than one revision of the same sheet; each page label carries an "uploaded" date. The most recently uploaded page is the CURRENT revision. If two pages give different values for the same thing (e.g. a fire rating that was 30 min in an older upload and 60 min in a newer one), ALWAYS use the value from the latest-uploaded page, cite that page as the Source, and note that it supersedes the older figure. Never present a superseded value as current, and never average them. CHOOSING THE RIGHT TOOL BY BREADTH — this matters for both accuracy and cost. For a SPECIFIC lookup (one fact, one detail: "door handle height?", "beam over grid 3?", "what's the wall type to the bathroom?") use search_plans — it's targeted and cheap, and you can call it a few times with different wording. For a WHOLE-SET question that needs completeness — "any clashes or discrepancies worth an RFI?", "is anything missing or contradictory?", "do the schedules agree with the details?", "review the drawings before we order/line/fabricate" — you MUST use review_plans instead, because search_plans only returns the pages matching a keyword and will MISS a clash sitting in two documents it didn't happen to rank. review_plans reads every page so you can cross-compare. Judge the breadth of the question yourself and pick accordingly; do not run a whole-set audit through keyword searches, and do not read the entire set for a single fact. If review_plans says it couldn't fit the whole set in one pass, tell the user which part you covered and offer to continue with a narrower focus — never imply a complete audit you didn't do.
 2) BUILDING-CODE — answer what the NZ Building Code REQUIRES by calling search_code (the free MBIE Acceptable Solutions, Verification Methods, Handbook, guidance). Use this for "what does the code require for…", clause requirements, acceptable solutions, minimum figures, weathertightness, egress, etc. Answer from the returned pages, make clear it's general Building-Code guidance (not this project's plans), finish with "Source: <page label>", and remind them to confirm against the current official document / their designer for anything safety-critical. Never invent a clause or number. (search_plans = THIS project's drawings; search_code = the universal Code. Pick the right one; for "does our design meet the code?" you may use both.)
 3) MANUFACTURER LITERATURE — answer what the PRODUCT MAKER requires by calling search_manufacturer (currently GIB / Winstone Wallboards: the Site Guide, Fire Rated, Noise Control, Intertenancy Barrier, Aqualine wet area, EzyBrace bracing and Weatherline manuals). Use it whenever the question names a product or a proprietary system, or asks how something must be fixed, laid out, sealed or built. This is a DIFFERENT question from the Code: the maker's requirement is frequently stricter than the Code minimum, and it is the maker's requirement that governs the warranty and the producer statement, so where they differ say so and lead with the manufacturer's figure. Finish with "Source: <page label>" and give the link the tool returns, so the user can open the current document themselves — that citation is a condition of the permission we hold, not a style choice. Two hard rules: never state a figure the tool did not return, and never merge two manufacturers' numbers into one answer, because near-identical tables from different makers are exactly how someone ends up building to the wrong spec. If the corpus doesn't cover it, say so plainly and point them at the manufacturer's technical line rather than filling the gap from memory.
 4) CONSTRUCTION EXPERT — general construction knowledge (methods, sequencing, materials, detailing, terminology, H&S, best practice) from your own expertise — no "Source:" line. Use web_search for current/specific external detail (latest product specs, standards) rather than guessing.
