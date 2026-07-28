@@ -16,6 +16,26 @@ const SYN: Record<string, string[]> = {
   insulation: ["r-value", "thermal", "batts", "pink"],
   window: ["glazing", "glazed", "joinery"],
   corridor: ["lobby", "circulation", "common"],
+  // Manufacturer literature vocabulary. A builder asks "how far apart do the
+  // screws go"; the manual says "fastener centres". Without these the query
+  // lands on whatever page merely repeats the word "screw" — which on the GIB
+  // Site Guide was a page about sanding compound.
+  screw: ["screws", "fastener", "fasteners", "fixing", "fixings", "nail", "nails", "centres", "spacing"],
+  screws: ["screw", "fastener", "fasteners", "fixing", "fixings", "centres", "spacing"],
+  fixing: ["fixings", "fastener", "fasteners", "screw", "screws", "nail", "centres", "spacing"],
+  fastener: ["fasteners", "fixing", "fixings", "screw", "screws", "centres", "spacing"],
+  spacing: ["centres", "centers", "spacings", "apart", "pitch"],
+  centres: ["spacing", "centers", "apart", "pitch"],
+  ceiling: ["ceilings", "soffit", "overhead"],
+  sheet: ["sheets", "board", "boards", "lining", "linings", "plasterboard"],
+  plasterboard: ["gib", "board", "sheet", "lining", "wallboard"],
+  brace: ["bracing", "bracline", "braceline", "ezybrace", "bu", "bracing-unit"],
+  bracing: ["brace", "braceline", "ezybrace", "bu", "bracing-unit"],
+  joint: ["joints", "jointing", "stopping", "stopped", "control", "seam"],
+  stud: ["studs", "framing", "frame", "nog", "nogging", "dwang"],
+  waterproof: ["waterproofing", "tanking", "membrane", "wet-area", "aqualine"],
+  acoustic: ["noise", "sound", "stc", "iic", "rw"],
+  noise: ["acoustic", "sound", "stc", "rw"],
 };
 
 export function expand(q: string): string[] {

@@ -187,6 +187,42 @@ export const codePages = pgTable(
   }
 );
 
+// ─── Manufacturer literature. Deliberately NOT in code_pages, even though the
+// shape is nearly identical, because the two carry different obligations. The
+// Code corpus is Crown material under CC BY 4.0 — free to anyone, forever.
+// Manufacturer literature is used under a permission we asked for in writing,
+// and that permission comes with promises we made in the email:
+//
+//   1. only a short extract is ever reproduced  → excerpt() at answer time
+//   2. every answer names the document and page → manufacturerLabel()
+//   3. every answer links the CURRENT document  → sourceUrl, per document
+//   4. never reproduce third-party material     → enforced at INGEST time,
+//      by dropping those pages entirely, so a BRANZ appraisal page simply
+//      isn't in the table to retrieve. A prompt instruction could be argued
+//      around; a missing row cannot.
+//
+// `licence` is what makes a withdrawal survivable: a manufacturer who says no,
+// or later changes their mind, is switched off with one UPDATE rather than a
+// migration and a redeploy.
+export const manufacturerPages = pgTable(
+  "manufacturer_pages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    manufacturer: text("manufacturer").notNull(), // "GIB" — the brand as a builder says it
+    doc: text("doc").notNull(), // readable title, e.g. "GIB Site Guide 2024"
+    file: text("file").notNull(), // source pdf filename
+    page: integer("page").notNull(),
+    npages: integer("npages").notNull(),
+    title: text("title"),
+    text: text("text").notNull(),
+    /** The live document on the manufacturer's own site, shown with every answer. */
+    sourceUrl: text("source_url"),
+    /** granted | pending | withdrawn — only `granted` and `pending` are served. */
+    licence: text("licence").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  }
+);
+
 // ─── Inspection history — "The Brain", stripped back. One row per uploaded
 //     inspection report, plus one row per FAILED item on it. We deliberately do
 //     NOT store the passes: the product question is "what do we keep getting

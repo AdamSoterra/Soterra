@@ -1,0 +1,171 @@
+{
+ "manufacturer": "GIB",
+ "licence": "pending",
+ "dir": "C:/Users/adam/Desktop/Soterra/GIB Manuals",
+ "docs": [
+  {
+   "file": "GIB Bracing Plates.pdf",
+   "title": "GIB Bracing Plates",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Bracing-Plates_Feb26.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Compound Supplement.pdf",
+   "title": "GIB Compound Supplement",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Compound-Supplement-Document-June-2020.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Curved Walls and Ceiling Supplement.pdf",
+   "title": "GIB Curved Walls and Ceiling Supplement",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Curved-Walls-and-Ceiling-Supplement-0625.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Curveline Spec and Install Manual.pdf",
+   "title": "GIB Curveline Spec and Install Manual",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB0144-Curveline-Spec-and-Install-Manual_Nov25-FINAL.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB EzyBrace Bracing Supplement Guide.pdf",
+   "title": "GIB EzyBrace Bracing Supplement Guide",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Bracing-Supplement-0425.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB EzyBrace Steel Frame Systems.pdf",
+   "title": "GIB EzyBrace Steel Frame Systems",
+   "url": "https://www.gib.co.nz/assets/Uploads/LiteratureFile/GIB-Ezybrace-Steel-Frame-Systems-March-2017.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB EzyBrace Systems.pdf",
+   "title": "GIB EzyBrace Systems",
+   "url": "https://www.gib.co.nz/assets/Uploads/LiteratureFile/System-Brochures/EzyBrace/GIB-EzyBrace-Systems-2016-August.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Fire Rated Systems Supplement.pdf",
+   "title": "GIB Fire Rated Systems Supplement",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB0112-GIB-Fire-Rated-Systems-Supplement_WEB_2510.pdf",
+   "exclude": [
+    49,
+    50,
+    51,
+    52
+   ]
+  },
+  {
+   "file": "GIB Fire Rated Systems.pdf",
+   "title": "GIB Fire Rated Systems",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Fire-Rated-Systems-Web-1124.pdf",
+   "exclude": [
+    144,
+    145,
+    146,
+    147
+   ]
+  },
+  {
+   "file": "GIB Healthcare Design Guide.pdf",
+   "title": "GIB Healthcare Design Guide",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Healthcare-Design-Guide-2018.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Intertenancy Barrier Systems.pdf",
+   "title": "GIB Intertenancy Barrier Systems",
+   "url": "https://www.gib.co.nz/assets/GIB-Barrier-System-Manual-1701-31102025_FLlowres.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Noise Control Systems Supplement.pdf",
+   "title": "GIB Noise Control Systems Supplement",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Noise-Control-Systems-Supplement.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Noise Control Systems.pdf",
+   "title": "GIB Noise Control Systems",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Noise-Control-Systems-Manual-May22.pdf",
+   "exclude": [
+    10,
+    126
+   ]
+  },
+  {
+   "file": "GIB Rigid Air Barrier Systems Guide.pdf",
+   "title": "GIB Rigid Air Barrier Systems Guide",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Rigid-Air-Barrier-Systems-Guide_DEC24.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Rondo Metal Batten Systems.pdf",
+   "title": "GIB Rondo Metal Batten Systems",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Rondo-Metal-Batten-Systems-0924.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Site Guide 2024 (Complete Manual).pdf",
+   "title": "GIB Site Guide 2024 (Complete Manual)",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Site-Guide-0525.pdf",
+   "exclude": [
+    8,
+    9,
+    78
+   ]
+  },
+  {
+   "file": "GIB Site Guide Supplement.pdf",
+   "title": "GIB Site Guide Supplement",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Site-Guide-Supplement-1121.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Suspended Plasterboard Ceilings.pdf",
+   "title": "GIB Suspended Plasterboard Ceilings",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB0157-Suspended-Ceilings_July2025_v380.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Tough Systems.pdf",
+   "title": "GIB Tough Systems",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Tough-System-Design-and-Install-Guide-0525.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Weatherline Design and Construction Manual.pdf",
+   "title": "GIB Weatherline Design and Construction Manual",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Weatherline-Design-and-Construction-Manual-0525.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Weatherline Rigid Air Barrier Supplement.pdf",
+   "title": "GIB Weatherline Rigid Air Barrier Supplement",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-Weatherline-Rigid-Air-Barrier-Supplement-0322.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIB Wet Area Systems (Aqualine).pdf",
+   "title": "GIB Wet Area Systems (Aqualine)",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB0081-Aqualine-Wet-Areas-Manual_WEB.pdf",
+   "exclude": [
+    5,
+    10
+   ]
+  },
+  {
+   "file": "GIB X-Block Radiation Shielding Systems.pdf",
+   "title": "GIB X-Block Radiation Shielding Systems",
+   "url": "https://www.gib.co.nz/assets/Uploads/GIB-X-Block-Book-01-2021.pdf",
+   "exclude": []
+  },
+  {
+   "file": "GIBFix Framing Systems.pdf",
+   "title": "GIBFix Framing Systems",
+   "url": "https://www.gib.co.nz/assets/Uploads/LiteratureFile/System-Brochures/GIBFix/GIBFix-Framing-Systems-Literature.pdf",
+   "exclude": []
+  }
+ ]
+}

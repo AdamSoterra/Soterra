@@ -48,7 +48,7 @@ Nothing to argue against. These are courtesy notifications more than requests.
 | 10 | **Techlam** | `info@techlam.co.nz`<br>0800 832 452 | Bare © notice only, no restriction | ⭐ |
 | 11 | **Metalcraft Roofing** | contact form | Terms page contains **no IP clause at all** | ⭐ |
 | 12 | **Stahlton** | contact form, stahlton.co.nz/contact | No terms, legal or privacy page. No copyright in 3 PDFs | ⭐ — brochure-grade, ~17pp |
-| 13 | **XLam NZ** | Mangere office (contact page 403s) | No IP clause anywhere; no copyright in either design guide | ⭐ — note copyright sits with the **Australian** entity |
+| 13 | ~~**XLam NZ**~~ **SKIPPED 2026-07-28** | `jordan.robinson@xlam.co.nz` | ⚠️ Earlier note WRONG. xlam.co/website-terms/ **does** carry an IP clause: content *"may not be distributed, modified, reproduced in whole or in part without the permission of Hyne Group"*, and the same page has a **Technical Literature** heading. Band **D** not C. Clause is **Hyne Group's** (Mayflower Enterprises + subsidiaries), Queensland law, so XLam NZ likely cannot grant alone | ⭐⭐⭐ CLT only. **Adam's call: not valuable enough, skipped** |
 
 ---
 

@@ -14,6 +14,7 @@ import { resolveProjectId, listMembers } from "@/lib/project";
 import { excerpt, retrieve } from "@/lib/retrieve";
 import { DEMO_ID, getProjectIndex, type Page } from "@/lib/projectIndex";
 import { codeLabel, getCodeIndex } from "@/lib/codeIndex";
+import { getManufacturerIndex, manufacturerLabel } from "@/lib/manufacturerIndex";
 import { companyIdForProject, type Scope } from "@/lib/company";
 import { searchHistory } from "@/lib/history";
 import { orderForPrompt } from "@/lib/inspectionOrder";
@@ -121,6 +122,18 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
     input_schema: {
       type: "object",
       properties: { query: { type: "string", description: "The code question in plain English (e.g. 'minimum stair riser height', 'E2 cavity requirement for direct-fixed cladding')." } },
+      required: ["query"],
+    },
+  },
+  {
+    name: "search_manufacturer",
+    description:
+      "Search MANUFACTURERS' OWN technical literature — the installation manuals, system manuals, specification guides and site guides published by the makers of the products actually being installed (currently GIB / Winstone Wallboards). Call this for anything product-specific: how a named system must be built, fixing types and centres, sheet layout and handling, fire and acoustic system numbers, bracing systems, wet-area details. This answers 'how does the MAKER say to install it', which is a different question from what the Code requires (search_code) and from what this project's drawings show (search_plans). Prefer this over search_code whenever the question names a product or a proprietary system, because the manufacturer's requirement is often stricter than the Code minimum and it is the manufacturer's requirement that governs the warranty. IMPORTANT: this material is used under permission from the manufacturer, so you MUST finish with 'Source: <the exact page label>' and include the document link when one is returned. Never state a figure this tool did not return, and never blend two manufacturers' figures into one answer.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The product question (e.g. 'GIB Aqualine fixing centres in a wet area', 'intertenancy barrier system for terrace homes')." },
+      },
       required: ["query"],
     },
   },
@@ -527,6 +540,25 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         return { content: JSON.stringify({ pages: top.map((p) => ({ label: codeLabel(p), text: excerpt(p.text, q, 2800) })) }), cards: [] };
       }
 
+      case "search_manufacturer": {
+        const q = s(input.query) ?? "";
+        if (!q) return { content: JSON.stringify({ error: "query required" }), cards: [] };
+        const { pages, df } = await getManufacturerIndex();
+        if (pages.length === 0) return { content: JSON.stringify({ pages: [], note: "No manufacturer literature is loaded yet." }), cards: [] };
+        const top = retrieve(pages, df, q, 6);
+        if (top.length === 0) return { content: JSON.stringify({ pages: [], note: "Nothing matched in the manufacturer literature we hold." }), cards: [] };
+        return {
+          content: JSON.stringify({
+            // Spelled out for the model rather than left implied: the excerpt is
+            // a fragment of a licensed document, and the citation plus link is
+            // the condition we're using it under, not a formatting preference.
+            note: "This is the manufacturer's own published literature, used with permission. Quote only what you need, always end with 'Source: <label>', and give the link so the user can open the full current document.",
+            pages: top.map((p) => ({ label: manufacturerLabel(p), link: p.sourceUrl, text: excerpt(p.text, q, 2800) })),
+          }),
+          cards: [],
+        };
+      }
+
       case "search_history": {
         const q = s(input.query) ?? "";
         if (!q) return { content: JSON.stringify({ error: "query required" }), cards: [] };
@@ -754,9 +786,10 @@ ${tkList}`;
 const STATIC_PROMPT = `You are Soterra's site assistant — a sharp, experienced construction professional helping the crew on a specific construction SITE. You help five ways:
 1) PLAN-READER — answer questions about THIS site's uploaded drawings & specifications. For any question about this project's plans/specs (materials, dimensions, fire ratings, schedules, finishes, "what does our spec say…") you MUST call search_plans, then answer ONLY from the page text it returns, finishing with a line: "Source: <the exact page label>". Never invent codes, ratings, products or numbers. If the answer isn't in the pages, say what's missing and which drawing set might have it. REVISIONS — the plans may hold more than one revision of the same sheet; each page label carries an "uploaded" date. The most recently uploaded page is the CURRENT revision. If two pages give different values for the same thing (e.g. a fire rating that was 30 min in an older upload and 60 min in a newer one), ALWAYS use the value from the latest-uploaded page, cite that page as the Source, and note that it supersedes the older figure. Never present a superseded value as current, and never average them.
 2) BUILDING-CODE — answer what the NZ Building Code REQUIRES by calling search_code (the free MBIE Acceptable Solutions, Verification Methods, Handbook, guidance). Use this for "what does the code require for…", clause requirements, acceptable solutions, minimum figures, weathertightness, egress, etc. Answer from the returned pages, make clear it's general Building-Code guidance (not this project's plans), finish with "Source: <page label>", and remind them to confirm against the current official document / their designer for anything safety-critical. Never invent a clause or number. (search_plans = THIS project's drawings; search_code = the universal Code. Pick the right one; for "does our design meet the code?" you may use both.)
-3) CONSTRUCTION EXPERT — general construction knowledge (methods, sequencing, materials, detailing, terminology, H&S, best practice) from your own expertise — no "Source:" line. Use web_search for current/specific external detail (latest product specs, standards) rather than guessing.
-4) INSPECTION HISTORY — answer "what have we been pulled up on before?" by calling search_history. It searches THIS COMPANY's own filed inspection reports (all their sites, council and consultant). Use it for "what failed on the last cavity wrap?", "do we keep failing passive fire?", "what did the inspector pick up at pre-line last time?", and whenever someone is preparing for an inspection. Answer from the rows it returns — say how many times a thing has come up and when it last did, because the repeat count is the point. It is this builder's own data, so be direct about it. Never present it as a code requirement; it's what happened.
-5) CALENDAR & TASKS — create, find, change, delete events and to-dos using the tools.
+3) MANUFACTURER LITERATURE — answer what the PRODUCT MAKER requires by calling search_manufacturer (currently GIB / Winstone Wallboards: the Site Guide, Fire Rated, Noise Control, Intertenancy Barrier, Aqualine wet area, EzyBrace bracing and Weatherline manuals). Use it whenever the question names a product or a proprietary system, or asks how something must be fixed, laid out, sealed or built. This is a DIFFERENT question from the Code: the maker's requirement is frequently stricter than the Code minimum, and it is the maker's requirement that governs the warranty and the producer statement, so where they differ say so and lead with the manufacturer's figure. Finish with "Source: <page label>" and give the link the tool returns, so the user can open the current document themselves — that citation is a condition of the permission we hold, not a style choice. Two hard rules: never state a figure the tool did not return, and never merge two manufacturers' numbers into one answer, because near-identical tables from different makers are exactly how someone ends up building to the wrong spec. If the corpus doesn't cover it, say so plainly and point them at the manufacturer's technical line rather than filling the gap from memory.
+4) CONSTRUCTION EXPERT — general construction knowledge (methods, sequencing, materials, detailing, terminology, H&S, best practice) from your own expertise — no "Source:" line. Use web_search for current/specific external detail (latest product specs, standards) rather than guessing.
+5) INSPECTION HISTORY — answer "what have we been pulled up on before?" by calling search_history. It searches THIS COMPANY's own filed inspection reports (all their sites, council and consultant). Use it for "what failed on the last cavity wrap?", "do we keep failing passive fire?", "what did the inspector pick up at pre-line last time?", and whenever someone is preparing for an inspection. Answer from the rows it returns — say how many times a thing has come up and when it last did, because the repeat count is the point. It is this builder's own data, so be direct about it. Never present it as a code requirement; it's what happened.
+6) CALENDAR & TASKS — create, find, change, delete events and to-dos using the tools.
 
 If the user attaches a photo or PDF, read it and answer about it.
 
