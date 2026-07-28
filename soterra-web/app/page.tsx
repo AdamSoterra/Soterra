@@ -30,7 +30,7 @@ type AsstCard = {
 type MfrDoc = { manufacturer: string; doc: string; sourceUrl: string | null; npages: number };
 type Msg =
   | { role: "u"; text: string; att?: string }
-  | { role: "a"; src?: string; text: string; raw?: string; full?: string; cite?: Cite; cards?: AsstCard[]; pending?: boolean };
+  | { role: "a"; src?: string; text: string; raw?: string; full?: string; cites?: Cite[]; cards?: AsstCard[]; pending?: boolean };
 type Attachment = { kind: "image" | "pdf"; mediaType: string; data: string; name: string };
 
 // ─── Sites (projects) + crew ───
@@ -1762,13 +1762,16 @@ export default function Page() {
                               ) : (
                                 <span dangerouslySetInnerHTML={{ __html: m.text }} />
                               )}
-                              {m.cite && (
-                                <div className="cite" onClick={() => setSheet(m.cite!)}>
-                                  <div className="cic">{m.cite.kind === "manufacturer" ? "📕" : "📐"}</div>
-                                  <div className="ct"><b>{m.cite.code}{m.cite.title ? ` · ${m.cite.title}` : ""}</b><small>{m.cite.sub}</small></div>
+                              {m.cites && m.cites.length > 1 && (
+                                <div className="cites-h">{m.cites.length} sources — tap any to open</div>
+                              )}
+                              {m.cites?.map((c, k) => (
+                                <div className="cite" key={k} onClick={() => setSheet(c)}>
+                                  <div className="cic">{c.kind === "manufacturer" ? "📕" : "📐"}</div>
+                                  <div className="ct"><b>{c.code}{c.title ? ` · ${c.title}` : ""}</b><small>{c.sub}</small></div>
                                   <div className="ca">›</div>
                                 </div>
-                              )}
+                              ))}
                               {m.cards?.map((c, j) => (
                                 <div className="evcard" key={j}>
                                   <div className="bar" style={{ background: c.itemType === "event" ? barColor((c.kind as EventKind) || null) : "var(--brand)" }} />
@@ -2882,27 +2885,40 @@ function resizeImage(file: File, max = 1600, quality = 0.82): Promise<Blob> {
 // it doesn't always do). The full `content` is stashed on the message so it can
 // be re-parsed once mfrDocs loads, in case an answer rendered before it arrived.
 function assistantMsg(content: string, cards?: AsstCard[], mfrDocs?: MfrDoc[]): Msg {
-  const sm = content.match(/\n*\s*Source:\s*([^\n]+)\s*$/i);
-  let body = sm ? content.slice(0, sm.index).trim() : content;
+  // An answer can draw on several documents (e.g. a clash review cites four
+  // schedules), so collect EVERY "Source: …" line, not just a trailing one, and
+  // strip them all from the body. A single line that lists documents separated
+  // by " / " is split into one per document.
+  const sourceLines: string[] = [];
+  let body = content.replace(/^[ \t]*[-*>]?[ \t]*(?:\*\*)?Source:(?:\*\*)?[ \t]*(.+?)[ \t]*$/gim, (_m, g) => {
+    sourceLines.push(String(g).trim());
+    return "";
+  });
+  body = body.replace(/https?:\/\/\S+\.pdf\b\S*/gi, "").replace(/\n{3,}/g, "\n\n").trim();
 
-  // If the model did paste the PDF link, hide it from the rendered text — the
-  // app supplies the link itself, so the raw URL shouldn't sit in the answer.
-  const um = body.match(/https?:\/\/\S+\.pdf\b/i);
-  const echoedUrl = um ? um[0] : undefined;
-  if (um) body = body.replace(/\n*\s*(?:Full document:\s*)?https?:\/\/\S+\.pdf\b\S*/gi, "").trim();
+  const refs = sourceLines.flatMap((l) => l.split(/\s+\/\s+/).map((x) => x.trim()).filter(Boolean));
+  const seen = new Set<string>();
+  const cites: Cite[] = [];
+  for (const ref of refs) {
+    const c = makeCite(ref, body, mfrDocs);
+    const key = `${c.kind || "plan"}|${(c.doc || c.code || "").toLowerCase()}|${c.page ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cites.push(c);
+  }
 
-  const cite = sm ? makeCite(sm[1].trim(), body, echoedUrl, mfrDocs) : undefined;
+  const first = cites[0];
   return {
     role: "a",
-    src: cite
-      ? cite.kind === "manufacturer"
-        ? `📕 FROM ${(cite.mfr || "the manufacturer").toUpperCase()}’S MANUAL`
+    src: first
+      ? first.kind === "manufacturer"
+        ? `📕 FROM ${(first.mfr || "the manufacturer").toUpperCase()}’S MANUAL`
         : "📐 FROM YOUR PLANS"
       : undefined,
     text: fmt(body),
     raw: body,
     full: content,
-    cite,
+    cites: cites.length ? cites : undefined,
     cards: cards && cards.length ? cards : undefined,
   };
 }
@@ -2930,18 +2946,16 @@ function resolveMfrDoc(parts: string[], mfrDocs?: MfrDoc[]): MfrDoc | null {
   );
 }
 
-function makeCite(sourceLine: string, body: string, echoedUrl?: string, mfrDocs?: MfrDoc[]): Cite {
+function makeCite(sourceLine: string, body: string, mfrDocs?: MfrDoc[]): Cite {
   const parts = sourceLine.split("·").map((x) => x.trim()).filter(Boolean);
 
   // Manufacturer citation. The label the tool produces is
-  // "GIB · <document> · page 14 of 32": brand, document, page(s). Resolve it
-  // against our own document list first (reliable), and fall back to a URL the
-  // model happened to paste only if that didn't match.
+  // "GIB · <document> · page 14 of 32": brand, document, page(s). Resolved
+  // against our own document list, so it's reliable regardless of the answer text.
   const hit = resolveMfrDoc(parts, mfrDocs);
-  const url = hit?.sourceUrl || echoedUrl;
-  if (hit || (echoedUrl && parts.length >= 2)) {
-    const mfr = hit?.manufacturer || parts[0];
-    const docName = hit?.doc || parts[1];
+  if (hit) {
+    const mfr = hit.manufacturer;
+    const docName = hit.doc;
     const pageSeg = parts.find((p) => /^page\s/i.test(p)) || "";
     const pageNum = pageSeg.match(/\d+/);
     return {
@@ -2954,7 +2968,7 @@ function makeCite(sourceLine: string, body: string, echoedUrl?: string, mfrDocs?
       mfr,
       doc: docName,
       page: pageNum ? parseInt(pageNum[0], 10) : 1,
-      url: url || undefined,
+      url: hit.sourceUrl || undefined,
     };
   }
 
