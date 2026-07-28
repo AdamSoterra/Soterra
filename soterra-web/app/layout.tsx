@@ -40,9 +40,23 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+// Hide the "Continue with Google" button (and the "or" divider it sits above)
+// from Clerk's sign-in and sign-up. This is a B2B login-only app, so social
+// sign-in isn't needed. NOTE: this hides it in the UI; the permanent removal is
+// the toggle in the Clerk dashboard (User & Authentication → SSO Connections →
+// Google → off). Kept here as well so the button never shows even if that
+// connection is ever re-enabled by accident.
+const clerkAppearance = {
+  elements: {
+    socialButtons: { display: "none" },
+    socialButtonsBlockButton: { display: "none" },
+    dividerRow: { display: "none" },
+  },
+} as const;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider appearance={clerkAppearance}>
       <html lang="en" className={dmSans.variable}>
         <body>
           {children}
