@@ -2247,10 +2247,30 @@ export default function Page() {
             ) : (
               <>
                 <div className="sh-canvas">
-                  <div className="sheetpaper">
-                    <div className="frame" /><div className="hl" /><div className="hltag">{sheet.hlTag}</div>
-                    <div className="tb"><b>{sheet.code}</b><span>{sheet.title}</span><br /><span style={{ color: "#9AA7B4" }}>{projName}</span></div>
-                  </div>
+                  {(() => {
+                    const canRender = !!(projectId && sheet.doc && sheet.page);
+                    return (
+                      <>
+                        {canRender && docImg !== "error" && (
+                          <img
+                            className="sh-doc"
+                            style={{ opacity: docImg === "ok" ? 1 : 0 }}
+                            src={`/api/plan-page?project=${encodeURIComponent(projectId!)}&doc=${encodeURIComponent(sheet.doc!)}&p=${sheet.page}`}
+                            alt={`${sheet.doc} page ${sheet.page}`}
+                            onLoad={() => setDocImg("ok")}
+                            onError={() => setDocImg("error")}
+                          />
+                        )}
+                        {canRender && docImg === "loading" && <div className="sh-msg">Loading the sheet…</div>}
+                        {(!canRender || docImg === "error") && (
+                          <div className="sheetpaper">
+                            <div className="frame" /><div className="hl" /><div className="hltag">{sheet.hlTag}</div>
+                            <div className="tb"><b>{sheet.code}</b><span>{sheet.title}</span><br /><span style={{ color: "#9AA7B4" }}>{projName}</span></div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
                 <div className="sh-ans"><div className="src">📐 ANSWER FROM THIS SHEET</div><p dangerouslySetInnerHTML={{ __html: sheet.ans }} /></div>
               </>
@@ -2932,10 +2952,18 @@ function makeCite(sourceLine: string, body: string, echoedUrl?: string, mfrDocs?
     };
   }
 
+  // Plan / Code citation. Carry doc + page so the viewer can render the actual
+  // uploaded sheet (a plan page has a private blob behind it; a Code page won't
+  // resolve and the viewer falls back to the placeholder).
   const doc = parts[0] || "Source";
   const code = parts.find((p, i) => i > 0 && /[A-Z]/.test(p) && /\d/.test(p)) || doc;
   const rest = parts.filter((p) => p !== doc && p !== code).join(" · ");
-  return { code, title: rest || doc, sub: doc, ans: fmt(body), hlTag: code };
+  const pageSeg = parts.find((p) => /^page\s/i.test(p)) || "";
+  const pageNum = pageSeg.match(/\d+/);
+  return {
+    code, title: rest || doc, sub: doc, ans: fmt(body), hlTag: code,
+    doc, page: pageNum ? parseInt(pageNum[0], 10) : undefined,
+  };
 }
 
 // "https://www.gib.co.nz/…/x.pdf" → "gib.co.nz", for the "open the full manual
