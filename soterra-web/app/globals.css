@@ -505,6 +505,7 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .src{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:6px;background:rgba(146,166,190,.16);color:var(--slate);flex:0 0 auto}
 .src-plans{background:rgba(14,116,189,.1);color:var(--brand-d)}
 .src-code{background:rgba(139,92,246,.12);color:#7C3AED}
+.src-manufacturer{background:rgba(214,40,40,.1);color:#C21F1F}
 .src-history{background:rgba(239,68,68,.1);color:var(--red)}
 .src-ccc{background:rgba(16,185,129,.12);color:var(--green)}
 .src-ref{font-size:11.5px;color:var(--mut);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

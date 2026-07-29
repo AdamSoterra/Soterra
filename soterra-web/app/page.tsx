@@ -117,7 +117,7 @@ const OUTCOME_LABEL: Record<string, string> = { pass: "Passed", partial: "Partia
 
 // Where a checklist item came from. An item with no source is a guess, so the
 // badge is deliberately loud about which of the three sources backed it.
-const SRC_LABEL: Record<string, string> = { plans: "Plans", code: "Code", history: "Our history", ccc: "CCC pack", manual: "Added" };
+const SRC_LABEL: Record<string, string> = { plans: "Plans", code: "Code", manufacturer: "GIB manual", history: "Our history", ccc: "CCC pack", manual: "Added" };
 
 // Soterra's project timezone. TODO: per-project tz once projects carry one.
 const TZ = "Pacific/Auckland";

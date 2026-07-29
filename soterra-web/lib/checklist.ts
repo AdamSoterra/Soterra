@@ -7,6 +7,7 @@ import { CATEGORIES, CONSULTANT_TYPES, INSPECTION_CODES, codeName, inspectionTyp
 import { historyForCode, searchHistory, topItems } from "./history";
 import { getProjectIndex } from "./projectIndex";
 import { getCodeIndex, codeLabel } from "./codeIndex";
+import { getManufacturerIndex, manufacturerLabel } from "./manufacturerIndex";
 import { excerpt, retrieve } from "./retrieve";
 import { blockersFor } from "./inspectionOrder";
 
@@ -70,7 +71,7 @@ const ITEM_LIST_SCHEMA = {
         properties: {
           title: { type: "string", description: "What to check, as an instruction, under 14 words. Start with the thing, not a verb: \"Membrane upstand — 150mm minimum above finished level\"." },
           detail: { type: "string", description: "What good looks like, including the actual figure or the actual plan requirement. One or two sentences." },
-          source: { type: "string", enum: ["plans", "code", "history"] },
+          source: { type: "string", enum: ["plans", "code", "manufacturer", "history"] },
           source_ref: { type: "string", description: "The EXACT page label you were given for the page this came from, copied verbatim. For a history item, the count, e.g. \"Failed 3 times before\"." },
           category: { type: "string", enum: [...CATEGORIES] },
         },
@@ -85,10 +86,11 @@ const ITEM_LIST_SCHEMA = {
 
 const GEN_SYSTEM = `You write the pre-inspection checklist a New Zealand site manager walks the job with an hour before the inspector arrives.
 
-You are given three sources. Use ALL of them:
+You are given four sources. Use ALL that have anything useful:
 1. THIS PROJECT'S DRAWINGS — pages from the site's own consented drawings and specs. Every "as per plan" item comes from here, WITH the actual value the plan gives. "Cavity battens as per plan" is useless; "Cavity battens — 20mm H3.1 treated, at 600 crs per A-302" is a check someone can do.
 2. THE BUILDING CODE — pages from the MBIE Acceptable Solutions and Verification Methods. Every numeric item comes from here, with the actual figure.
-3. THIS COMPANY'S OWN HISTORY — things this builder has already been failed on. These matter most: they are the specific mistakes this crew makes.
+3. THE MANUFACTURER'S MANUAL — pages from the maker's own installation manual (e.g. GIB). This is what the inspector actually checks a proprietary system against, and it is FREQUENTLY STRICTER than the Code minimum. Fastener type and centres, sheet layout, back-blocking, control joints, the specific system build-up — take these from here, with the exact figure, and cite the manual page. Where the manual and the Code differ, the manual governs the warranty, so lead with the manual's figure.
+4. THIS COMPANY'S OWN HISTORY — things this builder has already been failed on. These matter most: they are the specific mistakes this crew makes.
 
 RULES
 - EVERY item must be traceable. Copy the page label you were given into source_ref, exactly as given. If you cannot point at a source for an item, DO NOT include it — an invented item on a checklist is worse than a missing one.
@@ -159,14 +161,16 @@ export async function generateChecklistItems(
       ? topItems(scope, { category: type.category, limit: 10 })
       : historyForCode(scope, opts.inspectionCode, 10);
 
-  const [projectIdx, codeIdx, history] = await Promise.all([
+  const [projectIdx, codeIdx, mfrIdx, history] = await Promise.all([
     getProjectIndex(scope.projectId),
     getCodeIndex(),
+    getManufacturerIndex(),
     historyQuery,
   ]);
 
   const planPages = retrieve(projectIdx.pages, projectIdx.df, q, 6);
   const codeHits = retrieve(codeIdx.pages, codeIdx.df, q, 6);
+  const mfrHits = retrieve(mfrIdx.pages, mfrIdx.df, q, 6);
 
   const planLabel = (p: (typeof planPages)[number]) =>
     [p.doc, p.code, p.title].filter(Boolean).join(" · ") + ` · page ${p.page} of ${p.npages}`;
@@ -178,6 +182,9 @@ export async function generateChecklistItems(
     codeHits.length
       ? `THE BUILDING CODE\n${codeHits.map((p) => `--- PAGE LABEL: ${codeLabel(p)}\n${excerpt(p.text, q, 2200)}`).join("\n\n")}`
       : "THE BUILDING CODE\n(nothing matched — do not invent a clause)",
+    mfrHits.length
+      ? `THE MANUFACTURER'S MANUAL\n${mfrHits.map((p) => `--- PAGE LABEL: ${manufacturerLabel(p)}\n${excerpt(p.text, q, 2200)}`).join("\n\n")}`
+      : "THE MANUFACTURER'S MANUAL\n(nothing matched — do not invent a manufacturer figure)",
     history.length
       ? `THIS COMPANY'S OWN HISTORY — already failed on these\n${history.map((h) => `- ${h.title} [${h.category}] — failed ${h.count} time${h.count === 1 ? "" : "s"}${h.lastSeen ? `, last ${h.lastSeen}` : ""}`).join("\n")}`
       : "THIS COMPANY'S OWN HISTORY\n(no inspection history filed yet)",
@@ -201,7 +208,7 @@ export async function generateChecklistItems(
       .map((r) => ({
         title: String(r.title ?? "").trim(),
         detail: String(r.detail ?? "").trim(),
-        source: ["plans", "code", "history"].includes(String(r.source)) ? String(r.source) : "manual",
+        source: ["plans", "code", "manufacturer", "history"].includes(String(r.source)) ? String(r.source) : "manual",
         sourceRef: String(r.source_ref ?? "").trim() || null,
         category: isCategory(r.category) ? r.category : "Other",
       }))
