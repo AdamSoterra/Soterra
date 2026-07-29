@@ -2947,7 +2947,9 @@ function resolveMfrDoc(parts: string[], mfrDocs?: MfrDoc[]): MfrDoc | null {
 }
 
 function makeCite(sourceLine: string, body: string, mfrDocs?: MfrDoc[]): Cite {
-  const parts = sourceLine.split("·").map((x) => x.trim()).filter(Boolean);
+  // The model sometimes wraps the label in markdown bold (**…**). Strip it so a
+  // literal "**" doesn't show on the card.
+  const parts = sourceLine.replace(/[*_`]/g, "").split("·").map((x) => x.trim()).filter(Boolean);
 
   // Manufacturer citation. The label the tool produces is
   // "GIB · <document> · page 14 of 32": brand, document, page(s). Resolved
