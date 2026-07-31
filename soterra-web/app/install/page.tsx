@@ -73,7 +73,7 @@ export default function InstallPage() {
   return (
     <div className="inst">
       <div className="inst-card">
-        <Image src="/logo.png" alt="Soterra" width={150} height={40} className="inst-logo" priority />
+        <Image src="/logo-mark.png" alt="Soterra" width={40} height={54} className="inst-logo" priority />
         <div className="lg-pill">Install on your phone</div>
         <h1 className="inst-h">Put Soterra <b>on your home screen</b></h1>
         <p className="inst-sub">
@@ -154,10 +154,26 @@ export default function InstallPage() {
           </>
         )}
 
-        {/* ── Desktop: scan it onto the phone in your hand ── */}
+        {/* ── Desktop: install on THIS computer if the browser supports it
+             (Chrome/Edge fire beforeinstallprompt), and always offer the QR to
+             put it on a phone. On a laptop at a customer's desk you want both. ── */}
         {device === "desktop" && !installed && (
           <>
-            <div className="inst-badge">Scan with your phone</div>
+            {prompt && (
+              <>
+                <div className="inst-badge">This computer</div>
+                <button
+                  className="lg-btn primary"
+                  onClick={async () => { try { await prompt.prompt(); } catch { /* dismissed */ } }}
+                >
+                  Install Soterra on this computer
+                </button>
+                <p className="inst-note" style={{ marginBottom: 20 }}>
+                  Adds Soterra as an app on this computer. It also runs in the browser — <a href="/">open it here</a>.
+                </p>
+              </>
+            )}
+            <div className="inst-badge">{prompt ? "Or put it on a phone" : "Scan with your phone"}</div>
             <div className="inst-qr">
               <Image src="/install-qr.svg" alt="QR code linking to soterra.co.nz/install" width={190} height={190} />
             </div>
@@ -165,9 +181,11 @@ export default function InstallPage() {
               Point your phone camera at the code, or type the address below.
             </p>
             <div className="inst-url">soterra.co.nz/install</div>
-            <p className="inst-note">
-              Soterra runs in your browser on a computer too — <a href="/">just open it here</a>.
-            </p>
+            {!prompt && (
+              <p className="inst-note">
+                Soterra runs in your browser on a computer too — <a href="/">just open it here</a>.
+              </p>
+            )}
           </>
         )}
 

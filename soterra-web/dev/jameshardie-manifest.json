@@ -1,0 +1,19 @@
+{
+ "manufacturer": "James Hardie",
+ "licence": "demo",
+ "dir": "C:/Users/adam/Desktop/Soterra/James Hardie",
+ "docs": [
+  { "file": "James Hardie Axon Panel Timber Cavity Batten Technical Specification.pdf",
+    "title": "James Hardie Axon Panel Timber Cavity Batten Technical Specification",
+    "url": "https://www.jameshardie.co.nz/web/assets/general/Axon-Panel-Timber-Cavity-Batten-Technical-Specification.pdf",
+    "exclude": [9] },
+  { "file": "James Hardie Villaboard Lining Installation Manual.pdf",
+    "title": "James Hardie Villaboard Lining Installation Manual",
+    "url": "https://www.jameshardie.co.nz/web/assets/general/Villaboard-Lining-Installation-Manual.pdf",
+    "exclude": [] },
+  { "file": "James Hardie Secura Flooring Installation Manual.pdf",
+    "title": "James Hardie Secura Flooring Installation Manual",
+    "url": "https://www.jameshardie.co.nz/web/assets/general/Secura-Flooring-Installation-Manual-2025.pdf",
+    "exclude": [11] }
+ ]
+}

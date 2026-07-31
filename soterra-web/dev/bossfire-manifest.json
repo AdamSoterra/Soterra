@@ -1,0 +1,179 @@
+{
+ "manufacturer": "BOSS Fire",
+ "licence": "pending",
+ "dir": "C:/Users/adam/Desktop/Soterra/BOSS Fire",
+ "docs": [
+  {
+   "file": "BOSS Fire Quick Reference Guide HVAC Systems.pdf",
+   "title": "BOSS Fire Quick Reference Guide HVAC Systems",
+   "url": "https://bossfire.com/documents/qrg/BOSS_HVAC-Systems_QRG.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire FyreBox Technical Data Sheet.pdf",
+   "title": "BOSS Fire FyreBox Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_FyreBox_TDS.pdf",
+   "exclude": [
+    5
+   ]
+  },
+  {
+   "file": "BOSS Fire Quick Reference Guide FireMastic-HPE.pdf",
+   "title": "BOSS Fire Quick Reference Guide FireMastic-HPE",
+   "url": "https://bossfire.com/documents/qrg/BOSS_FireMastic-HPE_QRG.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire Quick Reference Guide 60min Plasterboard Systems.pdf",
+   "title": "BOSS Fire Quick Reference Guide 60min Plasterboard Systems",
+   "url": "https://bossfire.com/documents/qrg/BOSSFire_QRGuide_60minPlasterboardSystems_Edition1.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire FyreBox Cast-In Technical Data Sheet.pdf",
+   "title": "BOSS Fire FyreBox Cast-In Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_FyreBox_Cast-In_TDS.pdf",
+   "exclude": [
+    5
+   ]
+  },
+  {
+   "file": "BOSS Fire FastWrap-XLS Technical Data Sheet.pdf",
+   "title": "BOSS Fire FastWrap-XLS Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_FastWrap-XLS_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire Cable Transits CT120 and CT240 Technical Data Sheet.pdf",
+   "title": "BOSS Fire Cable Transits CT120 and CT240 Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_Cable_Transits_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire MaxiCollars Technical Data Sheet.pdf",
+   "title": "BOSS Fire MaxiCollars Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_MaxiCollars_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire FireMastic-300 Technical Data Sheet.pdf",
+   "title": "BOSS Fire FireMastic-300 Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_FireMastic-300_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire FireMastic-HPE Technical Data Sheet.pdf",
+   "title": "BOSS Fire FireMastic-HPE Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_FireMastic-HPE_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire Batts Technical Data Sheet.pdf",
+   "title": "BOSS Fire Batts Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_Batts_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire FlexiBatt Technical Data Sheet.pdf",
+   "title": "BOSS Fire FlexiBatt Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_Flexi-Batt_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire UniWrap Technical Data Sheet.pdf",
+   "title": "BOSS Fire UniWrap Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_UniWrap_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire P40-MAK Wrap Technical Data Sheet.pdf",
+   "title": "BOSS Fire P40-MAK Wrap Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_P40-MAKWrap_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire Ablative Coating Technical Data Sheet.pdf",
+   "title": "BOSS Fire Ablative Coating Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_Ablative_Coating_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire FireMortar-360 Technical Data Sheet.pdf",
+   "title": "BOSS Fire FireMortar-360 Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_FireMortar-360_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire FireSilicone-EMA Technical Data Sheet.pdf",
+   "title": "BOSS Fire FireSilicone-EMA Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_FireSilicone-EMA_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire FireStrip-ALX Technical Data Sheet.pdf",
+   "title": "BOSS Fire FireStrip-ALX Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_FireStrip-ALX_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire FlexiCoat-MAK Technical Data Sheet.pdf",
+   "title": "BOSS Fire FlexiCoat-MAK Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_FlexiCoat-MAK_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire PenoPatch Technical Data Sheet.pdf",
+   "title": "BOSS Fire PenoPatch Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_PenoPatch_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire Thermal Defence Wrap Technical Data Sheet.pdf",
+   "title": "BOSS Fire Thermal Defence Wrap Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_Thermal_Defence_Wrap_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire FacadeGard Technical Data Sheet.pdf",
+   "title": "BOSS Fire FacadeGard Technical Data Sheet",
+   "url": "https://bossfire.com/documents/tds/BOSS_FacadeGard_TDS.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire Building Product Information Statement Intumescent Products.pdf",
+   "title": "BOSS Fire Building Product Information Statement Intumescent Products",
+   "url": "https://bossfire.com/documents/bpir/Building-Products-Information-Statement-Intumescent-Products.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire Building Product Information Statement Sealant and Coating Products.pdf",
+   "title": "BOSS Fire Building Product Information Statement Sealant and Coating Products",
+   "url": "https://bossfire.com/documents/bpir/Building-Products-Information-Statement-Sealant-Coating-Products.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire Building Product Information Statement Mineral Wool Rockwool Products.pdf",
+   "title": "BOSS Fire Building Product Information Statement Mineral Wool Rockwool Products",
+   "url": "https://bossfire.com/documents/bpir/Building-Products-Information-Statement-Mineral-Wool-Rockwool-Products.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire Building Product Information Statement Putty Products.pdf",
+   "title": "BOSS Fire Building Product Information Statement Putty Products",
+   "url": "https://bossfire.com/documents/bpir/Building-Products-Information-Statement-Putty-Products.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire Building Product Information Statement Gypsum Mortar Products.pdf",
+   "title": "BOSS Fire Building Product Information Statement Gypsum Mortar Products",
+   "url": "https://bossfire.com/documents/bpir/Building-Products-Information-Statement_Gypsum-Mortar-Products.pdf",
+   "exclude": []
+  },
+  {
+   "file": "BOSS Fire Building Product Information Statement Thermal Resistance Products.pdf",
+   "title": "BOSS Fire Building Product Information Statement Thermal Resistance Products",
+   "url": "https://bossfire.com/documents/bpir/Building-Products-Information-Statement-Thermal-Resistance-Products.pdf",
+   "exclude": []
+  }
+ ]
+}

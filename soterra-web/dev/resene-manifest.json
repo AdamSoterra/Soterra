@@ -1,0 +1,22 @@
+{
+ "manufacturer": "Resene",
+ "licence": "demo",
+ "dir": "C:/Users/adam/Desktop/Soterra/Resene",
+ "docs": [
+  { "file": "Resene Lumbersider Low Sheen D34 Technical Data Sheet.pdf",
+    "title": "Resene Lumbersider Low Sheen (D34) Data Sheet",
+    "url": "https://www.resene.co.nz/archspec/datasheets/d34-Lumbersider.pdf", "exclude": [] },
+  { "file": "Resene Quick Dry Waterborne Primer Undercoat D45 Technical Data Sheet.pdf",
+    "title": "Resene Quick Dry Waterborne Primer Undercoat (D45) Data Sheet",
+    "url": "https://www.resene.co.nz/archspec/datasheets/d45-QuickDryPrimerUndercoat.pdf", "exclude": [] },
+  { "file": "Resene Galvo One Galvanised Steel Primer D41 Technical Data Sheet.pdf",
+    "title": "Resene Galvo One Galvanised Steel Primer (D41) Data Sheet",
+    "url": "https://www.resene.co.nz/archspec/datasheets/d41-Galvo-One-Primer.pdf", "exclude": [] },
+  { "file": "Resene Sonyx 101 Waterborne Semi-Gloss D30 Technical Data Sheet.pdf",
+    "title": "Resene Sonyx 101 Waterborne Semi-Gloss (D30) Data Sheet",
+    "url": "https://www.resene.co.nz/archspec/datasheets/d30-Sonyx-101-Acrylic.pdf", "exclude": [] },
+  { "file": "Resene Broadwall Waterborne Wallboard Sealer D403 Technical Data Sheet.pdf",
+    "title": "Resene Broadwall Waterborne Wallboard Sealer (D403) Data Sheet",
+    "url": "https://www.resene.co.nz/archspec/datasheets/d403-Broadwall-Sealer.pdf", "exclude": [] }
+ ]
+}

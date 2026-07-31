@@ -1,0 +1,15 @@
+{
+ "manufacturer": "Rondo",
+ "licence": "demo",
+ "dir": "C:/Users/adam/Desktop/Soterra/Rondo",
+ "docs": [
+  { "file": "Rondo Professional Series NZ C2 Steel Stud and Track.pdf",
+    "title": "Rondo Professional Series NZ C2 Steel Stud and Track",
+    "url": "https://buildingwith.rondo.com.au/hubfs/NZ%20C2%20-%20Steel%20Stud%20and%20Track%20Brochure_NZ_0925.pdf",
+    "exclude": [49] },
+  { "file": "Rondo Professional Series NZ C1 Wall Design Data.pdf",
+    "title": "Rondo Professional Series NZ C1 Wall Design Data",
+    "url": "https://buildingwith.rondo.com.au/hubfs/NZ%20C1%20-%20Walls%20Design%20Data-v3.pdf",
+    "exclude": [6,7,8,12] }
+ ]
+}

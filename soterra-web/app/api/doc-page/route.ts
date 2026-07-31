@@ -1,7 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
+import { get } from "@vercel/blob";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { manufacturerPages } from "@/lib/schema";
+import { SERVED_LICENCES, canSeeDemoCorpus } from "@/lib/manufacturerIndex";
 
 export const runtime = "nodejs";
 // Fetching a manufacturer PDF and rendering a page can take a few seconds cold.
@@ -31,20 +33,50 @@ export async function GET(req: Request) {
   if (!m || !doc || !Number.isInteger(p) || p < 1) return new Response("Bad request", { status: 400 });
 
   const [row] = await db
-    .select({ sourceUrl: manufacturerPages.sourceUrl, npages: manufacturerPages.npages })
+    .select({
+      sourceUrl: manufacturerPages.sourceUrl,
+      npages: manufacturerPages.npages,
+      licence: manufacturerPages.licence,
+      imageUrl: manufacturerPages.imageUrl,
+    })
     .from(manufacturerPages)
     .where(
       and(
         eq(manufacturerPages.manufacturer, m),
         eq(manufacturerPages.doc, doc),
         eq(manufacturerPages.page, p),
-        inArray(manufacturerPages.licence, ["granted", "pending"]),
+        inArray(manufacturerPages.licence, [...SERVED_LICENCES]),
       ),
     )
     .limit(1);
 
-  if (!row?.sourceUrl) return new Response("Not found", { status: 404 });
+  if (!row?.sourceUrl && !row?.imageUrl) return new Response("Not found", { status: 404 });
+  // Same gate as retrieval: a demo-tier page renders only for an allowed
+  // account. Without this, a guessed manufacturer + document + page would render
+  // an ungranted manufacturer's page for anyone signed in.
+  if (row.licence === "demo" && !canSeeDemoCorpus(userId)) return new Response("Not found", { status: 404 });
 
+  // Documents whose PDFs don't embed their fonts render blank on the Linux
+  // serverless runtime, so those pages were pre-rendered locally and stored in
+  // private Blob. Stream the stored PNG (the gate above already passed).
+  if (row.imageUrl) {
+    try {
+      const got = await get(row.imageUrl, { access: "private" });
+      if (got?.statusCode === 200 && got.stream) {
+        return new Response(got.stream as unknown as ReadableStream, {
+          headers: {
+            "Content-Type": got.blob?.contentType || "image/png",
+            "Cache-Control": "private, max-age=31536000, immutable",
+          },
+        });
+      }
+      // Fall through to a live render if the stored image can't be read.
+    } catch (e) {
+      console.error("doc-page stored image fetch failed:", e);
+    }
+  }
+
+  if (!row.sourceUrl) return new Response("Not found", { status: 404 });
   try {
     const res = await fetch(row.sourceUrl);
     if (!res.ok) return new Response("Source fetch failed", { status: 502 });

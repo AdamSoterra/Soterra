@@ -15,7 +15,7 @@ type Cite = {
 };
 type AsstCard = {
   id: string;
-  itemType: "event" | "task";
+  itemType: "event" | "task" | "checklist";
   action: "created" | "updated" | "deleted";
   title: string;
   when: string;
@@ -325,22 +325,8 @@ function AppLogin({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted
         Create an account
       </button>
       <p style={{ fontSize: 12.5, color: "#94A6BE", marginTop: 22, maxWidth: 300, lineHeight: 1.5 }}>
-        Got a site code from your PM? Log in, then enter it to join your site.
+        Got a site code? Log in or create an account, then enter it to join your site.
       </p>
-      {/* This screen only shows in the installed app, so "put it on your phone"
-          read as circular. Reframed for the real job: setting a crew member or a
-          new site owner up on THEIR phone. /install detects their device. */}
-      <a
-        href="/install"
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 7,
-          marginTop: 18, padding: "11px 18px", borderRadius: 12,
-          border: "1px solid #CFE4F7", background: "#F3F9FE",
-          color: "#0E8FE6", fontSize: 14, fontWeight: 700, textDecoration: "none",
-        }}
-      >
-        📱 Install on another phone →
-      </a>
     </div>
   );
 }
@@ -395,16 +381,33 @@ export default function Page() {
   // The full-screen page image (null = closed). Just shows the already-rendered
   // image bigger — no new render, no cost.
   const [zoomImg, setZoomImg] = useState<string | null>(null);
+  const [zoomScale, setZoomScale] = useState(1);
 
   // The manufacturer documents we hold, so a "Source: GIB · …" line resolves to
   // a real card, page image and link even when the model doesn't paste the URL.
   const [mfrDocs, setMfrDocs] = useState<MfrDoc[]>([]);
   useEffect(() => {
+    // Keep retrying until we actually get the list. A single attempt was fragile:
+    // a cold session (Clerk not ready → 401 → empty) or a flaky network dropped it,
+    // and with no map EVERY manufacturer citation silently mislabels as "FROM YOUR
+    // PLANS" and its preview 404s (hit live at the GIB demo). Retry fixes the load;
+    // the re-parse effect below then repairs any answers that rendered early.
     let live = true;
-    fetch("/api/manufacturer-docs")
-      .then((r) => (r.ok ? r.json() : { docs: [] }))
-      .then((d) => { if (live && Array.isArray(d.docs)) setMfrDocs(d.docs); })
-      .catch(() => {});
+    let attempts = 0;
+    const load = async () => {
+      while (live && attempts < 8) {
+        attempts++;
+        try {
+          const r = await fetch("/api/manufacturer-docs");
+          if (r.ok) {
+            const d = await r.json();
+            if (live && Array.isArray(d.docs) && d.docs.length) { setMfrDocs(d.docs); return; }
+          }
+        } catch { /* network blip — retry */ }
+        await new Promise((res) => setTimeout(res, 1500));
+      }
+    };
+    load();
     return () => { live = false; };
   }, []);
   // If any answers rendered before the document list arrived, re-parse them now
@@ -517,6 +520,25 @@ export default function Page() {
     const pid = projRef.current;
     if (pid) headers.set("x-soterra-project", pid);
     return fetch(path, { ...init, headers });
+  };
+
+  /**
+   * Wait for the current site id to be ready.
+   *
+   * On a fresh sign-in the projects list is still in flight for a moment. Asking
+   * a question in that window sent the request with no site header, and the 403
+   * came back rendered as the assistant's ANSWER: "No site selected". To the
+   * person on screen that reads as a broken product, not a half-second of
+   * loading — and it happened on the first take of a customer demo recording.
+   * Waiting is the honest behaviour: the question they typed is still valid, it
+   * just has to go a beat later.
+   */
+  const waitForProject = async (ms = 8000): Promise<string | null> => {
+    const step = 150;
+    for (let waited = 0; waited < ms && !projRef.current; waited += step) {
+      await new Promise((r) => setTimeout(r, step));
+    }
+    return projRef.current;
   };
 
   const loadEvents = async () => {
@@ -944,7 +966,20 @@ export default function Page() {
       if (transcript) setInput((prev) => (prev.trim() ? prev + " " : "") + transcript);
     };
     rec.onend = () => setIsRecording(false);
-    rec.onerror = () => setIsRecording(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onerror = (e: any) => {
+      setIsRecording(false);
+      // Silent failure was the bug — a dead mic button with no reason. Surface it.
+      const err = e?.error;
+      if (err === "not-allowed" || err === "service-not-allowed")
+        setAttachErr("Microphone is blocked. Allow mic access for this app in your device/browser settings, then try again.");
+      else if (err === "audio-capture")
+        setAttachErr("No microphone found — check one is connected.");
+      else if (err === "network")
+        setAttachErr("Voice dictation isn't available inside the installed app (it needs the browser's speech service). Open soterra.co.nz in Chrome to dictate, or just type.");
+      else if (err && err !== "no-speech" && err !== "aborted")
+        setAttachErr(`Voice didn't start (${err}). Type your message for now.`);
+    };
     recognitionRef.current = rec;
   }, []);
 
@@ -1016,6 +1051,11 @@ export default function Page() {
     setTab("assistant");
     setMessages((m) => [...m, { role: "u", text: t, att: att?.name }, { role: "a", text: "…", pending: true }]);
     try {
+      // Don't fire before the site id exists — see waitForProject.
+      if (!(await waitForProject())) {
+        setMessages((prev) => [...prev.slice(0, -1), { role: "a", text: "Still connecting to your site — give that another go in a moment." }]);
+        return;
+      }
       const res = await apiFetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1593,7 +1633,7 @@ export default function Page() {
         ref={taRef}
         rows={1}
         value={input}
-        placeholder="Ask about your plans, the building code, or organise your site calendar…"
+        placeholder="Ask about your plans, the Building Code, H&S or RFIs…"
         onChange={(e) => {
           setInput(e.target.value);
           e.target.style.height = "auto";
@@ -1603,10 +1643,10 @@ export default function Page() {
       />
       <input ref={fileInputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={onFilePick} />
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onFilePick} />
+      {attachErr && <div className="cerr">{attachErr}</div>}
       <div className="crow">
         <span className="hint">
-          {attachErr ? <span style={{ color: "var(--red)" }}>{attachErr}</span>
-            : isRecording ? "Listening… speak now"
+          {isRecording ? "Listening… speak now"
             : attachBusy ? "Attaching…"
             : "Enter to send · Shift+Enter for a new line"}
         </span>
@@ -1772,25 +1812,36 @@ export default function Page() {
                                   <div className="ca">›</div>
                                 </div>
                               ))}
-                              {m.cards?.map((c, j) => (
-                                <div className="evcard" key={j}>
-                                  <div className="bar" style={{ background: c.itemType === "event" ? barColor((c.kind as EventKind) || null) : "var(--brand)" }} />
-                                  <div className="et">
-                                    <b>{c.action === "deleted" ? "Removed: " : ""}{c.title}</b>
-                                    <small>{c.when}{c.sub ? ` · ${c.sub}` : ""}</small>
+                              {m.cards?.map((c, j) =>
+                                c.itemType === "checklist" ? (
+                                  <div className="evcard ckcard" key={j} onClick={() => openChecklistById(c.id)} role="button" tabIndex={0} title="Tap to open the checklist">
+                                    <div className="bar" style={{ background: "var(--brand)" }} />
+                                    <div className="et">
+                                      <b>{c.title}</b>
+                                      <small>{c.when}{c.sub ? ` · ${c.sub}` : ""} · tap to open</small>
+                                    </div>
+                                    <div className="ec">📋</div>
                                   </div>
-                                  {c.action !== "deleted" && (
-                                    <button
-                                      className={"vis-toggle " + (c.visibility === "team" ? "team" : "me")}
-                                      onClick={() => flipCardVisibility(i, j)}
-                                      title="Tap to change who can see this"
-                                    >
-                                      {c.visibility === "team" ? "👁 Whole crew" : "🔒 Just me"}
-                                    </button>
-                                  )}
-                                  <div className="ec">{c.itemType === "task" ? "✅" : "🗓️"}</div>
-                                </div>
-                              ))}
+                                ) : (
+                                  <div className="evcard" key={j}>
+                                    <div className="bar" style={{ background: c.itemType === "event" ? barColor((c.kind as EventKind) || null) : "var(--brand)" }} />
+                                    <div className="et">
+                                      <b>{c.action === "deleted" ? "Removed: " : ""}{c.title}</b>
+                                      <small>{c.when}{c.sub ? ` · ${c.sub}` : ""}</small>
+                                    </div>
+                                    {c.action !== "deleted" && (
+                                      <button
+                                        className={"vis-toggle " + (c.visibility === "team" ? "team" : "me")}
+                                        onClick={() => flipCardVisibility(i, j)}
+                                        title="Tap to change who can see this"
+                                      >
+                                        {c.visibility === "team" ? "👁 Whole crew" : "🔒 Just me"}
+                                      </button>
+                                    )}
+                                    <div className="ec">{c.itemType === "task" ? "✅" : "🗓️"}</div>
+                                  </div>
+                                )
+                              )}
                             </div>
                           </div>
                         )
@@ -1809,7 +1860,7 @@ export default function Page() {
         {tab === "calendar" && (
           <div className="page"><div className="page-inner">
             <div className="page-h">Calendar</div>
-            <div className="page-sub">{projName} · site schedule (NZ time)</div>
+            <div className="page-sub">{projName}</div>
             {members.length > 1 && (
               <div className="crewchips">
                 <button
@@ -1901,7 +1952,7 @@ export default function Page() {
             <div className="cal-top">
               <div>
                 <div className="page-h">Tasks</div>
-                <div className="page-sub" style={{ marginBottom: 0 }}>{projName} · your to-dos and the crew&apos;s</div>
+                <div className="page-sub" style={{ marginBottom: 0 }}>{projName}</div>
               </div>
               <button className="cal-new" onClick={() => openTaskForm()}>＋ New task</button>
             </div>
@@ -1921,7 +1972,7 @@ export default function Page() {
           isDemo ? (
             <div className="page"><div className="page-inner">
               <div className="page-h">Plans &amp; specs</div>
-              <div className="page-sub">{projName} · every drawing &amp; spec, searchable in seconds</div>
+              <div className="page-sub">{projName}</div>
               <div className="idx">
                 <div><div className="big">571</div><small>pages indexed</small></div>
                 <div style={{ flex: 1 }}><small>Architectural, structural, services and specs — all read and searchable.</small><span className="grn">● Ready — last updated today</span></div>
@@ -1945,7 +1996,7 @@ export default function Page() {
           ) : (
             <div className="page"><div className="page-inner">
               <div className="page-h">Plans &amp; specs</div>
-              <div className="page-sub">{projName} · every drawing &amp; spec, searchable in seconds</div>
+              <div className="page-sub">{projName}</div>
               {!docsLoaded ? (
                 <div className="page-sub">Loading…</div>
               ) : docs.length === 0 ? (
@@ -2051,6 +2102,23 @@ export default function Page() {
             <input ref={reportFileRef} type="file" accept="application/pdf" multiple style={{ display: "none" }}
               onChange={(e) => { const fs = filesFrom(e.target); if (reportFileRef.current) reportFileRef.current.value = ""; if (fs.length) onReportFiles(fs); }} />
 
+            {/* Pre-inspection checks — ALWAYS shown once the tab has loaded, even on a
+                site with no inspection reports yet. This block used to live inside the
+                "has reports" branch below, so a generated or completed check was
+                invisible on a fresh site until a report was uploaded. */}
+            {insightsLoaded && (
+              <div style={{ marginTop: 18 }}>
+                <div className="pg-k" style={{ marginTop: 0 }}>Pre-inspection checks{checklists.length > 0 ? ` (${checklists.length})` : ""}</div>
+                {checklists.length === 0 ? (
+                  <div className="page-sub">
+                    None yet on {projName}. A check is built from this site&apos;s drawings, the Building Code and your own history — tick it off on your phone before the inspector turns up.
+                  </div>
+                ) : (
+                  checklists.map((c) => <ChecklistRow key={c.id} c={c} onOpen={() => openChecklistById(c.id)} />)
+                )}
+              </div>
+            )}
+
             {!insightsLoaded ? (
               <div className="page-sub" style={{ marginTop: 18 }}>Loading…</div>
             ) : (insights?.summary.inspections ?? 0) === 0 ? (
@@ -2145,15 +2213,6 @@ export default function Page() {
                       <span className="cat-dot" style={{ background: catColor(t.category) }} />
                     </div>
                   ))
-                )}
-
-                <div className="pg-k" style={{ marginTop: 22 }}>Pre-inspection checks{checklists.length > 0 ? ` (${checklists.length})` : ""}</div>
-                {checklists.length === 0 ? (
-                  <div className="page-sub">
-                    None yet on {projName}. A check is built from this site&apos;s drawings, the Building Code and your own history — tick it off on your phone before the inspector turns up.
-                  </div>
-                ) : (
-                  checklists.map((c) => <ChecklistRow key={c.id} c={c} onOpen={() => openChecklistById(c.id)} />)
                 )}
 
                 <div className="pg-k" style={{ marginTop: 22 }}>Past inspections</div>
@@ -2280,11 +2339,26 @@ export default function Page() {
         </div>
       )}
 
-      {/* ─── full-screen page image ─── */}
+      {/* ─── full-screen, zoomable page image ─── */}
       {zoomImg && (
-        <div className="zoomscrim" onClick={() => setZoomImg(null)}>
-          <img className="zoomimg" src={zoomImg} alt="Full page" onClick={(e) => e.stopPropagation()} />
-          <button className="zoomx" onClick={() => setZoomImg(null)}>✕</button>
+        <div className="zoomscrim" onClick={() => { setZoomImg(null); setZoomScale(1); }}>
+          {/* Tap the image to zoom in a step (cycles back to fit after max); when
+              zoomed the scrim scrolls so you can pan around the fine print. */}
+          <img
+            className="zoomimg"
+            src={zoomImg}
+            alt="Full page"
+            style={zoomScale === 1
+              ? { maxWidth: "100%", maxHeight: "calc(100vh - 96px)", cursor: "zoom-in" }
+              : { width: `${zoomScale * 100}%`, maxWidth: "none", maxHeight: "none", cursor: "zoom-out" }}
+            onClick={(e) => { e.stopPropagation(); setZoomScale((s) => (s >= 3 ? 1 : s + 1)); }}
+          />
+          <div className="zoomctl" onClick={(e) => e.stopPropagation()}>
+            <button aria-label="Zoom out" onClick={() => setZoomScale((s) => Math.max(1, s - 1))}>−</button>
+            <span>{Math.round(zoomScale * 100)}%</span>
+            <button aria-label="Zoom in" onClick={() => setZoomScale((s) => Math.min(4, s + 1))}>+</button>
+          </div>
+          <button className="zoomx" onClick={() => { setZoomImg(null); setZoomScale(1); }}>✕</button>
         </div>
       )}
 
@@ -2552,7 +2626,7 @@ export default function Page() {
             <div className="sh-top">
               <div className="ti">
                 <b>{openChecklist.checklist.title}</b>
-                <small>{openChecklist.items.filter((i) => i.status !== "pending").length} of {openChecklist.items.length} done{openChecklist.items.some((i) => i.status === "issue") ? ` · ${openChecklist.items.filter((i) => i.status === "issue").length} to fix` : ""}</small>
+                <small>{openChecklist.checklist.status === "done" ? "✓ Marked done · saved under Insights › Checks · " : ""}{openChecklist.items.filter((i) => i.status !== "pending").length} of {openChecklist.items.length} done{openChecklist.items.some((i) => i.status === "issue") ? ` · ${openChecklist.items.filter((i) => i.status === "issue").length} to fix` : ""}</small>
               </div>
               <button className="sh-x" onClick={() => setOpenChecklist(null)}>✕</button>
             </div>
@@ -2611,9 +2685,19 @@ export default function Page() {
               {openChecklist.items.length === 0 && <div className="page-sub" style={{ marginBottom: 0 }}>This check has no items.</div>}
             </div>
             <div className="dm-foot">
-              <button className="lg-btn primary" style={{ height: 44, margin: 0, flex: 1 }} onClick={() => closeOutChecklist(openChecklist.checklist.status === "done" ? "open" : "done")}>
-                {openChecklist.checklist.status === "done" ? "Reopen" : "Mark this check done"}
-              </button>
+              {openChecklist.checklist.status === "done" ? (
+                <>
+                  {/* Already saved. "Done" just closes the sheet back to the calendar;
+                      "Reopen" is there if they need to keep working on it. */}
+                  <button className="lg-btn primary" style={{ height: 44, margin: 0, flex: 1 }} onClick={() => setOpenChecklist(null)}>Done</button>
+                  <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 16px" }} onClick={() => closeOutChecklist("open")}>Reopen</button>
+                </>
+              ) : (
+                // Mark done but STAY open, so the footer visibly flips to Done + Reopen —
+                // confirmation the save happened. "Done" then closes it. (Closing on the
+                // same tap read as "nothing happened".)
+                <button className="lg-btn primary" style={{ height: 44, margin: 0, flex: 1 }} onClick={() => closeOutChecklist("done")}>Mark this check done</button>
+              )}
               <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 18px" }} onClick={() => deleteChecklist(openChecklist.checklist.id)}>Delete</button>
             </div>
           </div>
@@ -2928,6 +3012,17 @@ function daySummary(ev: number, tk: number): string {
   if (tk) parts.push(`${tk} task${tk > 1 ? "s" : ""}`);
   return parts.length ? parts.join(" · ") : "Empty day";
 }
+// Manufacturers whose literature we hold. Used ONLY as a fallback so a
+// manufacturer citation is still labelled and rendered correctly when the
+// /api/manufacturer-docs map hasn't loaded (cold session / flaky network). The
+// canonical name + verify URL still come from the map once it arrives; this just
+// stops a "GIB · …" line being mislabelled as "FROM YOUR PLANS" in the meantime.
+// The image endpoint matches on the exact doc name the model copied from the
+// retrieval label, so it loads without the map too. KEEP IN STEP with the
+// `manufacturer` values used by dev/*-manifest.json — a brand missing here gets
+// mislabelled "FROM YOUR PLANS" whenever the doc map is slow or fails to load.
+const KNOWN_MFRS = new Set(["gib", "kingspan thermakraft", "boss fire", "james hardie", "rondo", "ryanfire", "resene", "colorsteel"]);
+
 // Match a "GIB · <document> · page 14 of 32" source line to a document we hold,
 // tolerating small differences in how the model wrote the document name. Returns
 // the CANONICAL name and URL from our data — which the image endpoint and the
@@ -2971,6 +3066,30 @@ function makeCite(sourceLine: string, body: string, mfrDocs?: MfrDoc[]): Cite {
       doc: docName,
       page: pageNum ? parseInt(pageNum[0], 10) : 1,
       url: hit.sourceUrl || undefined,
+    };
+  }
+
+  // Fallback: the map didn't resolve (empty / late), but the line clearly leads
+  // with a manufacturer we hold. Classify it as a manufacturer FROM THE LINE
+  // ITSELF, so the label is right and /api/doc-page can still render the page
+  // (it matches on the exact doc name the model copied). The verify URL fills in
+  // once the map loads and the message re-parses. Without this, a dropped map
+  // silently turns every GIB citation into a broken "FROM YOUR PLANS" card.
+  if (parts.length >= 2 && KNOWN_MFRS.has(parts[0].toLowerCase())) {
+    const mfr = parts[0];
+    const docName = parts[1];
+    const pageSeg = parts.find((p) => /^page\s/i.test(p)) || "";
+    const pageNum = pageSeg.match(/\d+/);
+    return {
+      code: docName,
+      title: pageSeg,
+      sub: `${mfr} manual`,
+      ans: fmt(body),
+      hlTag: pageSeg || docName,
+      kind: "manufacturer",
+      mfr,
+      doc: docName,
+      page: pageNum ? parseInt(pageNum[0], 10) : 1,
     };
   }
 

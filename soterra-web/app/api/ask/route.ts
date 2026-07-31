@@ -14,17 +14,21 @@ import { resolveProjectId, listMembers } from "@/lib/project";
 import { excerpt, expand, retrieve } from "@/lib/retrieve";
 import { DEMO_ID, getProjectIndex, type Page } from "@/lib/projectIndex";
 import { codeLabel, getCodeIndex } from "@/lib/codeIndex";
-import { getManufacturerIndex, manufacturerLabel } from "@/lib/manufacturerIndex";
+import { getManufacturerIndex, manufacturerLabel, visibleTo } from "@/lib/manufacturerIndex";
 import { companyIdForProject, type Scope } from "@/lib/company";
 import { searchHistory } from "@/lib/history";
+import { generateChecklistItems, createChecklist } from "@/lib/checklist";
 import { orderForPrompt } from "@/lib/inspectionOrder";
 
 export const runtime = "nodejs";
-// 180, not 60: Montázs measured a ~50-item update_events_bulk streaming ~2000
-// tokens of JSON and brushing the 60s cap. Bulk writes here are non-transactional
-// Promise.all, so a timeout means partial writes with nothing surfaced to the
-// user — the exact bulk failure mode we're trying to kill.
-export const maxDuration = 180;
+// 300, not 60: two reasons. Montázs measured a ~50-item update_events_bulk
+// streaming ~2000 tokens of JSON and brushing the 60s cap, and those bulk writes
+// are non-transactional Promise.all, so a timeout means partial writes with
+// nothing surfaced — the exact bulk failure mode we're trying to kill. On top of
+// that, create_checklist runs the full generator (drawings + Code + GIB manual +
+// history, ~30-60s) inside this same agent loop, so the ceiling must clear a
+// generation plus the surrounding rounds. Matches the checklists POST route.
+export const maxDuration = 300;
 
 const MODEL = "claude-sonnet-4-6";
 const DAILY_LIMIT = 300;
@@ -50,7 +54,7 @@ function pageLabel(p: Page): string {
 
 type Card = {
   id: string;
-  itemType: "event" | "task";
+  itemType: "event" | "task" | "checklist";
   action: "created" | "updated" | "deleted";
   title: string;
   when: string;
@@ -142,7 +146,7 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
   {
     name: "search_manufacturer",
     description:
-      "Search MANUFACTURERS' OWN technical literature — the installation manuals, system manuals, specification guides and site guides published by the makers of the products actually being installed (currently GIB / Winstone Wallboards). Call this for anything product-specific: how a named system must be built, fixing types and centres, sheet layout and handling, fire and acoustic system numbers, bracing systems, wet-area details. This answers 'how does the MAKER say to install it', which is a different question from what the Code requires (search_code) and from what this project's drawings show (search_plans). Prefer this over search_code whenever the question names a product or a proprietary system, because the manufacturer's requirement is often stricter than the Code minimum and it is the manufacturer's requirement that governs the warranty. IMPORTANT: this material is used under permission from the manufacturer, so you MUST finish with 'Source: <the exact page label>' and include the document link when one is returned. Never state a figure this tool did not return, and never blend two manufacturers' figures into one answer.",
+      "Search MANUFACTURERS' OWN technical literature — the installation manuals, system manuals, specification guides, technical data sheets and site guides published by the makers of the products actually being installed. We currently hold: GIB / Winstone Wallboards (plasterboard, fire, noise, bracing, wet area, intertenancy, weatherline), Kingspan Thermakraft (building wraps and roof/wall underlays — Watergate Plus, Covertek, Thermakraft, RainArmor, Thermaflash, Aluband flashing tape, OneSeal), BOSS Fire (passive fire — FyreBox transits, MaxiCollars, FireMastic, FastWrap, batts, ablative coating, HVAC fire systems), James Hardie (fibre-cement cladding, linings and flooring — Axon Panel, Villaboard, Secura), Rondo (steel wall and ceiling framing — steel stud and track, battens, wall design data), Ryanfire (passive fire — SL collars, FireMastic, Ryanbatt), Resene (paints, primers, coatings and stains — data sheets like Lumbersider, Sonyx 101, Quick Dry Primer, Galvo One, Broadwall), and ColorSteel (pre-painted steel roofing and cladding — environmental/durability categories, warranty conditions, installers guide, minimum pitch, maintenance). Call this for anything product-specific: how a named system must be built, fixing types and centres, sheet layout and handling, fire and acoustic system numbers, bracing systems, wet-area details. This answers 'how does the MAKER say to install it', which is a different question from what the Code requires (search_code) and from what this project's drawings show (search_plans). Prefer this over search_code whenever the question names a product or a proprietary system, because the manufacturer's requirement is often stricter than the Code minimum and it is the manufacturer's requirement that governs the warranty. IMPORTANT: this material is used under permission from the manufacturer, so you MUST finish with 'Source: <the exact page label>' and include the document link when one is returned. Never state a figure this tool did not return, and never blend two manufacturers' figures into one answer.",
     input_schema: {
       type: "object",
       properties: {
@@ -163,6 +167,20 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
         category: { type: "string", description: "Optional category filter: Structural, Weathertightness / Cladding, Fire, Electrical, Plumbing & Drainage, Mechanical, Interior / Linings, Access & Barriers, Site / External, Acoustic, Seismic, Architect." },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "create_checklist",
+    description:
+      "Create a REAL, interactive pre-inspection checklist the user can walk the job with — tickable items (Good / Needs fixing / N/A), notes and photos, saved to the site. Call this WHENEVER the user asks you to generate/make/build/prep an inspection or QA checklist ('QA check for tomorrow's fire inspection', 'checklist before pre-line', 'generate a check for the framing inspection', 'get me ready for the cavity inspection'). Do NOT write the checklist out as text yourself — this tool builds it from the project drawings, the NZ Building Code, the manufacturer manuals (GIB) and the company's own failure history, cites every item, and returns a card the user taps to open and use it. Pass inspection_code ONLY when the user asks for a WHOLE council inspection by its name ('a pre-line checklist' → IPB, 'the framing inspection' → IFG, 'cavity check' → ICA, 'final' → IF1). For a SPECIFIC element, system or detail — 'fire-rated wall first layer', 'the corridor wall', 'this GIB fire wall', 'the shower tanking', 'the head detail' — do NOT pass a code; pass only a clear title of that element. A broad code drags the whole inspection's unrelated items onto a narrow check (a pre-line code pulls insulation, internal-moisture and plumbing items onto what should be a focused fire-wall check), so when in doubt omit it and let the title carry it. If you just booked the inspection on the calendar in this same turn, pass its event_id so the checklist hangs off that booking.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Plain-language title, e.g. 'GIB fire-rated wall, first layer' or 'Pre-line inspection check'." },
+        inspection_code: { type: "string", description: "The council inspection code if known (IFO/ISF/IFG/ICA/ICL/ITK/IDT/IPP/IPB/IPL/IF1/IF2…). Optional." },
+        event_id: { type: "string", description: "If this ties to a booked inspection on the calendar, its event id (from a create_event you just made). Optional." },
+      },
+      required: ["title"],
     },
   },
   {
@@ -554,6 +572,36 @@ function codeHits<T extends { text: string }>(pages: T[], query: string, k = 4):
     .map((x) => x.p);
 }
 
+// When a question NAMES a manufacturer, that manufacturer's own pages must win.
+//
+// Plain relevance scoring doesn't give you this, and the bigger the corpus gets
+// the worse it reads. GIB is 823 pages; Rondo is 60. Ask "what centres do I fix
+// a Rondo track at" and every top hit came back GIB, partly because GIB's pages
+// simply outnumber Rondo's, and partly because GIB publish a co-branded "GIB
+// Rondo Metal Batten Systems" manual, so the word "Rondo" is scattered through
+// the larger corpus too. Answering a Rondo question out of a competitor's manual
+// is wrong in the way that matters most here: the brand IS the answer, because
+// the same detail has different figures for different makers.
+//
+// So: if the query names a manufacturer we hold, rank within that manufacturer
+// first, then let the general search fill the remaining slots.
+function brandHits<T extends { manufacturer: string; text: string }>(
+  pages: T[],
+  df: Map<string, number>,
+  q: string,
+  k = 5,
+): T[] {
+  const brands = [...new Set(pages.map((p) => p.manufacturer))];
+  const low = q.toLowerCase();
+  const named = brands.filter((b) => new RegExp(`\\b${b.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(low));
+  if (!named.length) return [];
+  const scoped = pages.filter((p) => named.includes(p.manufacturer));
+  if (!scoped.length) return [];
+  // Score within the brand's own pages, so a small corpus isn't buried by a
+  // large one. df stays global — it only weights how rare a word is.
+  return retrieve(scoped, df, q, k);
+}
+
 async function executeTool(name: string, input: Record<string, unknown>, ctx: Ctx): Promise<{ content: string; cards: Card[] }> {
   const { userId, projectId, members } = ctx;
   // Visible to the caller = team OR their own OR assigned to them.
@@ -629,14 +677,21 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
       case "search_manufacturer": {
         const q = s(input.query) ?? "";
         if (!q) return { content: JSON.stringify({ error: "query required" }), cards: [] };
-        const { pages, df } = await getManufacturerIndex();
+        const { pages: allPages, df } = await getManufacturerIndex();
+        // `demo`-tier pages belong to manufacturers who have NOT granted
+        // permission yet — they exist only so the founder can record a demo for
+        // them. Everyone else searches as if they aren't there.
+        const pages = visibleTo(allPages, userId);
         if (pages.length === 0) return { content: JSON.stringify({ pages: [], note: "No manufacturer literature is loaded yet." }), cards: [] };
         // Exact-code pages first (so "GBTL 90" reaches the page that defines it),
         // then keyword relevance, deduped.
+        // Order of precedence: an exact system code beats everything (it names
+        // one page), then the named brand's own pages, then general relevance.
         const exact = codeHits(pages, q, 4);
+        const brand = brandHits(pages, df, q, 5);
         const seenP = new Set<string>();
         const top: typeof pages = [];
-        for (const p of [...exact, ...retrieve(pages, df, q, 6)]) {
+        for (const p of [...exact, ...brand, ...retrieve(pages, df, q, 6)]) {
           const key = `${p.doc}|${p.page}`;
           if (seenP.has(key)) continue;
           seenP.add(key);
@@ -671,6 +726,25 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
             items: rows.map((r) => ({ item: r.title, detail: r.detail, where: r.location, category: r.category, inspection: r.inspectionCode, date: r.inspectedOn, site: r.projectName })),
           }),
           cards: [],
+        };
+      }
+
+      case "create_checklist": {
+        // The interactive checklist saves to a company + site, so it needs the
+        // verified scope. A legacy project with no company can't hold one.
+        if (!ctx.scope) return { content: JSON.stringify({ error: "This site isn't set up with a company yet, so I can't save a checklist to it." }), cards: [] };
+        const title = s(input.title) || "Inspection check";
+        const inspectionCode = (s(input.inspection_code) || "").toUpperCase() || null;
+        const eventId = s(input.event_id) || null;
+        // Same pipeline the "＋ New check" button uses: generate the cited items,
+        // then persist. Generation reads the drawings + Code + GIB manual + the
+        // company's history and takes ~30-60s — the tool call feels slow by design.
+        const gen = await generateChecklistItems(ctx.scope, { kind: "inspection", inspectionCode, title });
+        if (!gen.ok) return { content: JSON.stringify({ error: gen.message }), cards: [] };
+        const row = await createChecklist(ctx.scope, { eventId, kind: "inspection", title, inspectionCode, createdByName: ctx.creatorName, items: gen.items });
+        return {
+          content: JSON.stringify({ ok: true, checklistId: row.id, itemCount: gen.items.length, note: "The interactive checklist is created and shown as a card below your reply. Do NOT re-list the items as text — just tell the user it's ready to tap open and walk the job with, mention roughly how many checks it has, and that each is tickable Good / Needs fixing / N/A with notes and photos." }),
+          cards: [{ id: row.id, itemType: "checklist", action: "created", title, when: `${gen.items.length} check${gen.items.length === 1 ? "" : "s"}`, sub: inspectionCode || "inspection", kind: null, visibility: "team" }],
         };
       }
 
@@ -883,7 +957,7 @@ ${tkList}`;
 const STATIC_PROMPT = `You are Soterra's site assistant — a sharp, experienced construction professional helping the crew on a specific construction SITE. You help five ways:
 1) PLAN-READER — answer questions about THIS site's uploaded drawings & specifications. For any question about this project's plans/specs (materials, dimensions, fire ratings, schedules, finishes, "what does our spec say…") you MUST call search_plans, then answer ONLY from the page text it returns, finishing with a line: "Source: <the exact page label>". Never invent codes, ratings, products or numbers. If the answer isn't in the pages, say what's missing and which drawing set might have it. REVISIONS — the plans may hold more than one revision of the same sheet; each page label carries an "uploaded" date. The most recently uploaded page is the CURRENT revision. If two pages give different values for the same thing (e.g. a fire rating that was 30 min in an older upload and 60 min in a newer one), ALWAYS use the value from the latest-uploaded page, cite that page as the Source, and note that it supersedes the older figure. Never present a superseded value as current, and never average them. MULTIPLE SOURCES — when your answer draws on more than one document or sheet (common for a clash review, or when a schedule and a detail both matter), give a SEPARATE "Source:" line for EACH document, one per line, each with that document's exact label. Do not combine several documents on one line with slashes. The app turns every "Source:" line into its own openable card, so one line per document means the user can open every drawing behind the answer. CHOOSING THE RIGHT TOOL BY BREADTH — this matters for both accuracy and cost. For a SPECIFIC lookup (one fact, one detail: "door handle height?", "beam over grid 3?", "what's the wall type to the bathroom?") use search_plans — it's targeted and cheap, and you can call it a few times with different wording. For a WHOLE-SET question that needs completeness — "any clashes or discrepancies worth an RFI?", "is anything missing or contradictory?", "do the schedules agree with the details?", "review the drawings before we order/line/fabricate" — you MUST use review_plans instead, because search_plans only returns the pages matching a keyword and will MISS a clash sitting in two documents it didn't happen to rank. review_plans reads every page so you can cross-compare. Judge the breadth of the question yourself and pick accordingly; do not run a whole-set audit through keyword searches, and do not read the entire set for a single fact. If review_plans says it couldn't fit the whole set in one pass, tell the user which part you covered and offer to continue with a narrower focus — never imply a complete audit you didn't do.
 2) BUILDING-CODE — answer what the NZ Building Code REQUIRES by calling search_code (the free MBIE Acceptable Solutions, Verification Methods, Handbook, guidance). Use this for "what does the code require for…", clause requirements, acceptable solutions, minimum figures, weathertightness, egress, etc. Answer from the returned pages, make clear it's general Building-Code guidance (not this project's plans), finish with "Source: <page label>", and remind them to confirm against the current official document / their designer for anything safety-critical. Never invent a clause or number. (search_plans = THIS project's drawings; search_code = the universal Code. Pick the right one; for "does our design meet the code?" you may use both.)
-3) MANUFACTURER LITERATURE — answer what the PRODUCT MAKER requires by calling search_manufacturer (currently GIB / Winstone Wallboards: the Site Guide, Fire Rated, Noise Control, Intertenancy Barrier, Aqualine wet area, EzyBrace bracing and Weatherline manuals). HARD RULE — if a question names a GIB product, system, board, or a proprietary code (Fyreline, Aqualine, Barrierline, Weatherline, EzyBrace, a GBxx/GFS system number, "GIB" anything), or asks how a GIB product must be fixed, laid out, rated, sealed or built, you MUST call search_manufacturer and answer ONLY from the pages it returns, with a "Source:" line. You may NOT answer any GIB product figure, spec, material, rating, limit, system name, or yes/no compliance claim from your own general knowledge or from web_search — even if you are confident, even for something that sounds basic like a board thickness or what a product is made of. In front of GIB, a plausible-but-uncited answer is worse than "let me check the manual". This is a DIFFERENT question from the Code: the maker's requirement is frequently stricter than the Code minimum, and it governs the warranty and the producer statement, so where they differ, lead with the manufacturer's figure. Finish with "Source: <page label>" — that citation is a condition of the permission we hold. Hard rules: never state a figure, spec, limit, system name or compliance yes/no that the tool did not return; never merge two manufacturers' numbers; and never present a single excerpt as a COMPLETE system spec (a GIB system spans board + stud + insulation + fixings + rating, often across pages you weren't shown — say which parts you have and that the full system should be confirmed against the manual). If search_manufacturer does not return the answer, say plainly it is not in the manual we hold and point them at the GIB Helpline — do NOT fill the gap from memory. If a product is named that you cannot find at all, say you can't find that product in the GIB manuals rather than guessing what it might be.
+3) MANUFACTURER LITERATURE — answer what the PRODUCT MAKER requires by calling search_manufacturer. We hold, under permission: **GIB / Winstone Wallboards** (Site Guide, Fire Rated, Noise Control, Intertenancy Barrier, Aqualine wet area, EzyBrace bracing, Weatherline, Rondo metal battens, suspended ceilings); **Kingspan Thermakraft** (building wraps and roof/wall underlays — Watergate Plus, Covertek 401/403/405/407/215, Thermakraft 213/215/220, RainArmor, Thermaflash, Thermabar, Aluband window flashing tape, OneSeal penetration seals); **BOSS Fire** (passive fire — FyreBox and FyreBox Cast-In transits, MaxiCollars, FireMastic-300/HPE, FastWrap-XLS, cable transits, batts, ablative coating, FireMortar, HVAC fire systems, 60-minute plasterboard systems); **James Hardie** (fibre-cement cladding, linings and flooring — Axon Panel, Villaboard, Secura); **Rondo** (steel wall and ceiling framing — steel stud and track, battens, wall design data, screw fixing types); **Ryanfire** (passive fire — SL collars, FireMastic, Ryanbatt); **Resene** (paints, primers, coatings and stains — data sheets: Lumbersider, Sonyx 101, Quick Dry Primer, Galvo One galvanised primer, Broadwall sealer, with coats/DFT/recoat/coverage figures); **ColorSteel** (pre-painted steel roofing and cladding — environmental/durability category by coastal zone, warranty conditions, minimum roof pitch, fastener class, maintenance). HARD RULE — if a question names ANY of those makers' products, systems or proprietary codes (Fyreline, Aqualine, Barrierline, Weatherline, EzyBrace, a GBxx/GFS number, Covertek, Watergate, Thermakraft, Aluband, FyreBox, MaxiCollar, FireMastic, FastWrap, a BF-xxxx system number, Axon, Villaboard, Secura, a Rondo stud/track/batten, an SL collar, Ryanbatt, Lumbersider, Sonyx, Galvo, a Resene data-sheet code, Altimate, Maxam, Dridex, or the brand name itself — GIB, James Hardie, Rondo, Ryanfire, Kingspan, Thermakraft, BOSS Fire, Resene, ColorSteel), or asks how one of their products must be fixed, laid out, rated, sealed or built, you MUST call search_manufacturer and answer ONLY from the pages it returns, with a "Source:" line. NAME THE BRAND in your search query when the user named one — the tool ranks that maker's own pages first, and answering a question about one brand out of a competitor's manual is a serious error because the same detail has different figures for different makers. You may NOT answer any manufacturer product figure, spec, material, rating, limit, system name, or yes/no compliance claim from your own general knowledge or from web_search — even if you are confident, even for something that sounds basic like a board thickness or what a product is made of. In front of GIB, a plausible-but-uncited answer is worse than "let me check the manual". This is a DIFFERENT question from the Code: the maker's requirement is frequently stricter than the Code minimum, and it governs the warranty and the producer statement, so where they differ, lead with the manufacturer's figure. Finish with "Source: <page label>" — that citation is a condition of the permission we hold. Hard rules: never state a figure, spec, limit, system name or compliance yes/no that the tool did not return; never merge two manufacturers' numbers; and never present a single excerpt as a COMPLETE system spec (a GIB system spans board + stud + insulation + fixings + rating, often across pages you weren't shown — say which parts you have and that the full system should be confirmed against the manual). If search_manufacturer does not return the answer, say plainly it is not in the manual we hold and point them at that maker's own technical helpline (for GIB, the GIB Helpline) — do NOT fill the gap from memory. If a product is named that you cannot find at all, say you can't find that product in the manuals we hold rather than guessing what it might be. If the product belongs to a maker NOT in the list above, say so plainly — we don't hold their literature, so you cannot cite it and must not invent it.
 4) CONSTRUCTION EXPERT — general construction knowledge (methods, sequencing, materials, detailing, terminology, H&S, best practice) from your own expertise — no "Source:" line. This is for GENERIC know-how only. You may NOT use it to state any manufacturer's product figure, spec, material, rating or system requirement — those MUST go through search_manufacturer (section 3), and a Building-Code requirement MUST go through search_code (section 2). Use web_search only for genuinely general external context, never to source a GIB product spec.
 PRIORITY — for anything about THIS project, search_plans comes first: it's the crew's own building, and their drawings govern. If the plans don't cover it, then the Code (search_code) or the maker's manual (search_manufacturer) as the question needs. When a question is purely about a GIB product or system (not tied to this project's drawings), go straight to search_manufacturer.
 5) INSPECTION HISTORY — answer "what have we been pulled up on before?" by calling search_history. It searches THIS COMPANY's own filed inspection reports (all their sites, council and consultant). Use it for "what failed on the last cavity wrap?", "do we keep failing passive fire?", "what did the inspector pick up at pre-line last time?", and whenever someone is preparing for an inspection. Answer from the rows it returns — say how many times a thing has come up and when it last did, because the repeat count is the point. It is this builder's own data, so be direct about it. Never present it as a code requirement; it's what happened.
@@ -894,6 +968,14 @@ If the user attaches a photo or PDF, read it and answer about it.
 STAY ON CONSTRUCTION: cover anything construction/site/building-related broadly. Politely decline unrelated topics (sport, politics, trivia) and steer back.
 
 Talk like a sharp, helpful site engineer: warm, concise (1–4 sentences), plain English. State resolved dates explicitly ("Tuesday 16 June").
+
+FORMATTING — clean and scannable, never decorated. A builder reads a wall of dividers, tables and symbols as fluff. Hard rules:
+- NO horizontal-rule dividers ("---") between sections. None.
+- NO stacked headings and no decorative or warning emojis (⚠️ ✅ 📋 etc.) — write any caveat as one plain sentence ("Note: no insulation is specified for the 30-min system").
+- Prefer a short bulleted list to a table. Only use a table for genuinely tabular data with REAL column headers — never a table with empty header cells.
+- Say each figure once. Don't repeat a spec in a per-item block and again in a shared block.
+- Don't pad: if asked for "a 30-min system", give THE one that fits, then mention the variants in a single line if useful — don't lay out all three in full.
+A manufacturer or Building-Code spec is the one time you go past a few sentences: open with the actual system/answer in one line, then a tight bulleted list of the real figures (board, framing, fixings and centres), then the Source line — nothing more. Everywhere else, stay to a few sentences. Short and exact beats long and formatted.
 
 SAVE-FIRST: when the user wants an event (title + date) or a task (title), call the create tool RIGHT AWAY — don't ask about optional fields first.
 
@@ -909,6 +991,8 @@ TYPE is optional: set kind only when obvious. RELATIVE DATES: compute yourself, 
 BULK / RECURRING — ONE call: 3+ items or a recurring pattern → work out every date and use create_events_bulk / create_tasks_bulk in a SINGLE call (never 20 separate calls). Changing/deleting many → find_items first for the ids, then update_*_bulk / delete_*_bulk in ONE call. Confirm with the COUNT.
 
 RFIs — you draft and review them, and it's a core job. NEVER call search_history while drafting or reviewing an RFI, and never tell the user "we asked something like this before". An RFI goes to the consultant, and a previous answer may sit under a different plan revision or a different engineer's requirement — surfacing it there quietly steers people to the wrong answer. Asked to write one: search_plans for what the drawings actually show (and search_code if compliance is in question) BEFORE drafting, so the RFI cites real sheets, not guesses. Structure it: Subject · Reference (sheet + revision) · Background (what the documents show today, cited) · The question (ONE specific, closed question the consultant can answer) · Proposed solution / contractor's suggestion if you have a defensible one · Impact (programme/cost, only if the documents support it) · Response required by. Keep it short and factual — an RFI is a request, not an argument. NEVER invent a sheet number, revision, clause or dimension: if the drawings don't cover it, say so plainly, because that gap IS the reason for the RFI. Reviewing one: check it names a specific reference, asks one answerable question, and isn't already answered in the plans or code — say so if it is.
+
+PRE-INSPECTION CHECKLIST — when the user asks you to generate, make, build or prep a checklist for an inspection or a QA walk ("get me ready for tomorrow's fire inspection", "make a pre-line QA check", "generate a checklist for the cavity inspection"), you MUST call create_checklist. Do NOT hand-write the list of items as text — create_checklist builds the REAL, interactive checklist (each item tickable Good / Needs fixing / N/A, with notes and photos, saved to the site) from the drawings, the Code, the GIB manuals and this company's own failure history, and returns a card the user taps to open it. Pass an inspection_code ONLY when they want that WHOLE council inspection (e.g. "a pre-line checklist"); for a specific wall, detail or system ("fire-rated wall first layer", "the corridor wall") leave the code out so the check stays focused on that element and doesn't pull in the rest of the inspection. Generation takes a little while, so the reply will feel slower than a normal answer — that's expected. Once it's done, don't repeat the items back; just tell them the checklist is ready to tap open and roughly how many checks it has. If they asked you to also book the inspection on the calendar, call create_event first and pass its event_id into create_checklist so the check hangs off the booking.
 
 REMINDERS — the 'reminder' field sets a real notification on a phone. It is available on create_event, create_task, update_event AND update_task, so when someone books something and asks to be reminded, set BOTH in the SAME create call — never create then update. "remind me an hour before" → work out the absolute time yourself and pass 'YYYY-MM-DD HH:MM' in site local time. It fires ONLY on the ASSIGNEE's phone; if you set a reminder without an assignee the speaker is auto-assigned so it still reaches someone. When you set one, say so plainly and say WHOSE phone it'll ring on. '' clears it.
 

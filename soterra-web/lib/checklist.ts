@@ -86,11 +86,18 @@ const ITEM_LIST_SCHEMA = {
 
 const GEN_SYSTEM = `You write the pre-inspection checklist a New Zealand site manager walks the job with an hour before the inspector arrives.
 
-You are given four sources. Use ALL that have anything useful:
+You are given four sources. Use every one that has something ON-SUBJECT for this inspection (see the subject rule below); ignore the parts that aren't:
 1. THIS PROJECT'S DRAWINGS — pages from the site's own consented drawings and specs. Every "as per plan" item comes from here, WITH the actual value the plan gives. "Cavity battens as per plan" is useless; "Cavity battens — 20mm H3.1 treated, at 600 crs per A-302" is a check someone can do.
 2. THE BUILDING CODE — pages from the MBIE Acceptable Solutions and Verification Methods. Every numeric item comes from here, with the actual figure.
 3. THE MANUFACTURER'S MANUAL — pages from the maker's own installation manual (e.g. GIB). This is what the inspector actually checks a proprietary system against, and it is FREQUENTLY STRICTER than the Code minimum. Fastener type and centres, sheet layout, back-blocking, control joints, the specific system build-up — take these from here, with the exact figure, and cite the manual page. Where the manual and the Code differ, the manual governs the warranty, so lead with the manual's figure.
 4. THIS COMPANY'S OWN HISTORY — things this builder has already been failed on. These matter most: they are the specific mistakes this crew makes.
+
+THE SUBJECT IS FIXED BY THE REQUEST — READ THIS FIRST.
+You are writing the checklist for ONE specific inspection, named at the end. Before you write anything, decide what that inspection is actually about. Retrieval is fuzzy: some pages you are handed matched only because they share a common word ("wall", "layer", "GIB", "board") with the request, but are really about a DIFFERENT trade or system. You MUST leave those out. Take items ONLY from pages that genuinely belong to this inspection's subject.
+- A FIRE-RATED LINING / fire wall check is about: the fire-rated boards (type, thickness, e.g. GIB Fyreline), the specific GIB fire system number, fastener type and centres for that system, sheet layout and stagger, back-blocking, control joints, the fire/acoustic infill THAT SYSTEM specifies, and sealing/fire-collaring penetrations through the rated wall. It is NOT about external flashings, building underlay, cavity, cladding, head/sill weathertightness, capping or bottom plates, or wet-area (Aqualine) boards — even though those pages say "wall". Drop them.
+- In particular, Building Code pages about ENERGY EFFICIENCY or INTERNAL MOISTURE (H1 or E3: thermal R-values / insulation levels like "R-value 1.5 minimum", building paper, thermal breaks on steel framing, ceiling or roof insulation, weathertightness) are a DIFFERENT inspection entirely. Never put them on a fire check, even when the page says "wall", "framing" or "insulation". The ONLY insulation that belongs on a fire or acoustic wall check is the specific fire/acoustic infill named in the manufacturer's fire or noise-control system (e.g. the glass-wool batt the GIB system calls for), cited from that manual — never a Building-Code thermal R-value.
+- The same discipline applies to every subject: a waterproofing check is not a framing check; a bracing check is not a cladding check. If a page is off-subject, it does not become an item, no matter how well it's cited.
+A checklist full of the wrong trade's items is a FAILURE — worse than a short one. If, after filtering to the subject, a source has nothing on-subject, take nothing from it and say less. It is completely fine to lean mostly on the manufacturer's manual, the Code and this company's history when the project's own drawings don't cover this particular system.
 
 RULES
 - EVERY item must be traceable. Copy the page label you were given into source_ref, exactly as given. If you cannot point at a source for an item, DO NOT include it — an invented item on a checklist is worse than a missing one.
@@ -100,6 +107,30 @@ RULES
 - 10 to 20 items. This is walked on a phone, on site, in the rain. Ruthless beats thorough.
 - Write like an experienced site manager talking to another one. No filler, no "ensure that", no "it is recommended".
 - If a source gives you nothing useful, use fewer items rather than padding with generic ones.`;
+
+// A free-text checklist title retrieves badly on its own. "GIB fire-rated wall,
+// first layer" tokenises to a hyphenated "fire-rated" that never matches "fire
+// rated" in the corpus, so the fire signal vanishes and the search falls back to
+// the one common word "wall" — which on a weathertightness-heavy drawing set
+// ranks flashings, underlay and cladding, the wrong trade entirely. Normalise
+// the hyphens so the compound's parts match, and for a few common subjects add
+// the vocabulary the manuals and the Code actually use, so the right pages rank.
+const SUBJECT_HINTS: { re: RegExp; add: string }[] = [
+  { re: /\bfire|fyreline|frr|fhr\b/i, add: "fire rated FRR fire resistance fyreline passive fire fire collar penetration fire seal fire lining system GBTL fastener screw centres control joint back-blocking board layer stud" },
+  { re: /\bwaterproof|tank|membrane|wet\s?area|shower|bathroom\b/i, add: "waterproofing membrane tanking wet area upstand fall bond breaker Aqualine primer" },
+  { re: /\bbrac/i, add: "bracing bracing unit BU EzyBrace GBS hold-down fixing lining sheet nailing" },
+  { re: /\bcavity|wrap|underlay|weathertight|cladding|flashing\b/i, add: "cavity batten building wrap underlay flashing drainage plane clearance junction saddle" },
+  { re: /\bframe|framing|stud|lintel|plate|truss\b/i, add: "framing stud lintel top plate bottom plate nog dwang fixing bracing" },
+];
+
+/** Enrich a free-text checklist title into a retrieval query: split hyphenated
+ *  compounds so their parts match the corpus, and append the subject vocabulary
+ *  so a fire check finds the fire pages, not the pages that merely say "wall". */
+function enrichTitleQuery(title: string): string {
+  const base = title.replace(/-/g, " ");
+  const hints = SUBJECT_HINTS.filter((h) => h.re.test(title)).map((h) => h.add);
+  return [base, ...hints].join(" ");
+}
 
 /** Turn an inspection code into the retrieval queries that actually find the
  *  right pages. "ICA" finds nothing in a drawing set; "cavity batten building
@@ -124,9 +155,11 @@ const CODE_QUERIES: Record<string, string> = {
 
 function queryFor(code: string | null, title: string): string {
   // Council codes have their own query table; consultant disciplines carry
-  // theirs on the type itself (lib/categories.ts).
+  // theirs on the type itself (lib/categories.ts). The title is always enriched
+  // so a free-text "fire-rated wall" ask retrieves the fire pages, not the pages
+  // that merely share the word "wall".
   const c = code ? CODE_QUERIES[code.toUpperCase()] ?? typeQuery(code) : null;
-  return [c, title].filter(Boolean).join(" ");
+  return [c, enrichTitleQuery(title)].filter(Boolean).join(" ");
 }
 
 export type GeneratedItem = { title: string; detail: string; source: string; sourceRef: string | null; category: string };
@@ -190,7 +223,13 @@ export async function generateChecklistItems(
       : "THIS COMPANY'S OWN HISTORY\n(no inspection history filed yet)",
   ].join("\n\n════════\n\n");
 
-  const codeLabelName = opts.inspectionCode ? `${codeName(opts.inspectionCode) ?? opts.inspectionCode} (${opts.inspectionCode})` : opts.title;
+  // Lead with the user's own words. When a code is passed too, it's added as
+  // context — never INSTEAD of the title, or a narrow request ("fire-rated wall
+  // first layer") tagged with a broad code (IPB) loses its subject and the model
+  // writes the whole pre-line inspection instead of the fire wall.
+  const codeLabelName = opts.inspectionCode
+    ? `${opts.title} (being checked at the ${codeName(opts.inspectionCode) ?? opts.inspectionCode} / ${opts.inspectionCode} inspection — but keep the checklist focused on "${opts.title}", not the whole inspection)`
+    : opts.title;
 
   const anthropic = new Anthropic({ maxRetries: 2 });
   try {

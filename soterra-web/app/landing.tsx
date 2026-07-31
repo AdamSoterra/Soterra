@@ -248,9 +248,20 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
           An AI assistant that knows your whole project today, and a learning engine that captures
           knowledge from every project to reduce mistakes on the next one.
         </p>
-        <div className="cta rv in">
-          <Cta kind="solid" big label="Get set up" onAct={onGetStarted} />
-          <Cta kind="ghost" big label="Log in" onAct={onLogin} />
+        {/* Three ways in, one row: set up, log in, or install the app. /install
+            detects a phone (add to home screen) or a computer (install as a
+            desktop app) and shows only that. Smaller than the old big pair so
+            all three sit side by side. */}
+        <div className="cta cta3 rv in">
+          <Cta kind="solid" label="Get set up" onAct={onGetStarted} />
+          <Cta kind="ghost" label="Log in" onAct={onLogin} />
+          <a className="ghost getapp3" href="/install" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="6" y="2" width="12" height="20" rx="2.6" />
+              <line x1="10.5" y1="18.5" x2="13.5" y2="18.5" />
+            </svg>
+            Install
+          </a>
         </div>
       </section>
 
@@ -404,6 +415,9 @@ const CSS = `
 .lp .lead{font-size:19px;line-height:1.6;color:var(--slate);max-width:620px;margin-bottom:32px}
 .lp .lead b{color:var(--navy);font-weight:600}
 .lp .cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:0}
+.lp .cta3{gap:10px}
+.lp .getapp3{display:inline-flex;align-items:center;gap:6px;color:var(--brand-d);border-color:rgba(14,143,230,.32)}
+.lp .getapp3:hover{border-color:var(--brand)}
 .lp .trust{font-size:13.5px;color:var(--mut);font-weight:500}
 /* partners */
 .lp .partners{max-width:1000px;margin:0 auto;padding:24px 7vw 52px;text-align:center}
@@ -562,6 +576,9 @@ const CSS = `
   .lp .bim{grid-template-columns:1fr;gap:32px}
   .lp .layer3{grid-template-columns:1fr;gap:28px}
   .lp .prow{gap:12px}
+  /* three CTAs share the row evenly on a phone */
+  .lp .cta3{width:100%;gap:8px;flex-wrap:nowrap}
+  .lp .cta3 .solid,.lp .cta3 .ghost{flex:1;padding:12px 4px;font-size:12.5px;justify-content:center;text-align:center}
   /* phone only: stop "LAYER 1" wrapping inside the pill and going tall+odd */
   .lp .lbadge span{white-space:nowrap}
 }

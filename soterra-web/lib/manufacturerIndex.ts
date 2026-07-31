@@ -14,6 +14,25 @@ import { computeDf } from "./retrieve";
 // manufacturer's own current document — an obligation the Code corpus doesn't
 // have and shouldn't grow.
 
+/**
+ * Which licence states are served to users. One list, imported everywhere, so
+ * retrieval, the citation map and the page-image endpoint can never drift apart
+ * and start serving something one of them believes is withheld.
+ *
+ *   granted  — permission in writing. The steady state.
+ *   pending  — asked, and they were positive; served while the paperwork lands.
+ *   demo     — their own PUBLIC pages, held ONLY so we can record a short demo
+ *              showing that manufacturer how their content would be quoted and
+ *              cited, to help them decide. Kept as its own tier rather than
+ *              lumped in with `pending` because "we emailed and they have not
+ *              replied" is a materially weaker footing than "they said yes",
+ *              and that difference should be visible in the data rather than
+ *              remembered. Promote to `pending`/`granted` on a yes; delete on a
+ *              no. See dev/demo-corpus.mts.
+ *   withdrawn — kept on disk, never served. A change of mind is one UPDATE.
+ */
+export const SERVED_LICENCES = ["granted", "pending", "demo"] as const;
+
 export type ManufacturerPage = {
   manufacturer: string;
   doc: string;
@@ -23,7 +42,38 @@ export type ManufacturerPage = {
   title: string | null;
   text: string;
   sourceUrl: string | null;
+  licence: string;
 };
+
+/**
+ * Who may see `demo`-tier pages: a comma-separated list of Clerk user ids in
+ * DEMO_CORPUS_USERS. Everyone else is served exactly as if those pages did not
+ * exist.
+ *
+ * This gate is the difference between "we recorded a demo for you" and "we put
+ * your copyrighted material in our product before you answered". James Hardie,
+ * Rondo and Ryanfire all publish terms REQUIRING written agreement before their
+ * literature is reproduced commercially, and none of them has answered yet.
+ * They are also competitors of each other and of GIB — and a GIB technical
+ * manager already has a live account here. Serving one manufacturer's manual to
+ * another's staff inside a product that is asking all of them for permission is
+ * the kind of unforced error that loses every one of those conversations at
+ * once. So demo pages reach the founder's own accounts and nobody else.
+ */
+export function canSeeDemoCorpus(userId: string | null | undefined): boolean {
+  if (!userId) return false;
+  const allow = (process.env.DEMO_CORPUS_USERS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return allow.includes(userId);
+}
+
+/** Drop `demo` pages unless this caller is allowed to see them. */
+export function visibleTo<T extends { licence: string }>(pages: T[], userId: string | null | undefined): T[] {
+  if (canSeeDemoCorpus(userId)) return pages;
+  return pages.filter((p) => p.licence !== "demo");
+}
 
 let MFR_CACHE: { pages: ManufacturerPage[]; df: Map<string, number> } | null = null;
 
@@ -42,9 +92,10 @@ export async function getManufacturerIndex(): Promise<{ pages: ManufacturerPage[
       title: manufacturerPages.title,
       text: manufacturerPages.text,
       sourceUrl: manufacturerPages.sourceUrl,
+      licence: manufacturerPages.licence,
     })
     .from(manufacturerPages)
-    .where(inArray(manufacturerPages.licence, ["granted", "pending"]));
+    .where(inArray(manufacturerPages.licence, [...SERVED_LICENCES]));
 
   const pages: ManufacturerPage[] = rows.map((r) => ({ ...r }));
   MFR_CACHE = { pages, df: computeDf(pages) };

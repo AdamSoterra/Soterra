@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { manufacturerPages } from "@/lib/schema";
+import { SERVED_LICENCES, visibleTo } from "@/lib/manufacturerIndex";
 
 export const runtime = "nodejs";
 
@@ -23,13 +24,19 @@ export async function GET() {
       doc: manufacturerPages.doc,
       sourceUrl: sql<string>`max(${manufacturerPages.sourceUrl})`,
       npages: sql<number>`max(${manufacturerPages.npages})::int`,
+      licence: sql<string>`min(${manufacturerPages.licence})`,
     })
     .from(manufacturerPages)
-    .where(inArray(manufacturerPages.licence, ["granted", "pending"]))
+    .where(inArray(manufacturerPages.licence, [...SERVED_LICENCES]))
     .groupBy(manufacturerPages.manufacturer, manufacturerPages.doc);
 
+  // Hide demo-tier documents from everyone but the allowed accounts, so an
+  // ungranted manufacturer's name never even appears in another user's citation
+  // map. `licence` is dropped from the response — the client doesn't need it.
+  const docs = visibleTo(rows, userId).map(({ licence: _l, ...d }) => d);
+
   return Response.json(
-    { docs: rows },
+    { docs },
     // The set changes only when we ingest, so let the browser hold it briefly.
     { headers: { "Cache-Control": "private, max-age=300" } },
   );

@@ -217,7 +217,15 @@ export const manufacturerPages = pgTable(
     text: text("text").notNull(),
     /** The live document on the manufacturer's own site, shown with every answer. */
     sourceUrl: text("source_url"),
-    /** granted | pending | withdrawn — only `granted` and `pending` are served. */
+    /** Private Blob pathname of a pre-rendered PNG of this page, for documents
+     *  whose PDFs reference fonts they don't embed (e.g. Resene's data sheets):
+     *  those render blank on Vercel's Linux serverless runtime, so we render
+     *  them once locally and serve the stored image. Null = render live. */
+    imageUrl: text("image_url"),
+    /** granted | pending | demo | withdrawn. Served set = SERVED_LICENCES in
+     *  lib/manufacturerIndex.ts (granted, pending, demo). `demo` is a
+     *  manufacturer's public pages held only to record a permission-seeking
+     *  demo for them — promote or delete it, never let it linger. */
     licence: text("licence").notNull().default("pending"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   }

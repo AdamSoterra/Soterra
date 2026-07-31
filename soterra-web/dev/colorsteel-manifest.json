@@ -1,0 +1,22 @@
+{
+ "manufacturer": "ColorSteel",
+ "licence": "demo",
+ "dir": "C:/Users/adam/Desktop/Soterra/NZ Steel",
+ "docs": [
+  { "file": "COLORSTEEL Environmental Categories and Warranty Guide.pdf",
+    "title": "COLORSTEEL Environmental Categories & Warranty Guide",
+    "url": "https://www.colorsteel.co.nz/assets/default-site/Environmental-Categories-Warranty-Guide-WEB-7.24.pdf", "exclude": [] },
+  { "file": "COLORSTEEL Warranty Terms and Conditions.pdf",
+    "title": "COLORSTEEL Warranty Terms & Conditions",
+    "url": "https://www.colorsteel.co.nz/assets/Brochures/General-COLORSTEEL-Warranty-TC-Document.pdf", "exclude": [] },
+  { "file": "COLORSTEEL Installers Guide.pdf",
+    "title": "COLORSTEEL Installers Guide",
+    "url": "https://www.colorsteel.co.nz/assets/Brochures/COLORSTEEL_Installers_Guide_.pdf", "exclude": [] },
+  { "file": "COLORSTEEL Swarf Staining of Steel Roofing and Cladding Information Bulletin.pdf",
+    "title": "COLORSTEEL Swarf Staining Information Bulletin",
+    "url": "https://www.colorsteel.co.nz/assets/Brochures/Swarf-Staining-4pp.pdf", "exclude": [] },
+  { "file": "COLORSTEEL MAXAM Product Information Sheet.pdf",
+    "title": "COLORSTEEL MAXAM Product Information Sheet",
+    "url": "https://www.colorsteel.co.nz/assets/default-site/Product-Info-Sheet-CS-MAXAM-July2024-1-.pdf", "exclude": [] }
+ ]
+}
