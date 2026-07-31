@@ -91,8 +91,11 @@ export async function GET(req: Request) {
     return new Response(Buffer.from(png as ArrayBuffer), {
       headers: {
         "Content-Type": "image/png",
-        // (m, doc, page) → the same image forever, so let the CDN keep it.
-        "Cache-Control": "public, max-age=31536000, immutable",
+        // Private, not public: this route is licence-gated per request, so a
+        // shared/CDN cache must never hold a demo-tier image and serve it to
+        // anyone with the URL. The browser may still cache it (immutable, keyed
+        // by m/doc/page/v — bump v in page.tsx if a render ever changes).
+        "Cache-Control": "private, max-age=31536000, immutable",
       },
     });
   } catch (e) {

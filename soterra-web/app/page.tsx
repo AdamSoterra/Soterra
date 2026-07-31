@@ -2284,7 +2284,12 @@ export default function Page() {
               const docSrc =
                 sheet.kind === "manufacturer"
                   ? sheet.mfr && sheet.doc && sheet.page
-                    ? `/api/doc-page?m=${encodeURIComponent(sheet.mfr)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}`
+                    ? // &v busts the browser cache. doc-page images are served
+                      // `immutable` for a year, so when the render itself changes
+                      // (e.g. Resene's pages went from a blank live render to a
+                      // stored pre-render), the same URL would keep showing the
+                      // old frozen image. Bump this number after any such change.
+                      `/api/doc-page?m=${encodeURIComponent(sheet.mfr)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}&v=2`
                     : null
                   : projectId && sheet.doc && sheet.page
                     ? `/api/plan-page?project=${encodeURIComponent(projectId)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}`
