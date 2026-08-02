@@ -1730,6 +1730,14 @@ export default function Page() {
           {menuOpen && (
             <div className="menu">
               <div className="mrow"><span className="mi">🏗️</span><div><b>{projName}</b><br /><small>{curProject?.role === "admin" ? "You're the admin" : (members.find((m) => m.isMe)?.title || "Crew member")}</small></div></div>
+              {/* Switch between this company's sites, and start a new one. The
+                  backend always supported multiple sites per company; this is
+                  the missing switcher — a clean empty site is also how you demo
+                  the Code and standards without a project's plans in the way. */}
+              {projects.filter((p) => p.id !== projectId).map((p) => (
+                <div className="mrow" key={p.id} onClick={() => { selectProject(p.id); setMenuOpen(false); }}><span className="mi">🏢</span> Switch to {p.name}</div>
+              ))}
+              <div className="mrow" onClick={() => { setMenuOpen(false); setSetupMode("create"); setSetupOpen(true); }}><span className="mi">＋</span> New site</div>
               {/* Past chats lives here now. It used to be a button floating
                   over the top-left of the assistant screen, which sat on top
                   of the Today card and covered its heading. */}
