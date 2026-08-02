@@ -20,7 +20,7 @@ type Cite = {
 };
 type AsstCard = {
   id: string;
-  itemType: "event" | "task" | "checklist";
+  itemType: "event" | "task" | "checklist" | "standard";
   action: "created" | "updated" | "deleted";
   title: string;
   when: string;
@@ -28,6 +28,8 @@ type AsstCard = {
   kind: string | null;
   visibility: "team" | "private";
   assigneeName?: string | null;
+  /** "standard" cards: where to get a figure we are not licensed to reproduce. */
+  std?: { ref: string; title: string; section: string | null; holds: string; url: string };
 };
 // A manufacturer document we hold, from /api/manufacturer-docs. Drives reliable
 // manufacturer citations (card, page image, verify link) independent of what the
@@ -1836,7 +1838,32 @@ export default function Page() {
                                 </div>
                               ))}
                               {m.cards?.map((c, j) =>
-                                c.itemType === "checklist" ? (
+                                c.itemType === "standard" && c.std ? (
+                                  // The handoff card. Deliberately looks like a
+                                  // deliberate stop, not a failure: the answer
+                                  // continues, it just continues in a document
+                                  // we can point at but are not licensed to
+                                  // reproduce.
+                                  <div className="stdcard" key={j}>
+                                    <div className="stdh">
+                                      <span className="stdtag">In the standard</span>
+                                      <b>{c.std.ref}</b>
+                                      <small>{c.std.title}</small>
+                                    </div>
+                                    <div className="stdbody">
+                                      <div className="stdholds">
+                                        {c.std.section ? <span className="stdsec">{c.std.section}</span> : null}
+                                        {c.std.holds}
+                                      </div>
+                                      <div className="stdredact" aria-label="Content withheld pending licence">
+                                        <span>content withheld pending licence</span>
+                                      </div>
+                                    </div>
+                                    <a className="stdget" href={c.std.url} target="_blank" rel="noopener noreferrer">
+                                      Free to download from Standards NZ ↗
+                                    </a>
+                                  </div>
+                                ) : c.itemType === "checklist" ? (
                                   <div className="evcard ckcard" key={j} onClick={() => openChecklistById(c.id)} role="button" tabIndex={0} title="Tap to open the checklist">
                                     <div className="bar" style={{ background: "var(--brand)" }} />
                                     <div className="et">

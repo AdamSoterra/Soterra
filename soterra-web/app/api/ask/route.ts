@@ -15,6 +15,7 @@ import { excerpt, expand, retrieve } from "@/lib/retrieve";
 import { DEMO_ID, getProjectIndex, type Page } from "@/lib/projectIndex";
 import { codeLabel, getCodeIndex } from "@/lib/codeIndex";
 import { determinationLabel, searchDeterminations } from "@/lib/determinations";
+import { resolveStandard } from "@/lib/standards";
 import { getManufacturerIndex, manufacturerLabel, visibleTo } from "@/lib/manufacturerIndex";
 import { companyIdForProject, type Scope } from "@/lib/company";
 import { searchHistory } from "@/lib/history";
@@ -55,7 +56,7 @@ function pageLabel(p: Page): string {
 
 type Card = {
   id: string;
-  itemType: "event" | "task" | "checklist";
+  itemType: "event" | "task" | "checklist" | "standard";
   action: "created" | "updated" | "deleted";
   title: string;
   when: string;
@@ -63,6 +64,8 @@ type Card = {
   kind: string | null;
   visibility: "team" | "private";
   assigneeName?: string | null;
+  /** "standard" cards only: where to get the figure we can't reproduce. */
+  std?: { ref: string; title: string; section: string | null; holds: string; url: string };
 };
 
 const dayFmt = new Intl.DateTimeFormat("en-NZ", { timeZone: PROJECT_TZ, weekday: "short", day: "numeric", month: "short" });
@@ -142,6 +145,20 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
       type: "object",
       properties: { query: { type: "string", description: "The code question in plain English (e.g. 'minimum stair riser height', 'E2 cavity requirement for direct-fixed cladding')." } },
       required: ["query"],
+    },
+  },
+  {
+    name: "standards_handoff",
+    description:
+      "Show the user EXACTLY where to get a figure that lives in an NZ Standard we are not licensed to reproduce. Call this at the END of an answer whenever the real number sits in an NZS (lintel and bracing sizes in NZS 3604, safety-glass thresholds in NZS 4223.3, smoke alarm positions in NZS 4514, pool barriers in NZS 8500, insulation R-values in NZS 4218, seismic restraint in NZS 4219, and so on). FIRST give everything the Building Code documents DO cover (the performance clause, the compliance route, and what drives the answer, e.g. span, loaded dimension and wind zone for a lintel), THEN call this once. It renders a card with the standard, the edition, the section to open, and a link to download it FREE. Do NOT describe the card in your text or repeat the link, and never state a figure from inside the standard. Pass the standard as the Code cites it ('NZS 3604:2011'), the section or table if you genuinely know it from the Code's own reference (do not guess a table number), and one plain line naming what the standard holds.",
+    input_schema: {
+      type: "object",
+      properties: {
+        standard: { type: "string", description: "The standard as cited, e.g. 'NZS 3604:2011' or 'NZS 4223.3'." },
+        section: { type: "string", description: "Section/part to open if known from the Code's own reference, e.g. 'Section 8, Walls'. Omit rather than guess." },
+        holds: { type: "string", description: "One line: what the standard holds that the Code does not, e.g. 'the lintel member size and grade for your span, loaded dimension and wind zone'." },
+      },
+      required: ["standard", "holds"],
     },
   },
   {
@@ -687,6 +704,42 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         return { content: JSON.stringify({ pages: top.map((p) => ({ label: codeLabel(p), text: excerpt(p.text, q, 2800) })) }), cards: [] };
       }
 
+      case "standards_handoff": {
+        const name = s(input.standard) ?? "";
+        const holds = s(input.holds) ?? "";
+        const section = s(input.section) ?? null;
+        const std = resolveStandard(name);
+        // Resolved against our own verified registry, never the model's memory:
+        // a wrong edition or a dead link on this card is exactly the sloppiness
+        // that would cost us the licensing conversation.
+        if (!std) {
+          return {
+            content: JSON.stringify({
+              ok: false,
+              note: `We hold no verified record of "${name}", so no card was shown. Name the standard in your text and say it is cited by the Code, but do NOT state an edition, a link, or any figure from it.`,
+            }),
+            cards: [],
+          };
+        }
+        return {
+          content: JSON.stringify({
+            ok: true,
+            shown: `A card now points the user to ${std.ref} (${std.title}), free to download. Do not repeat the link or the edition in your text, and do not state any figure from inside the standard.`,
+          }),
+          cards: [{
+            id: std.ref,
+            itemType: "standard",
+            action: "created",
+            title: std.ref,
+            when: std.title,
+            sub: std.clauses.join(", "),
+            kind: null,
+            visibility: "team",
+            std: { ref: std.ref, title: std.title, section, holds, url: std.url },
+          }],
+        };
+      }
+
       case "search_determinations": {
         const q = s(input.query) ?? "";
         if (!q) return { content: JSON.stringify({ error: "query required" }), cards: [] };
@@ -997,6 +1050,7 @@ const STATIC_PROMPT = `You are Soterra's site assistant — a sharp, experienced
 
 2a) NEW ZEALAND STANDARDS (NZS / AS/NZS) — WE DO NOT HOLD THESE, AND YOU MUST NEVER QUOTE FROM ONE. The Building Code constantly routes to a Standard ("comply with NZS 3604"), and the Standard, not the Code, holds the actual number. We are not licensed to reproduce Standards content, so you must NEVER state a figure, table value, span, spacing, size, grade, threshold or clause requirement that comes from an NZS or AS/NZS Standard, and never guess at one. Getting a lintel size or a bracing figure wrong on site is a structural failure, and inventing one is the single worst thing you can do.
 GET THE ACCESS FACT RIGHT — do NOT say a Standard is "paywalled" or that the user "can't get it". MBIE's Building System Performance branch SPONSORS free access to most building-related Standards, including NZS 3604 (timber-framed buildings), NZS 4229 (masonry), NZS 3101 (concrete), NZS 3404 (steel), NZS 3602 (timber treatment), NZS 4251.1 (solid plastering/stucco), NZS 4223.3 (glazing and safety glass), NZS 4514 (smoke alarms), NZS 4219 (seismic restraint of building services) and NZS 1170.5 (earthquake actions). Anyone can view and print a single PDF copy free from standards.govt.nz for their own use. What is restricted is REPRODUCTION, which is why we can point but not quote.
+END THE ANSWER WITH THE standards_handoff TOOL. Once you have given everything the Code covers and named the Standard, call standards_handoff once. It renders a card with the verified edition, the section and a free-download link, so the user can go straight there. Don't describe that card or repeat the link in your text.
 SO THE RIGHT ANSWER SHAPE IS: give everything the Crown documents DO cover (the performance clause, which Acceptable Solution applies, the compliance route, and what actually drives the answer — e.g. span, loaded dimension and wind zone for a lintel), then name the exact Standard AND the specific section or table to look in, then say plainly that the figure itself sits in that Standard, that it is free to download from standards.govt.nz, and that we can't reproduce the table. That is a genuinely useful answer, not a refusal: it turns "check NZS 3604" into "open NZS 3604:2011 Section 8, the lintel tables, and read the row for your span, loaded dimension and wind zone". Never pretend the Code answers something it only cross-references.
 
 2b) DETERMINATIONS — when the question is a DISPUTE or a JUDGEMENT CALL rather than a plain requirement, call search_determinations. We hold MBIE's determinations from 2019 onward: their binding rulings on real disagreements between an owner and a council. Use it for "the council failed us on this, are they right?", "can they refuse a CCC for that?", "has MBIE ruled on this?", or when the Code is silent/ambiguous and the user needs to know how the line has been drawn before. search_code = what the Code REQUIRES; search_determinations = how it was INTERPRETED when someone argued. TWO HARD RULES: always name the determination WITH its year ("Determination 2024/001"), because the ruling may rest on an Acceptable Solution that has since changed; and a determination decides ONE case on ITS OWN facts, so present it as how MBIE reasoned, never as the rule itself — for any actual figure or clause requirement, defer to the current Acceptable Solution via search_code. Never state a finding the tool did not return, and if nothing matches, say so rather than guessing how MBIE would rule.
