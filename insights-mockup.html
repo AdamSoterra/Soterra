@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soterra Insights — mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --brand:#0E8FE6;--brand-d:#0A78C8;
+    --navy:#0C2A47;--ink:#0C2A47;--slate:#52698A;--mut:#94A6BE;
+    --bg:#F6FAFF;--white:#fff;--line:#E6EFF9;--line2:#EDF3FB;
+    --red:#EF4444;--amber:#F59E0B;--green:#10B981;
+    --font:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);color:var(--navy);background:var(--bg);-webkit-font-smoothing:antialiased}
+
+  /* ---- top bar (just to make it feel like the app) ---- */
+  .top{height:58px;display:flex;align-items:center;gap:26px;padding:0 26px;background:rgba(255,255,255,.75);backdrop-filter:blur(14px);border-bottom:1px solid var(--line2);position:sticky;top:0;z-index:5}
+  .logo{font-size:21px;font-weight:700;letter-spacing:-.02em;color:var(--brand)}
+  .navtab{font-size:13.5px;font-weight:500;color:var(--slate);padding:8px 13px;border-radius:10px}
+  .navtab.act{background:rgba(65,195,255,.14);color:var(--brand-d);font-weight:600}
+  .spacer{flex:1}
+  .proj-chip{font-size:12.5px;font-weight:600;color:var(--navy);background:#fff;border:1px solid var(--line);padding:8px 13px;border-radius:11px;display:flex;align-items:center;gap:8px;box-shadow:0 1px 2px rgba(12,42,71,.04)}
+  .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
+  /* ---- page ---- */
+  .wrap{max-width:1060px;margin:0 auto;padding:30px 26px 80px}
+  .page-h{font-size:27px;font-weight:600;letter-spacing:-.02em}
+  .page-sub{font-size:14px;color:var(--slate);margin-top:5px}
+  .mockchip{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--brand);background:rgba(14,143,230,.08);border:1px solid rgba(14,143,230,.16);padding:4px 11px;border-radius:20px;margin-left:12px;vertical-align:middle}
+
+  /* ---- KPI cards ---- */
+  .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:24px}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 17px;box-shadow:0 6px 22px rgba(12,42,71,.05)}
+  .kpi .k-lab{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+  .kpi .k-val{font-size:32px;font-weight:700;letter-spacing:-.02em;margin-top:7px;line-height:1}
+  .kpi .k-sub{font-size:12.5px;color:var(--slate);margin-top:7px}
+  .kpi.hero{background:linear-gradient(135deg,#0E8FE6,#0A78C8);border:none;color:#fff}
+  .kpi.hero .k-lab{color:rgba(255,255,255,.8)}
+  .kpi.hero .k-sub{color:rgba(255,255,255,.85)}
+  .k-trade{display:flex;align-items:center;gap:8px;margin-top:8px}
+  .k-trade .k-val{font-size:22px;margin-top:0}
+  .note{font-size:12.5px;color:var(--slate);margin-top:12px;display:flex;align-items:center;gap:7px}
+  .note .bulb{color:var(--green);font-size:15px}
+
+  /* ---- main split ---- */
+  .split{display:grid;grid-template-columns:390px 1fr;gap:18px;margin-top:26px;align-items:start}
+  .card{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 6px 22px rgba(12,42,71,.05)}
+  .card-h{padding:17px 19px 4px}
+  .card-t{font-size:15px;font-weight:600}
+  .card-s{font-size:12.5px;color:var(--slate);margin-top:3px}
+
+  /* ---- ranked bar chart ---- */
+  .bars{padding:12px 14px 16px}
+  .bar-row{display:flex;align-items:center;gap:11px;width:100%;background:none;border:none;font-family:inherit;cursor:pointer;padding:9px 8px;border-radius:11px;text-align:left;transition:background .12s}
+  .bar-row:hover{background:var(--bg)}
+  .bar-row.act{background:rgba(14,143,230,.07)}
+  .bar-lab{width:96px;flex-shrink:0;font-size:12.5px;font-weight:500;color:var(--navy);display:flex;align-items:center;gap:7px;line-height:1.15}
+  .bar-lab span{overflow:hidden;text-overflow:ellipsis}
+  .bar-track{flex:1;height:22px;background:var(--line2);border-radius:7px;overflow:hidden}
+  .bar-fill{height:100%;border-radius:7px;transition:width .5s cubic-bezier(.2,.7,.3,1),opacity .15s}
+  .bar-row:not(.act) .bar-fill{opacity:.55}
+  .bar-ct{width:30px;flex-shrink:0;text-align:right;font-size:14px;font-weight:700;color:var(--navy)}
+  .chart-foot{padding:2px 20px 16px;font-size:12px;color:var(--mut)}
+
+  /* ---- drill-down ---- */
+  .dd-head{padding:18px 20px 14px;border-bottom:1px solid var(--line2);display:flex;align-items:center;gap:12px}
+  .dd-swatch{width:34px;height:34px;border-radius:10px;flex-shrink:0}
+  .dd-name{font-size:18px;font-weight:700;letter-spacing:-.01em}
+  .dd-meta{font-size:12.5px;color:var(--slate);margin-top:2px}
+  .dd-list{padding:8px 12px 6px}
+  .dd-item{display:flex;align-items:center;gap:14px;padding:11px 10px;border-radius:11px}
+  .dd-item:hover{background:var(--bg)}
+  .di-main{flex:1;min-width:0}
+  .di-title{font-size:13.5px;font-weight:500;color:var(--navy);margin-bottom:8px;line-height:1.25}
+  .di-track{height:8px;background:var(--line2);border-radius:5px;overflow:hidden}
+  .di-fill{height:100%;border-radius:5px;transition:width .5s cubic-bezier(.2,.7,.3,1)}
+  .di-ct{width:44px;flex-shrink:0;text-align:right;font-size:17px;font-weight:700;color:var(--navy)}
+  .di-ct small{font-size:12px;font-weight:600;color:var(--mut)}
+  .dd-foot{padding:14px 18px 16px;font-size:12.5px;color:var(--slate);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;border-top:1px solid var(--line2)}
+  .dd-foot .more{font-weight:600;color:var(--navy)}
+
+  .footnote{margin-top:22px;font-size:12px;color:var(--mut);line-height:1.6;border-top:1px solid var(--line2);padding-top:16px}
+
+  @media(max-width:820px){
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .split{grid-template-columns:1fr}
+    .top .navtab{display:none}
+  }
+</style>
+</head>
+<body>
+
+  <div class="top">
+    <div class="logo">Soterra</div>
+    <div class="navtab">Assistant</div>
+    <div class="navtab">Calendar</div>
+    <div class="navtab">Tasks</div>
+    <div class="navtab act">Insights</div>
+    <div class="navtab">Plans</div>
+    <div class="spacer"></div>
+    <div class="proj-chip"><span class="dot" style="background:#0E8FE6"></span>Kauri Tower</div>
+  </div>
+
+  <div class="wrap">
+    <div>
+      <span class="page-h">Insights</span><span class="mockchip">Design mockup</span>
+      <div class="page-sub">Kauri Tower · what your crews keep getting pulled up on, across the whole company</div>
+    </div>
+
+    <!-- KPI cards -->
+    <div class="kpis">
+      <div class="kpi hero">
+        <div class="k-lab">Items flagged</div>
+        <div class="k-val">209</div>
+        <div class="k-sub">things that got picked up in your reports</div>
+      </div>
+      <div class="kpi">
+        <div class="k-lab">Reports read</div>
+        <div class="k-val">12</div>
+        <div class="k-sub">council + consultant inspections</div>
+      </div>
+      <div class="kpi">
+        <div class="k-lab">Worst trade</div>
+        <div class="k-trade"><span class="dot" style="width:12px;height:12px;background:#F59E0B"></span><span class="k-val">Electrical</span></div>
+        <div class="k-sub">75 items, most of any trade</div>
+      </div>
+    </div>
+    <div class="note"><span class="bulb">●</span> Every item below came off one of your own reports.</div>
+
+    <!-- chart + drill-down -->
+    <div class="split">
+      <div class="card">
+        <div class="card-h">
+          <div class="card-t">What keeps failing</div>
+          <div class="card-s">By trade, across every report. Tap one to open it.</div>
+        </div>
+        <div class="bars" id="bars"></div>
+        <div class="chart-foot">209 items · 12 reports</div>
+      </div>
+
+      <div class="card" id="dd"></div>
+    </div>
+
+    <div class="footnote">
+      Mockup note: the trade totals, the 12 reports / 209 items, and your top Plumbing items are your real numbers.
+      The other failure lines are illustrative placeholders. On the live page every row is pulled straight from your uploaded reports.
+      No fix-tracking, no reinspections, no pass/fail. Just what fails and how many times.
+    </div>
+  </div>
+
+<script>
+  const CAT = {
+    Fire:"#EF4444","Weathertightness / Cladding":"#0E74BD",Structural:"#0A2540",
+    "Plumbing & Drainage":"#06B6D4",Electrical:"#F59E0B",Mechanical:"#8B5CF6",
+    "Interior / Linings":"#10B981","Access & Barriers":"#EC4899","Site / External":"#65A30D",
+    Acoustic:"#7C3AED",Seismic:"#B45309",Architect:"#0891B2",Other:"#94A6BE"
+  };
+
+  // trade -> {count, insp, items:[{t, n, recur|null}]}
+  const DATA = {
+    "Electrical":{count:75,insp:11,items:[
+      {t:"Cable tray earthing / bonding not completed",n:9,recur:64},
+      {t:"Service penetrations through fire wall not sealed",n:7,recur:55},
+      {t:"Sub-main support / fixings insufficient",n:6,recur:45},
+      {t:"Smoke detector spacing not to plan",n:5,recur:36},
+      {t:"Socket / switch clashes with joinery",n:5,recur:27},
+      {t:"Exposed cabling not in containment",n:4,recur:27},
+      {t:"MEP as-builts not on site at inspection",n:4,recur:18},
+    ]},
+    "Plumbing & Drainage":{count:62,insp:10,items:[
+      {t:"Pipe unsupported",n:4,recur:40},
+      {t:"Cover / cap all drainage connections",n:3,recur:30},
+      {t:"Gully trap height / clearance not compliant",n:3,recur:30},
+      {t:"Vent pipe termination not to plan",n:3,recur:20},
+      {t:"Trap seal / floor waste missing",n:2,recur:20},
+      {t:"Isolating valve not accessible",n:2,recur:10},
+      {t:"Pressure test certificate not on site",n:2,recur:10},
+    ]},
+    "Mechanical":{count:35,insp:8,items:[
+      {t:"Duct penetration fire collar missing",n:5,recur:50},
+      {t:"Seismic restraint to ductwork incomplete",n:4,recur:38},
+      {t:"Condensate drain not connected",n:3,recur:25},
+      {t:"Fan unit access clearance short",n:3,recur:25},
+      {t:"Grille positions differ from plan",n:2,recur:13},
+    ]},
+    "Fire":{count:19,insp:7,items:[
+      {t:"Passive fire stopping incomplete at penetration",n:6,recur:57},
+      {t:"Fire collar wrong size for pipe",n:3,recur:43},
+      {t:"Fire-rated wall not full height to slab",n:3,recur:29},
+      {t:"Intumescent seal missing to door",n:2,recur:29},
+      {t:"FRR system label not visible",n:2,recur:14},
+    ]},
+    "Interior / Linings":{count:8,insp:3,items:[
+      {t:"GIB fixing centres wider than spec",n:3,recur:null},
+      {t:"Bracing line linings incomplete",n:2,recur:null},
+      {t:"Wet-area substrate not to E3",n:2,recur:null},
+    ]},
+    "Acoustic":{count:7,insp:2,items:[
+      {t:"Inter-tenancy wall gap not sealed",n:3,recur:null},
+      {t:"Acoustic underlay missing to floor",n:2,recur:null},
+      {t:"STC junction detail not to plan",n:2,recur:null},
+    ]},
+    "Seismic":{count:2,insp:2,items:[
+      {t:"Services bracket bracing missing",n:1,recur:null},
+      {t:"Pipe seismic restraint spacing exceeded",n:1,recur:null},
+    ]},
+    "Architect":{count:1,insp:1,items:[
+      {t:"Balustrade height short of plan",n:1,recur:null},
+    ]},
+  };
+
+  const order = Object.keys(DATA).sort((a,b)=>DATA[b].count-DATA[a].count);
+  const max = Math.max(...order.map(k=>DATA[k].count));
+  let sel = order[0];
+
+  function renderBars(){
+    document.getElementById('bars').innerHTML = order.map(k=>{
+      const d=DATA[k], w=Math.round(d.count/max*100);
+      return `<button class="bar-row ${k===sel?'act':''}" onclick="pick('${k.replace(/'/g,"\\'")}')">
+        <span class="bar-lab"><span class="dot" style="background:${CAT[k]}"></span><span>${k}</span></span>
+        <span class="bar-track"><span class="bar-fill" style="width:${w}%;background:${CAT[k]}"></span></span>
+        <span class="bar-ct">${d.count}</span>
+      </button>`;
+    }).join('');
+  }
+
+  function renderDD(){
+    const d=DATA[sel], c=CAT[sel];
+    const listed=d.items.reduce((s,i)=>s+i.n,0);
+    const more=d.count-listed;
+    const maxN=Math.max(...d.items.map(i=>i.n));
+    const rows=d.items.map(i=>{
+      const w=Math.round(i.n/maxN*100);
+      return `<div class="dd-item">
+        <div class="di-main">
+          <div class="di-title">${i.t}</div>
+          <div class="di-track"><div class="di-fill" style="width:${w}%;background:${c}"></div></div>
+        </div>
+        <div class="di-ct">${i.n}<small>×</small></div>
+      </div>`;
+    }).join('');
+    document.getElementById('dd').innerHTML = `
+      <div class="dd-head">
+        <div class="dd-swatch" style="background:${c}"></div>
+        <div>
+          <div class="dd-name">${sel}</div>
+          <div class="dd-meta">${d.count} items across your reports · most repeated at the top</div>
+        </div>
+      </div>
+      <div class="dd-list">${rows}</div>
+      <div class="dd-foot"><span class="more">${more>0?`+ ${more} more ${sel} items`:'All items shown'}</span><span>the number is how many times it came up</span></div>`;
+  }
+
+  function pick(k){ sel=k; renderBars(); renderDD(); }
+  renderBars(); renderDD();
+</script>
+</body>
+</html>

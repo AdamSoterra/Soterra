@@ -53,6 +53,9 @@ type Insights = {
   summary: { inspections: number; failedItems: number; graded: number; cleanPasses: number; returnVisits: number };
   categories: CategoryCount[];
   topItems: TopItem[];
+  // The trade the drill-down is currently showing (defaults server-side to the
+  // worst trade). The chart highlights this one and topItems belong to it.
+  selectedCategory: string | null;
   inspections: InspectionRow[];
 };
 type ChecklistPhoto = { id: string; itemId: string; url: string; caption: string | null };
@@ -2147,73 +2150,94 @@ export default function Page() {
                     consultant's site observation report has no verdict, so a
                     pass rate over ALL reports is a made-up number — show the
                     item count instead until there's something graded. */}
-                <div className="idx" style={{ marginTop: 4 }}>
-                  {insights!.summary.graded > 0 ? (
-                    <div>
-                      <div className="big">{Math.round((insights!.summary.cleanPasses / insights!.summary.graded) * 100)}%</div>
-                      <small>passed first time</small>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="big">{insights!.summary.failedItems}</div>
-                      <small>items to fix</small>
-                    </div>
-                  )}
-                  <div style={{ flex: 1 }}>
-                    <small>
-                      {insights!.summary.graded > 0
-                        ? `${insights!.summary.inspections} inspection${insights!.summary.inspections === 1 ? "" : "s"} filed · ${insights!.summary.failedItems} item${insights!.summary.failedItems === 1 ? "" : "s"} picked up · ${insights!.summary.returnVisits} needed the inspector back.`
-                        : `Across ${insights!.summary.inspections} report${insights!.summary.inspections === 1 ? "" : "s"}. None of them carry a pass/fail — consultants don't grade a site visit, so there's no first-time-pass rate until a council inspection goes in.`}
-                    </small>
-                    <span className="grn">● Every item below came off one of your own reports</span>
+                {/* Headline counts — what fails and how much. No grading, no
+                    reinspections, no fix-tracking: this page just learns what
+                    keeps getting pulled up. */}
+                <div className="iz-kpis" style={{ marginTop: 4 }}>
+                  <div className="iz-kpi hero">
+                    <div className="iz-lab">Items flagged</div>
+                    <div className="iz-val">{insights!.summary.failedItems}</div>
+                    <div className="iz-sub">things picked up in your reports</div>
+                  </div>
+                  <div className="iz-kpi">
+                    <div className="iz-lab">Reports read</div>
+                    <div className="iz-val">{insights!.summary.inspections}</div>
+                    <div className="iz-sub">council + consultant inspections</div>
+                  </div>
+                  <div className="iz-kpi">
+                    <div className="iz-lab">Worst trade</div>
+                    {insights!.categories[0] ? (
+                      <>
+                        <div className="iz-trade"><span className="rank-dot" style={{ width: 12, height: 12, background: catColor(insights!.categories[0].category) }} /><span className="iz-val">{insights!.categories[0].category}</span></div>
+                        <div className="iz-sub">{insights!.categories[0].count} item{insights!.categories[0].count === 1 ? "" : "s"}, most of any trade</div>
+                      </>
+                    ) : (
+                      <div className="iz-val">—</div>
+                    )}
                   </div>
                 </div>
+                <div className="iz-note"><b>●</b> Every item below came off one of your own reports.</div>
 
-                <div className="pg-k">Where you get pulled up</div>
-                <div className="cal-card">
-                  {insights!.categories.length === 0 ? (
-                    <div className="page-sub" style={{ marginBottom: 0 }}>Nothing failed yet across your filed reports. Enjoy it.</div>
-                  ) : (
-                    <div className="rank">
-                      {insights!.categories.map((c) => {
-                        const max = insights!.categories[0]?.count || 1;
-                        const on = catFilter === c.category;
-                        return (
-                          <button
-                            key={c.category}
-                            className={"rank-row" + (on ? " on" : "")}
-                            onClick={() => { const next = on ? null : c.category; setCatFilter(next); loadInsights(next); }}
-                            title={on ? "Show everything" : `Show only ${c.category}`}
-                          >
-                            <span className="rank-dot" style={{ background: catColor(c.category) }} />
-                            <span className="rank-lbl">{c.category}</span>
-                            <span className="rank-track"><span className="rank-fill" style={{ width: `${Math.round((c.count / max) * 100)}%`, background: catColor(c.category) }} /></span>
-                            <span className="rank-n">{c.count}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="pg-k" style={{ marginTop: 22 }}>
-                  {catFilter ? `Most repeated — ${catFilter}` : "Most repeated items"}
-                  {catFilter && <button className="pg-clear" onClick={() => { setCatFilter(null); loadInsights(null); }}>show all</button>}
-                </div>
-                {insights!.topItems.length === 0 ? (
-                  <div className="page-sub">Nothing to show here yet.</div>
-                ) : (
-                  insights!.topItems.map((t, i) => (
-                    <div className="ins-row" key={i}>
-                      <span className="ins-n">{t.count}×</span>
-                      <div className="ins-body">
-                        <b>{t.title}</b>
-                        <small>{t.category}{t.lastSeen ? ` · last ${t.lastSeen}` : ""}</small>
+                {insights!.categories.length === 0 ? (
+                  <div className="cal-card"><div className="page-sub" style={{ marginBottom: 0 }}>Nothing failed yet across your filed reports. Enjoy it.</div></div>
+                ) : (() => {
+                  const selCat = insights!.selectedCategory ?? insights!.categories[0].category;
+                  const selCount = insights!.categories.find((c) => c.category === selCat)?.count ?? 0;
+                  const items = insights!.topItems;
+                  const maxN = Math.max(1, ...items.map((i) => i.count));
+                  const shown = items.reduce((s, i) => s + i.count, 0);
+                  const more = Math.max(0, selCount - shown);
+                  const maxCat = insights!.categories[0]?.count || 1;
+                  return (
+                    <div className="iz-split">
+                      <div className="iz-card">
+                        <div className="iz-cardh">
+                          <div className="iz-cardt">What keeps failing</div>
+                          <div className="iz-cards">By trade, across every report. Tap one to open it.</div>
+                        </div>
+                        <div className="iz-bars">
+                          {insights!.categories.map((c) => {
+                            const on = c.category === selCat;
+                            return (
+                              <button key={c.category} className={"iz-bar" + (on ? " on" : "")} onClick={() => { setCatFilter(c.category); loadInsights(c.category); }} title={`Show ${c.category}`}>
+                                <span className="iz-bl"><span className="rank-dot" style={{ background: catColor(c.category) }} /><span>{c.category}</span></span>
+                                <span className="iz-bt"><span className="iz-bf" style={{ width: `${Math.round((c.count / maxCat) * 100)}%`, background: catColor(c.category) }} /></span>
+                                <span className="iz-bn">{c.count}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="iz-cardf">{insights!.summary.failedItems} items · {insights!.summary.inspections} reports</div>
                       </div>
-                      <span className="cat-dot" style={{ background: catColor(t.category) }} />
+
+                      <div className="iz-card">
+                        <div className="iz-ddh">
+                          <div className="iz-sw" style={{ background: catColor(selCat) }} />
+                          <div>
+                            <div className="iz-ddn">{selCat}</div>
+                            <div className="iz-ddm">{selCount} item{selCount === 1 ? "" : "s"} across your reports · most repeated at the top</div>
+                          </div>
+                        </div>
+                        {items.length === 0 ? (
+                          <div className="page-sub" style={{ padding: "16px 20px", marginBottom: 0 }}>Nothing to show here yet.</div>
+                        ) : (
+                          <div className="iz-list">
+                            {items.map((t, i) => (
+                              <div className="iz-item" key={i}>
+                                <div className="iz-im">
+                                  <div className="iz-it">{t.title}</div>
+                                  <div className="iz-itk"><div className="iz-itf" style={{ width: `${Math.round((t.count / maxN) * 100)}%`, background: catColor(selCat) }} /></div>
+                                </div>
+                                <div className="iz-ic">{t.count}<small>×</small></div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="iz-ddf"><span className="more">{more > 0 ? `+ ${more} more ${selCat} item${more === 1 ? "" : "s"}` : "All items shown"}</span><span>the number is how many times it came up</span></div>
+                      </div>
                     </div>
-                  ))
-                )}
+                  );
+                })()}
 
                 <div className="pg-k" style={{ marginTop: 22 }}>Past inspections</div>
                 {/* Grouped the way they arrive: the council's statutory checks,

@@ -17,10 +17,15 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const category = url.searchParams.get("category");
 
-  const [summary, categories, top, inspections, sites, name] = await Promise.all([
+  const categories = await categoryCounts(scope);
+  // The drill-down always opens on a trade. With no explicit pick, default to
+  // the worst one so the panel is never empty on load, and tell the client
+  // which trade the returned items belong to.
+  const selectedCategory = category ?? categories[0]?.category ?? null;
+
+  const [summary, top, inspections, sites, name] = await Promise.all([
     historySummary(scope),
-    categoryCounts(scope),
-    topItems(scope, { category, limit: 12 }),
+    topItems(scope, { category: selectedCategory, limit: 12 }),
     listInspections(scope, { limit: 60 }),
     companyProjects(scope),
     companyName(scope.companyId),
@@ -31,6 +36,7 @@ export async function GET(req: Request) {
     summary,
     categories,
     topItems: top,
+    selectedCategory,
     inspections,
   });
 }

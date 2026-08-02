@@ -495,6 +495,59 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .ins-detail{color:var(--mut) !important;margin-top:5px !important;line-height:1.5}
 .cat-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;margin-top:6px}
 
+/* ─── Insights v2: KPI cards + "what keeps failing" chart + per-trade drill-down ─── */
+.iz-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:4px 0 12px}
+.iz-kpi{background:#fff;border:1px solid var(--line);border-radius:16px;padding:15px 17px;box-shadow:0 6px 22px rgba(12,42,71,.05)}
+.iz-kpi.hero{background:var(--grad);border:none;color:#fff;box-shadow:0 16px 40px rgba(10,141,237,.28)}
+.iz-lab{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.iz-kpi.hero .iz-lab{color:rgba(255,255,255,.82)}
+.iz-val{font-size:30px;font-weight:700;letter-spacing:-.02em;margin-top:7px;line-height:1}
+.iz-sub{font-size:12.5px;color:var(--slate);margin-top:7px}
+.iz-kpi.hero .iz-sub{color:rgba(255,255,255,.85)}
+.iz-trade{display:flex;align-items:center;gap:8px;margin-top:8px}
+.iz-trade .iz-val{font-size:20px;margin-top:0}
+.iz-note{font-size:12.5px;color:var(--slate);margin:0 2px 22px;display:flex;align-items:center;gap:7px}
+.iz-note b{color:var(--green);font-weight:700}
+
+.iz-split{display:grid;grid-template-columns:360px 1fr;gap:16px;align-items:start;margin-bottom:24px}
+.iz-card{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 6px 26px rgba(12,42,71,.05);overflow:hidden}
+.iz-cardh{padding:16px 18px 4px}
+.iz-cardt{font-size:14.5px;font-weight:600;color:var(--navy)}
+.iz-cards{font-size:12.5px;color:var(--slate);margin-top:3px}
+
+.iz-bars{padding:10px 12px 14px}
+.iz-bar{display:flex;align-items:center;gap:11px;width:100%;background:none;border:none;font-family:var(--font);cursor:pointer;padding:8px;border-radius:11px;text-align:left;transition:background .12s}
+.iz-bar:hover{background:var(--bg)}
+.iz-bar.on{background:rgba(65,195,255,.12)}
+.iz-bl{width:90px;flex-shrink:0;font-size:12px;font-weight:500;color:var(--navy);display:flex;align-items:center;gap:7px;line-height:1.15}
+.iz-bl span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iz-bt{flex:1;height:20px;background:var(--line2);border-radius:7px;overflow:hidden}
+.iz-bf{height:100%;border-radius:7px;transition:width .5s cubic-bezier(.2,.7,.3,1),opacity .15s}
+.iz-bar:not(.on) .iz-bf{opacity:.5}
+.iz-bn{width:28px;flex-shrink:0;text-align:right;font-size:14px;font-weight:700;color:var(--navy)}
+.iz-cardf{padding:2px 20px 15px;font-size:12px;color:var(--mut)}
+
+.iz-ddh{padding:17px 20px 14px;border-bottom:1px solid var(--line2);display:flex;align-items:center;gap:12px}
+.iz-sw{width:32px;height:32px;border-radius:10px;flex-shrink:0}
+.iz-ddn{font-size:17px;font-weight:700;color:var(--navy);letter-spacing:-.01em}
+.iz-ddm{font-size:12.5px;color:var(--slate);margin-top:2px}
+.iz-list{padding:8px 12px 4px}
+.iz-item{display:flex;align-items:center;gap:14px;padding:11px 10px;border-radius:11px}
+.iz-item:hover{background:var(--bg)}
+.iz-im{flex:1;min-width:0}
+.iz-it{font-size:13.5px;font-weight:500;color:var(--navy);margin-bottom:8px;line-height:1.25}
+.iz-itk{height:8px;background:var(--line2);border-radius:5px;overflow:hidden}
+.iz-itf{height:100%;border-radius:5px;transition:width .5s cubic-bezier(.2,.7,.3,1)}
+.iz-ic{width:44px;flex-shrink:0;text-align:right;font-size:16px;font-weight:700;color:var(--navy)}
+.iz-ic small{font-size:12px;font-weight:600;color:var(--mut)}
+.iz-ddf{padding:13px 18px 15px;font-size:12.5px;color:var(--slate);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;border-top:1px solid var(--line2)}
+.iz-ddf .more{font-weight:600;color:var(--navy)}
+
+@media(max-width:760px){
+  .iz-kpis{grid-template-columns:1fr 1fr}
+  .iz-split{grid-template-columns:1fr}
+}
+
 /* Status pill — .tag is only sized inside .ev, so this is the standalone one */
 .pill{font-size:10.5px;font-weight:600;padding:5px 11px;border-radius:8px;white-space:nowrap;flex:0 0 auto;align-self:center}
 .pill.pass{background:rgba(16,185,129,.12);color:var(--green)}
