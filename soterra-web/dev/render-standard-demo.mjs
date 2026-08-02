@@ -20,8 +20,14 @@ if (!token) throw new Error("BLOB_READ_WRITE_TOKEN missing");
 
 const PDF = "C:/Users/adam/Desktop/NZS-36042011 (5).pdf";
 const SLUG = "nzs-3604-2011";
-// PDF page numbers (not the printed 8-xx). Verified by reading the pages.
-const PAGES = [209, 210, 211];
+// PDF page numbers (not the printed 4-xx / 8-xx). Verified by reading each page.
+//   71  Table 4.1  fixings/fastenings protection by corrosion zone
+//   72  Table 4.3  nails and screws by corrosion zone
+//   73  clause 4.5.1  minimum concrete cover to reinforcing
+//   209 Table 8.8  which lintel table applies
+//   210 Table 8.9  lintel supporting roof only
+//   211 Table 8.10 lintel supporting roof and wall
+const PAGES = [71, 72, 73, 209, 210, 211];
 
 const { renderPageAsImage } = await import("unpdf");
 const { put } = await import("@vercel/blob");

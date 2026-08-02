@@ -13,12 +13,15 @@
 export type StandardDemoPage = { page: number; label: string };
 export type StandardDemoSet = { ref: string; slug: string; topic: RegExp; pages: StandardDemoPage[] };
 
+// One entry per demo topic. Each is matched on its own keyword regex so a
+// lintel question gets the lintel tables and a corrosion question gets the
+// durability tables — never the wrong ones. Order matters: the first entry
+// whose ref AND topic match wins (lintel is checked before fixings so a
+// "lintel fixing" phrasing still lands on the lintel tables).
 export const STANDARD_DEMOS: StandardDemoSet[] = [
   {
     ref: "NZS 3604:2011",
     slug: "nzs-3604-2011",
-    // Only attach these pages when the answer is genuinely about a lintel, so a
-    // stud or bracing question doesn't get handed the lintel tables.
     topic: /lintel/i,
     pages: [
       { page: 209, label: "Table 8.8 — which lintel table applies" },
@@ -26,16 +29,43 @@ export const STANDARD_DEMOS: StandardDemoSet[] = [
       { page: 211, label: "Table 8.10 — lintel supporting roof and wall" },
     ],
   },
+  {
+    ref: "NZS 3604:2011",
+    slug: "nzs-3604-2011",
+    // Corrosion / fixing material by exposure zone (coastal, sea spray).
+    topic: /\b(fixing|fixings|nail|nails|screw|screws|galvan|stainless|corros|coast|sea[\s-]?spray|rust|durabil)\b/i,
+    pages: [
+      { page: 71, label: "Table 4.1 — fixings protection by corrosion zone" },
+      { page: 72, label: "Table 4.3 — nails and screws by corrosion zone" },
+    ],
+  },
+  {
+    ref: "NZS 3604:2011",
+    slug: "nzs-3604-2011",
+    // Minimum concrete cover to reinforcing steel.
+    topic: /\b(concrete cover|cover to (?:the )?(?:steel|reinforc)|reinforc|rebar|reo)\b/i,
+    pages: [
+      { page: 73, label: "Clause 4.5.1 — concrete cover to reinforcing" },
+    ],
+  },
 ];
 
-/** The rendered pages available for a standards answer, or [] when we have none
- *  for this standard/topic. `context` is whatever text describes the answer
- *  (the question, or the "holds" line), used to keep pages on-topic. */
+const norm = (s: string) => s.replace(/\s+/g, "").toUpperCase().match(/(\d{3,4}(?:\.\d+)?)/)?.[1] ?? "";
+
+/** The rendered pages available for a standards answer, or null when we have
+ *  none for this standard/topic. `context` is whatever text describes the answer
+ *  (the question plus the "holds" line), used to keep pages on-topic. First
+ *  entry whose standard AND topic match wins. */
 export function demoPagesFor(standardRef: string, context: string): { slug: string; pages: StandardDemoPage[] } | null {
-  const norm = (s: string) => s.replace(/\s+/g, "").toUpperCase().match(/(\d{3,4}(?:\.\d+)?)/)?.[1] ?? "";
   const k = norm(standardRef);
-  const set = STANDARD_DEMOS.find((d) => norm(d.ref) === k);
-  if (!set) return null;
-  if (!set.topic.test(context)) return null;
-  return { slug: set.slug, pages: set.pages };
+  if (!k) return null;
+  const set = STANDARD_DEMOS.find((d) => norm(d.ref) === k && d.topic.test(context));
+  return set ? { slug: set.slug, pages: set.pages } : null;
+}
+
+/** Whether (slug, page) is a page we actually rendered — the gate the render
+ *  route checks so no arbitrary page can be requested. Considers every topic
+ *  entry for that slug, not just the first. */
+export function isStandardDemoPage(slug: string, page: number): boolean {
+  return STANDARD_DEMOS.some((d) => d.slug === slug && d.pages.some((p) => p.page === page));
 }

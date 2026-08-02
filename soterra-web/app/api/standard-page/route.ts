@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { get } from "@vercel/blob";
 import { canSeeDemoCorpus } from "@/lib/manufacturerIndex";
-import { STANDARD_DEMOS } from "@/lib/standardDemo";
+import { isStandardDemoPage } from "@/lib/standardDemo";
 
 export const runtime = "nodejs";
 
@@ -24,8 +24,7 @@ export async function GET(req: Request) {
 
   // Only a (slug, page) we actually rendered can be requested — no arbitrary
   // path can be assembled through this route.
-  const set = STANDARD_DEMOS.find((d) => d.slug === slug);
-  if (!set || !set.pages.some((pg) => pg.page === p)) return new Response("Not found", { status: 404 });
+  if (!isStandardDemoPage(slug, p)) return new Response("Not found", { status: 404 });
 
   try {
     const got = await get(`standard-demo/${slug}/${p}.png`, { access: "private" });
