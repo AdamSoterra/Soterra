@@ -515,6 +515,15 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .stdredact span{font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--mut)}
 .stdget{display:block;padding:11px 16px;border-top:1px solid var(--line2);font-size:13px;font-weight:600;color:var(--brand-d);text-decoration:none;background:rgba(14,143,230,.03)}
 .stdget:hover{background:rgba(14,143,230,.08)}
+/* The gated "your licensed copy" list — replaces the redaction band for a
+   demo-corpus account. Each row opens the real page in the citation viewer. */
+.stdpages{margin-top:11px;border:1px solid var(--line2);border-radius:11px;overflow:hidden}
+.stdpages-h{font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--mut);padding:8px 12px 6px;background:rgba(16,185,129,.05)}
+.stdpage{display:flex;align-items:center;gap:9px;width:100%;background:none;border:none;border-top:1px solid var(--line2);font-family:var(--font);font-size:13px;color:var(--navy);text-align:left;padding:10px 12px;cursor:pointer}
+.stdpage:hover{background:var(--bg)}
+.stdpage-ic{color:var(--brand-d);font-size:14px;flex-shrink:0}
+.stdpage span:nth-child(2){flex:1}
+.stdpage-go{color:var(--mut);font-size:17px;flex-shrink:0}
 
 /* Collapsible Insights section headers — a .pg-k label turned into a toggle. */
 .iz-toggle{display:flex;align-items:center;gap:9px;width:100%;background:none;border:none;font-family:var(--font);cursor:pointer;text-align:left}

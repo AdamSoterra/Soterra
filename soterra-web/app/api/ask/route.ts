@@ -16,7 +16,8 @@ import { DEMO_ID, getProjectIndex, type Page } from "@/lib/projectIndex";
 import { codeLabel, getCodeIndex } from "@/lib/codeIndex";
 import { determinationLabel, searchDeterminations } from "@/lib/determinations";
 import { resolveStandard } from "@/lib/standards";
-import { getManufacturerIndex, manufacturerLabel, visibleTo } from "@/lib/manufacturerIndex";
+import { demoPagesFor } from "@/lib/standardDemo";
+import { canSeeDemoCorpus, getManufacturerIndex, manufacturerLabel, visibleTo } from "@/lib/manufacturerIndex";
 import { companyIdForProject, type Scope } from "@/lib/company";
 import { searchHistory } from "@/lib/history";
 import { generateChecklistItems, createChecklist } from "@/lib/checklist";
@@ -64,8 +65,13 @@ type Card = {
   kind: string | null;
   visibility: "team" | "private";
   assigneeName?: string | null;
-  /** "standard" cards only: where to get the figure we can't reproduce. */
-  std?: { ref: string; title: string; section: string | null; holds: string; url: string };
+  /** "standard" cards only: where to get the figure we can't reproduce. `demo`
+   *  is only ever set for a DEMO_CORPUS account: the pages of that account's own
+   *  licensed copy, for personal evaluation. Never populated for a customer. */
+  std?: {
+    ref: string; title: string; section: string | null; holds: string; url: string;
+    demo?: { slug: string; pages: { page: number; label: string }[] };
+  };
 };
 
 const dayFmt = new Intl.DateTimeFormat("en-NZ", { timeZone: PROJECT_TZ, weekday: "short", day: "numeric", month: "short" });
@@ -721,6 +727,11 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
             cards: [],
           };
         }
+        // Personal-use evaluation only: for a demo-corpus account, attach the
+        // pages of that account's own licensed copy so they can see the real
+        // table in the UI. Never populated for a customer, and only when the
+        // topic matches (a stud question doesn't get the lintel pages).
+        const demo = canSeeDemoCorpus(userId) ? demoPagesFor(std.ref, `${holds} ${section ?? ""} ${name}`) : null;
         return {
           content: JSON.stringify({
             ok: true,
@@ -735,7 +746,7 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
             sub: std.clauses.join(", "),
             kind: null,
             visibility: "team",
-            std: { ref: std.ref, title: std.title, section, holds, url: std.url },
+            std: { ref: std.ref, title: std.title, section, holds, url: std.url, ...(demo ? { demo } : {}) },
           }],
         };
       }

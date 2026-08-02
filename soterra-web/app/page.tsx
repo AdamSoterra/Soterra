@@ -13,10 +13,12 @@ type Cite = {
   // "determination" = an MBIE ruling on a real dispute. Its own card and viewer,
   // rendered from MBIE's public PDF and always shown with its year, because a
   // ruling can rest on an Acceptable Solution that has since changed.
-  kind?: "manufacturer" | "determination";
+  kind?: "manufacturer" | "determination" | "standard";
   mfr?: string; doc?: string; page?: number; url?: string;
   /** Determination reference, "2024/001". */
   ref?: string;
+  /** Standard demo page: the slug (e.g. "nzs-3604-2011") for /api/standard-page. */
+  stdSlug?: string;
 };
 type AsstCard = {
   id: string;
@@ -28,8 +30,13 @@ type AsstCard = {
   kind: string | null;
   visibility: "team" | "private";
   assigneeName?: string | null;
-  /** "standard" cards: where to get a figure we are not licensed to reproduce. */
-  std?: { ref: string; title: string; section: string | null; holds: string; url: string };
+  /** "standard" cards: where to get a figure we are not licensed to reproduce.
+   *  `demo` is set only for a demo-corpus account (personal-use evaluation of the
+   *  account's own licensed copy) — a customer never receives it. */
+  std?: {
+    ref: string; title: string; section: string | null; holds: string; url: string;
+    demo?: { slug: string; pages: { page: number; label: string }[] };
+  };
 };
 // A manufacturer document we hold, from /api/manufacturer-docs. Drives reliable
 // manufacturer citations (card, page image, verify link) independent of what the
@@ -1855,9 +1862,31 @@ export default function Page() {
                                         {c.std.section ? <span className="stdsec">{c.std.section}</span> : null}
                                         {c.std.holds}
                                       </div>
-                                      <div className="stdredact" aria-label="Content withheld pending licence">
-                                        <span>content withheld pending licence</span>
-                                      </div>
+                                      {c.std.demo ? (
+                                        // Personal-use evaluation: your own licensed copy, this
+                                        // account only. Tap to read the real table.
+                                        <div className="stdpages">
+                                          <div className="stdpages-h">Your licensed copy</div>
+                                          {c.std.demo.pages.map((pg) => (
+                                            <button
+                                              key={pg.page}
+                                              className="stdpage"
+                                              onClick={() => setSheet({
+                                                code: c.std!.ref, title: pg.label, sub: c.std!.title, ans: "", hlTag: c.std!.ref,
+                                                kind: "standard", stdSlug: c.std!.demo!.slug, page: pg.page, url: c.std!.url,
+                                              })}
+                                            >
+                                              <span className="stdpage-ic">▤</span>
+                                              <span>{pg.label}</span>
+                                              <span className="stdpage-go">›</span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="stdredact" aria-label="Content withheld pending licence">
+                                          <span>content withheld pending licence</span>
+                                        </div>
+                                      )}
                                     </div>
                                     <a className="stdget" href={c.std.url} target="_blank" rel="noopener noreferrer">
                                       Free to download from Standards NZ ↗
@@ -2369,10 +2398,14 @@ export default function Page() {
                     ? sheet.ref && sheet.page
                       ? `/api/determination-page?ref=${encodeURIComponent(sheet.ref)}&p=${sheet.page}`
                       : null
-                    : projectId && sheet.doc && sheet.page
-                      ? `/api/plan-page?project=${encodeURIComponent(projectId)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}`
-                      : null;
-              const isMfr = sheet.kind === "manufacturer" || sheet.kind === "determination";
+                    : sheet.kind === "standard"
+                      ? sheet.stdSlug && sheet.page
+                        ? `/api/standard-page?ref=${encodeURIComponent(sheet.stdSlug)}&p=${sheet.page}`
+                        : null
+                      : projectId && sheet.doc && sheet.page
+                        ? `/api/plan-page?project=${encodeURIComponent(projectId)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}`
+                        : null;
+              const isMfr = sheet.kind === "manufacturer" || sheet.kind === "determination" || sheet.kind === "standard";
               return (
                 <>
                   <div className="sh-canvas">
