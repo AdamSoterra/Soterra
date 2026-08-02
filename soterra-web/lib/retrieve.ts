@@ -36,12 +36,51 @@ const SYN: Record<string, string[]> = {
   waterproof: ["waterproofing", "tanking", "membrane", "wet-area", "aqualine"],
   acoustic: ["noise", "sound", "stc", "iic", "rw"],
   noise: ["acoustic", "sound", "stc", "rw"],
+  // Everyday word → Code word. These matter more than they look: the Acceptable
+  // Solutions are written in a register nobody speaks on site, so the person who
+  // needs the answer uses the word the document never contains. F2/AS1 says
+  // "Glazing likely to be subject to human impact" and never once says "glass",
+  // so "does this window need safety glass" scored ZERO against the clause that
+  // answers it until these were added.
+  glass: ["glazing", "glazed", "4223", "impact"],
+  glazing: ["glass", "glazed", "4223", "impact"],
+  handrail: ["handrails", "barrier", "barriers", "balustrade", "graspable"],
+  balustrade: ["barrier", "barriers", "handrail", "handrails"],
+  barrier: ["balustrade", "handrail", "barriers"],
+  smoke: ["alarm", "alarms", "detector", "detectors", "domestic"],
+  alarm: ["smoke", "alarms", "detector", "detectors"],
+  stair: ["stairs", "stairway", "stairways", "riser", "tread", "going", "pitch"],
+  stairs: ["stair", "stairway", "stairways", "riser", "tread", "going"],
+  shower: ["wet-area", "wet", "tanking", "waterproofing", "membrane", "splash"],
+  clearance: ["clearances", "separation", "gap", "distance"],
+  ground: ["finished", "clearance", "paved", "unpaved"],
+  pile: ["piles", "foundation", "foundations", "subfloor"],
+  deck: ["decks", "decking", "balcony", "threshold"],
 };
 
+// Words that carry no retrieval signal but do carry score. People ask whole
+// questions ("does this window need safety glass"), and the filler outweighs the
+// two words that matter: every long page contains "does/this/need" somewhere, so
+// a dense unrelated page can outscore the short clause that actually answers it.
+// Deliberately conservative — anything with construction meaning stays, so no
+// "fall", "going", "rise", "run", "fire", "door", "over", "under", "clear".
+const STOP = new Set([
+  "the", "a", "an", "and", "or", "but", "if", "of", "to", "in", "on", "at", "by", "with", "from",
+  "is", "are", "was", "were", "be", "been", "am", "do", "does", "did", "have", "has", "had",
+  "i", "we", "you", "my", "our", "your", "it", "its", "this", "that", "these", "those", "there",
+  "what", "which", "who", "when", "where", "how", "why", "can", "could", "should", "would", "will",
+  "need", "needs", "needed", "want", "get", "got", "use", "used", "any", "some", "much", "many",
+  "please", "pls", "me", "us", "about", "as", "so", "just", "also", "here", "than", "then",
+]);
+
 export function expand(q: string): string[] {
-  const terms = (q.toLowerCase().match(/[a-z0-9-]+/g) || []).filter((t) => t.length > 1);
-  const out = new Set(terms);
-  for (const t of terms) for (const s of SYN[t] || []) out.add(s);
+  const all = (q.toLowerCase().match(/[a-z0-9-]+/g) || []).filter((t) => t.length > 1);
+  // Keep the raw terms if the question was ENTIRELY filler, so a odd query still
+  // retrieves something rather than nothing.
+  const terms = all.filter((t) => !STOP.has(t));
+  const base = terms.length ? terms : all;
+  const out = new Set(base);
+  for (const t of base) for (const s of SYN[t] || []) out.add(s);
   return [...out];
 }
 
