@@ -10,8 +10,13 @@ type Cite = {
   // Set when the answer came from a manufacturer's manual (e.g. GIB) rather than
   // the customer's own plans. Drives a different card, a different viewer (the
   // real page rendered as an image) and a link to the manufacturer's own PDF.
-  kind?: "manufacturer";
+  // "determination" = an MBIE ruling on a real dispute. Its own card and viewer,
+  // rendered from MBIE's public PDF and always shown with its year, because a
+  // ruling can rest on an Acceptable Solution that has since changed.
+  kind?: "manufacturer" | "determination";
   mfr?: string; doc?: string; page?: number; url?: string;
+  /** Determination reference, "2024/001". */
+  ref?: string;
 };
 type AsstCard = {
   id: string;
@@ -1825,7 +1830,7 @@ export default function Page() {
                               )}
                               {m.cites?.map((c, k) => (
                                 <div className="cite" key={k} onClick={() => setSheet(c)}>
-                                  <div className="cic">{c.kind === "manufacturer" ? "📕" : "📐"}</div>
+                                  <div className="cic">{c.kind === "manufacturer" ? "📕" : c.kind === "determination" ? "⚖️" : "📐"}</div>
                                   <div className="ct"><b>{c.code}{c.title ? ` · ${c.title}` : ""}</b><small>{c.sub}</small></div>
                                   <div className="ca">›</div>
                                 </div>
@@ -2333,10 +2338,14 @@ export default function Page() {
                       // old frozen image. Bump this number after any such change.
                       `/api/doc-page?m=${encodeURIComponent(sheet.mfr)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}&v=2`
                     : null
-                  : projectId && sheet.doc && sheet.page
-                    ? `/api/plan-page?project=${encodeURIComponent(projectId)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}`
-                    : null;
-              const isMfr = sheet.kind === "manufacturer";
+                  : sheet.kind === "determination"
+                    ? sheet.ref && sheet.page
+                      ? `/api/determination-page?ref=${encodeURIComponent(sheet.ref)}&p=${sheet.page}`
+                      : null
+                    : projectId && sheet.doc && sheet.page
+                      ? `/api/plan-page?project=${encodeURIComponent(projectId)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}`
+                      : null;
+              const isMfr = sheet.kind === "manufacturer" || sheet.kind === "determination";
               return (
                 <>
                   <div className="sh-canvas">
@@ -3044,7 +3053,9 @@ function assistantMsg(content: string, cards?: AsstCard[], mfrDocs?: MfrDoc[]): 
     src: first
       ? first.kind === "manufacturer"
         ? `📕 FROM ${(first.mfr || "the manufacturer").toUpperCase()}’S MANUAL`
-        : "📐 FROM YOUR PLANS"
+        : first.kind === "determination"
+          ? "⚖️ FROM AN MBIE DETERMINATION"
+          : "📐 FROM YOUR PLANS"
       : undefined,
     text: fmt(body),
     raw: body,
@@ -3137,6 +3148,30 @@ function makeCite(sourceLine: string, body: string, mfrDocs?: MfrDoc[]): Cite {
       mfr,
       doc: docName,
       page: pageNum ? parseInt(pageNum[0], 10) : 1,
+    };
+  }
+
+  // MBIE determination. The label is "Determination 2024/001 · <subject> · page
+  // 3 of 15". These are public documents on building.govt.nz at a stable,
+  // reference-derived URL, so the viewer can render the real page and link to
+  // the original without us hosting anything.
+  const detRef = parts[0]?.match(/^Determination\s+(\d{4})\/(\d{1,3})/i);
+  if (detRef) {
+    const [, year, num] = detRef;
+    const ref = `${year}/${num.padStart(3, "0")}`;
+    const pageSeg = parts.find((p) => /^page\s/i.test(p)) || "";
+    const pageNum = pageSeg.match(/\d+/);
+    const subject = parts.slice(1).find((p) => !/^page\s/i.test(p)) || "";
+    return {
+      code: `Determination ${ref}`,
+      title: subject,
+      sub: "MBIE determination",
+      ans: fmt(body),
+      hlTag: pageSeg || `Determination ${ref}`,
+      kind: "determination",
+      ref,
+      page: pageNum ? parseInt(pageNum[0], 10) : 1,
+      url: `https://www.building.govt.nz/assets/Uploads/resolving-problems/determinations/${year}/${year}-${num.padStart(3, "0")}.pdf`,
     };
   }
 

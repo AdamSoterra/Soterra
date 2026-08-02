@@ -204,6 +204,31 @@ export const codePages = pgTable(
 // `licence` is what makes a withdrawal survivable: a manufacturer who says no,
 // or later changes their mind, is switched off with one UPDATE rather than a
 // migration and a redeploy.
+// ─── MBIE determinations (CC BY 4.0) — how the Building Code was actually
+//     applied when someone argued about it. Kept OUT of code_pages on purpose:
+//     code_pages is loaded whole into memory per warm server, and a
+//     determination decides one case on its own facts, so it is guidance about
+//     the Code and never the rule itself. Searched via Postgres full-text
+//     (the `tsv` generated column, created in dev/migrate-determinations.mjs). ───
+export const determinationPages = pgTable(
+  "determination_pages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ref: text("ref").notNull(), // "2024/001" — always cited WITH the year, so currency is visible
+    year: integer("year").notNull(),
+    subject: text("subject"), // the "Regarding …" line off page 1
+    file: text("file").notNull(),
+    page: integer("page").notNull(),
+    npages: integer("npages").notNull(),
+    text: text("text").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byRef: index("determination_pages_ref_idx").on(t.ref),
+    byYear: index("determination_pages_year_idx").on(t.year),
+  })
+);
+
 export const manufacturerPages = pgTable(
   "manufacturer_pages",
   {
