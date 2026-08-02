@@ -97,6 +97,17 @@ function groupInspections(rows: InspectionRow[]): { key: string; label: string; 
   );
 }
 
+// A collapsible section heading on Insights: the same .pg-k label, made into a
+// button with a chevron that folds its body away.
+function IzToggle({ label, count, open, onClick }: { label: string; count?: number | null; open: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className="pg-k iz-toggle" onClick={onClick} aria-expanded={open}>
+      <span className={"iz-chev" + (open ? " open" : "")}>›</span>
+      <span>{label}{count != null && count > 0 ? ` (${count})` : ""}</span>
+    </button>
+  );
+}
+
 // Category colours — must match lib/categories.ts CATEGORY_COLOR.
 const CAT_COLOR: Record<string, string> = {
   Fire: "#EF4444",
@@ -493,6 +504,10 @@ export default function Page() {
   const [insights, setInsights] = useState<Insights | null>(null);
   const [insightsLoaded, setInsightsLoaded] = useState(false);
   const [catFilter, setCatFilter] = useState<string | null>(null);
+  // Which Insights sections are collapsed. Empty = all open; a section is
+  // closed when its key is true. Lets a manager fold away the long lists.
+  const [izClosed, setIzClosed] = useState<Record<string, boolean>>({});
+  const izToggle = (k: string) => setIzClosed((s) => ({ ...s, [k]: !s[k] }));
   const [openInspection, setOpenInspection] = useState<{ inspection: InspectionRow; items: { id: string; category: string; title: string; detail: string | null; location: string | null }[] } | null>(null);
   const reportFileRef = useRef<HTMLInputElement>(null);
   const [repCurrent, setRepCurrent] = useState<{ name: string; phase: string; pct: number } | null>(null);
@@ -2111,14 +2126,14 @@ export default function Page() {
                 invisible on a fresh site until a report was uploaded. */}
             {insightsLoaded && (
               <div style={{ marginTop: 18 }}>
-                <div className="pg-k" style={{ marginTop: 0 }}>Pre-inspection checks{checklists.length > 0 ? ` (${checklists.length})` : ""}</div>
-                {checklists.length === 0 ? (
+                <IzToggle label="Pre-inspection checks" count={checklists.length} open={!izClosed.checks} onClick={() => izToggle("checks")} />
+                {!izClosed.checks && (checklists.length === 0 ? (
                   <div className="page-sub">
                     None yet on {projName}. A check is built from this site&apos;s drawings, the Building Code and your own history — tick it off on your phone before the inspector turns up.
                   </div>
                 ) : (
                   checklists.map((c) => <ChecklistRow key={c.id} c={c} onOpen={() => openChecklistById(c.id)} />)
-                )}
+                ))}
               </div>
             )}
 
@@ -2146,13 +2161,12 @@ export default function Page() {
               </div>
             ) : (
               <>
-                {/* Only the council grades an inspection pass/partial/fail. A
-                    consultant's site observation report has no verdict, so a
-                    pass rate over ALL reports is a made-up number — show the
-                    item count instead until there's something graded. */}
                 {/* Headline counts — what fails and how much. No grading, no
                     reinspections, no fix-tracking: this page just learns what
-                    keeps getting pulled up. */}
+                    keeps getting pulled up. The whole block folds under one toggle. */}
+                <IzToggle label="What keeps failing" open={!izClosed.fails} onClick={() => izToggle("fails")} />
+                {!izClosed.fails && (
+                <>
                 <div className="iz-kpis" style={{ marginTop: 4 }}>
                   <div className="iz-kpi hero">
                     <div className="iz-lab">Items flagged</div>
@@ -2192,8 +2206,8 @@ export default function Page() {
                     <div className="iz-split">
                       <div className="iz-card">
                         <div className="iz-cardh">
-                          <div className="iz-cardt">What keeps failing</div>
-                          <div className="iz-cards">By trade, across every report. Tap one to open it.</div>
+                          <div className="iz-cardt">By trade</div>
+                          <div className="iz-cards">Across every report. Tap one to open it.</div>
                         </div>
                         <div className="iz-bars">
                           {insights!.categories.map((c) => {
@@ -2238,11 +2252,13 @@ export default function Page() {
                     </div>
                   );
                 })()}
+                </>
+                )}
 
-                <div className="pg-k" style={{ marginTop: 22 }}>Past inspections</div>
+                <IzToggle label="Past inspections" count={insights!.inspections.length} open={!izClosed.past} onClick={() => izToggle("past")} />
                 {/* Grouped the way they arrive: the council's statutory checks,
                     then each consultant discipline under its own heading. */}
-                {groupInspections(insights!.inspections).map((g) => (
+                {!izClosed.past && groupInspections(insights!.inspections).map((g) => (
                   <div key={g.key}>
                     <div className="sub-k">{g.label}<span>{g.rows.length}</span></div>
                     {g.rows.map((r) => (
@@ -2265,7 +2281,8 @@ export default function Page() {
                   </div>
                 ))}
 
-                <div className="pg-k" style={{ marginTop: 22 }}>Add more reports</div>
+                <IzToggle label="Add more reports" open={!izClosed.addmore} onClick={() => izToggle("addmore")} />
+                {!izClosed.addmore && (
                 <div
                   className="drop"
                   style={{ padding: "26px 20px", cursor: repCurrent ? "default" : "pointer", outline: repDragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
@@ -2276,6 +2293,7 @@ export default function Page() {
                   <p>{repCurrent ? repCurrent.name : "Council checklists or a consultant's site observation report — PDF with real text, not a scan."}</p>
                   {repCurrent && <div className="upbar"><div className="upbar-fill" style={{ width: `${Math.max(repCurrent.pct, 4)}%` }} /></div>}
                 </div>
+                )}
               </>
             )}
 
