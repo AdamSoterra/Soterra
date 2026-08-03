@@ -330,11 +330,13 @@ html,body{overflow-x:hidden}
 
 /* ════════ SHEET MODAL ════════ */
 .scrim{position:fixed;inset:0;background:rgba(12,42,71,.5);backdrop-filter:blur(3px);z-index:80;display:flex;align-items:center;justify-content:center;padding:24px}
-.sheet{width:100%;max-width:680px;max-height:88vh;background:#fff;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 40px 90px rgba(12,42,71,.42)}
-.sh-top{height:58px;flex:0 0 58px;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line)}
+.sheet{width:100%;max-width:680px;max-height:88vh;background:#fff;border-radius:20px;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;box-shadow:0 40px 90px rgba(12,42,71,.42)}
+/* Header pinned while the viewer scrolls, so one scrollbar reaches the very
+   bottom — the page image, the answer and the "open the full document" link. */
+.sh-top{height:58px;flex:0 0 58px;position:sticky;top:0;z-index:3;background:#fff;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line);border-top-left-radius:20px;border-top-right-radius:20px}
 .sh-top .ti{flex:1}.sh-top .ti b{font-size:14px;color:var(--navy);display:block}.sh-top .ti small{font-size:11.5px;color:var(--mut)}
 .sh-x{width:34px;height:34px;border-radius:10px;border:none;background:var(--bg);color:var(--slate);cursor:pointer;font-size:16px}
-.sh-canvas{flex:1;overflow:auto;background:#5A6B80;display:flex;align-items:center;justify-content:center;padding:24px;min-height:250px;position:relative}
+.sh-canvas{flex:0 0 auto;background:#5A6B80;display:flex;align-items:center;justify-content:center;padding:24px;min-height:250px;position:relative}
 /* Expand-to-full-screen button, top-right of the page preview. */
 .sh-expand{position:absolute;top:12px;right:12px;z-index:2;width:34px;height:34px;border-radius:9px;border:none;background:rgba(12,42,71,.55);color:#fff;cursor:pointer;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 .sh-expand:hover{background:rgba(12,42,71,.82)}
@@ -353,7 +355,7 @@ html,body{overflow-x:hidden}
 .sh-doc{max-width:100%;max-height:52vh;object-fit:contain;background:#fff;box-shadow:0 10px 34px rgba(0,0,0,.4);border-radius:2px;transition:opacity .2s}
 .sh-msg{position:absolute;color:#D5DEE8;font-size:13px;font-weight:600;text-align:center;line-height:1.7}
 .sh-msg a{color:#8FD0FF;font-weight:700}
-.sh-ans{flex:0 0 auto;padding:18px 20px 22px;border-top:1px solid var(--line);max-height:36%;overflow-y:auto}
+.sh-ans{flex:0 0 auto;padding:18px 20px 22px;border-top:1px solid var(--line)}
 /* full-screen page image */
 /* margin:auto (not align/justify-center) so that when the image is zoomed BIGGER
    than the viewport, both edges stay reachable by scroll — flex centering clips
