@@ -31,6 +31,11 @@ import { blockersFor } from "./inspectionOrder";
 // a plan lookup or a code figure. The drawings were on site. Nobody checked.
 
 const MODEL = "claude-opus-4-8";
+// The inspection checklist cites the drawings, the Code and the manufacturer
+// manuals, so it stays on Opus — a fabricated citation there is unacceptable. A
+// safety plan (SWMS) has no retrieval; it's standard HSWA / WorkSafe knowledge,
+// which Sonnet writes just as well for ~a fifth of the cost. So SWMS runs cheaper.
+const SWMS_MODEL = "claude-sonnet-4-6";
 
 export type ChecklistKind = "inspection" | "ccc" | "swms";
 
@@ -346,7 +351,7 @@ async function generateSwmsItems(task: string): Promise<GenerateResult> {
   const anthropic = new Anthropic({ maxRetries: 2 });
   try {
     const resp = await anthropic.messages.create({
-      model: MODEL,
+      model: SWMS_MODEL,
       max_tokens: 8000,
       thinking: { type: "adaptive" },
       output_config: { effort: "high", format: { type: "json_schema", schema: SWMS_SCHEMA as unknown as Record<string, unknown> } },
