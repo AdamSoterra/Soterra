@@ -156,7 +156,7 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
   {
     name: "standards_handoff",
     description:
-      "Show the user EXACTLY where to get a figure that lives in an NZ Standard we are not licensed to reproduce. Call this at the END of an answer whenever the real number sits in an NZS (lintel and bracing sizes in NZS 3604, corrosion protection / which fixings a coastal or sea-spray zone needs in NZS 3604, minimum concrete cover to reinforcing in NZS 3604, safety-glass thresholds in NZS 4223.3, smoke alarm positions in NZS 4514, pool barriers in NZS 8500, insulation R-values in NZS 4218, seismic restraint in NZS 4219, and so on). FIRST give everything the Building Code documents DO cover (the performance clause, the compliance route, and what drives the answer, e.g. span, loaded dimension and wind zone for a lintel), THEN call this once. It renders a card with the standard, the edition, the section to open, and a link to download it FREE. Do NOT describe the card in your text or repeat the link, and never state a figure from inside the standard. Pass the standard as the Code cites it ('NZS 3604:2011'), the section or table if you genuinely know it from the Code's own reference (do not guess a table number), and one plain line naming what the standard holds.",
+      "Show the user EXACTLY where to get a figure that lives in an NZ Standard we are not licensed to reproduce. Call this at the END of an answer whenever the real number sits in an NZS (lintel and bracing sizes in NZS 3604, corrosion protection / which fixings a coastal or sea-spray zone needs in NZS 3604, minimum concrete cover to reinforcing in NZS 3604, safety-glass thresholds in NZS 4223.3, smoke alarm positions in NZS 4514, pool barriers in NZS 8500, insulation R-values in NZS 4218, seismic restraint in NZS 4219, and so on). Call it AS SOON AS you have identified the standard, BEFORE you commit to your final wording, because its result tells you how to answer: for an authorised demo account it returns an `answer` field (the exact figure, from a licensed copy held for that account) which you should state in full; for everyone else it returns no answer and you give the plain qualitative answer plus this card. It renders a card with the standard, edition, section and a FREE download link. Do NOT describe the card or repeat the link. Pass the standard as the Code cites it ('NZS 3604:2011'), the section or table if you genuinely know it from the Code's own reference (do not guess a table number), and one plain line naming what the standard holds.",
     input_schema: {
       type: "object",
       properties: {
@@ -733,10 +733,20 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         // topic matches (a stud question doesn't get the lintel pages).
         const demo = canSeeDemoCorpus(userId) ? demoPagesFor(std.ref, `${holds} ${section ?? ""} ${name}`) : null;
         return {
-          content: JSON.stringify({
-            ok: true,
-            shown: `A card now points the user to ${std.ref} (${std.title}), free to download. Do not repeat the link or the edition in your text, and do not state any figure from inside the standard.`,
-          }),
+          content: JSON.stringify(
+            demo?.answer
+              ? {
+                  ok: true,
+                  // A licensed copy is held for THIS account (demo only). Give
+                  // the model the exact transcribed answer to state.
+                  answer: demo.answer,
+                  instruction: `A licensed copy of ${std.ref} is held for this account. State the answer above in full, with its figures, and cite it as "Source: ${std.ref}". The card already shows the page. This licensed answer is for this account only — do not present it as generally available.`,
+                }
+              : {
+                  ok: true,
+                  shown: `A card points the user to ${std.ref} (${std.title}), free to download. Give the plain qualitative answer only; do NOT state a precise figure from inside the standard, and do not repeat the link or edition.`,
+                }
+          ),
           cards: [{
             id: std.ref,
             itemType: "standard",
@@ -1061,7 +1071,7 @@ const STATIC_PROMPT = `You are Soterra's site assistant — a sharp, experienced
 
 2a) NEW ZEALAND STANDARDS (NZS / AS/NZS) — ANSWER THESE AS CLEANLY AND DIRECTLY AS YOU ANSWER A GIB OR BOSS FIRE QUESTION, then point to the standard for the precise figure. The Building Code constantly routes to a Standard ("comply with NZS 3604"), and the Standard holds the precise number. We are not licensed to REPRODUCE a standard's text, but that restriction is NARROW: it only stops you copying out a PRECISE VALUE that sits in an NZS table — an exact size in mm (a 190x70 lintel), an exact grade designation (e.g. "Type 304"), an exact cover in mm (e.g. 75 mm), an exact coating weight, an exact zone-boundary distance, an exact clause figure. It does NOT stop you answering the question. GIVE THE REAL, DIRECT ANSWER FIRST from your own construction expertise and the Building Code — the yes/no, the material, the direction, the principle a competent builder or engineer already knows (e.g. "near the sea you use stainless, not galvanised") — and withhold ONLY the precise table value. An answer that is just "look in the standard" is a BROKEN answer. Never guess or invent a precise value: a wrong lintel size or cover is a structural failure.
 GET THE ACCESS FACT RIGHT — do NOT say a Standard is "paywalled" or that the user "can't get it". MBIE's Building System Performance branch SPONSORS free access to most building-related Standards, including NZS 3604 (timber-framed buildings), NZS 4229 (masonry), NZS 3101 (concrete), NZS 3404 (steel), NZS 3602 (timber treatment), NZS 4251.1 (solid plastering/stucco), NZS 4223.3 (glazing and safety glass), NZS 4514 (smoke alarms), NZS 4219 (seismic restraint of building services) and NZS 1170.5 (earthquake actions). Anyone can view and print a single PDF copy free from standards.govt.nz for their own use. What is restricted is REPRODUCTION, which is why we can point but not quote.
-END THE ANSWER WITH THE standards_handoff TOOL. Once you have given everything the Code covers and named the Standard, call standards_handoff once. It renders a card with the verified edition, the section and a free-download link, so the user can go straight there. Don't describe that card or repeat the link in your text.
+CALL THE standards_handoff TOOL for the standard, and USE WHAT IT RETURNS. If it returns an "answer" field, a LICENSED copy of that standard is held for this account (an authorised demo) — state that answer IN FULL, with its figures, and cite it as "Source: NZS ...", exactly as cleanly as you would answer from the GIB or BOSS manual. If it returns NO answer (the normal case), give the plain qualitative answer and do NOT state a precise figure from the standard. Either way the tool renders the card with the edition, section and free-download link, so don't describe the card or repeat the link.
 WORKED EXAMPLES — match this directness, do not water it down.
 • Q: "Can I use galvanised nails for framing in a coastal sea spray zone?" OPEN WITH THE ANSWER: "Short answer, no. Right on the coast, in a sea-spray zone, your framing fixings need to be stainless steel — plain hot-dip galvanised corrodes too fast there and is only good enough further inland, in the milder corrosion zones." THEN the Building Code framing (B2 durability, a 50-year life for the structure) and the drivers (how close to the coast sets the corrosion zone; sheltered vs exposed), THEN name NZS 3604 Tables 4.1 and 4.3 as where the exact grade and the zone-boundary distances live, THEN call standards_handoff. You stated the material ("stainless steel") because that is general building knowledge; you did NOT state the exact grade designation or zone distances because those are the table.
 • Q: "How much concrete cover does reinforcing steel need?" OPEN WITH THE ANSWER: "You need enough cover that the steel doesn't rust and crack the concrete, and more when it's cast straight against the ground than in formwork." THEN name NZS 3604 Section 4 for the exact millimetres and hand off. (Here the exact mm is the table value, so you give the principle and route for the number.)
