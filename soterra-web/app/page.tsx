@@ -1847,7 +1847,7 @@ export default function Page() {
                               )}
                               {m.cites?.map((c, k) => (
                                 <div className="cite" key={k} onClick={() => setSheet(c)}>
-                                  <div className="cic">{c.kind === "manufacturer" ? "📕" : c.kind === "determination" ? "⚖️" : "📐"}</div>
+                                  <div className="cic">{c.kind === "manufacturer" ? "📕" : c.kind === "determination" ? "⚖️" : c.kind === "standard" ? "📘" : "📐"}</div>
                                   <div className="ct"><b>{c.code}{c.title ? ` · ${c.title}` : ""}</b><small>{c.sub}</small></div>
                                   <div className="ca">›</div>
                                 </div>
@@ -2448,11 +2448,19 @@ export default function Page() {
                     )}
                   </div>
                   <div className="sh-ans">
-                    <div className="src">{isMfr ? `📕 FROM ${(sheet.mfr || "THE MANUFACTURER").toUpperCase()}’S MANUAL` : "📐 ANSWER FROM THIS SHEET"}</div>
+                    <div className="src">
+                      {sheet.kind === "manufacturer"
+                        ? `📕 FROM ${(sheet.mfr || "THE MANUFACTURER").toUpperCase()}’S MANUAL`
+                        : sheet.kind === "determination"
+                          ? "⚖️ FROM AN MBIE DETERMINATION"
+                          : sheet.kind === "standard"
+                            ? `📘 FROM ${(sheet.code || "THE NZS STANDARD").toUpperCase()}`
+                            : "📐 ANSWER FROM THIS SHEET"}
+                    </div>
                     <p dangerouslySetInnerHTML={{ __html: sheet.ans }} />
                     {isMfr && sheet.url && (
                       <a className="sh-open" href={sheet.url} target="_blank" rel="noopener noreferrer">
-                        Open the full manual on {hostOf(sheet.url)} ↗
+                        {sheet.kind === "standard" ? "Open the full standard" : sheet.kind === "determination" ? "Open the full determination" : "Open the full manual"} on {hostOf(sheet.url)} ↗
                       </a>
                     )}
                   </div>
@@ -3123,7 +3131,9 @@ function assistantMsg(content: string, cards?: AsstCard[], mfrDocs?: MfrDoc[]): 
         ? `📕 FROM ${(first.mfr || "the manufacturer").toUpperCase()}’S MANUAL`
         : first.kind === "determination"
           ? "⚖️ FROM AN MBIE DETERMINATION"
-          : "📐 FROM YOUR PLANS"
+          : first.kind === "standard"
+            ? `📘 FROM ${(first.code || "THE NZS STANDARD").toUpperCase()}`
+            : "📐 FROM YOUR PLANS"
       : undefined,
     text: fmt(body),
     raw: body,
@@ -3240,6 +3250,31 @@ function makeCite(sourceLine: string, body: string, mfrDocs?: MfrDoc[]): Cite {
       ref,
       page: pageNum ? parseInt(pageNum[0], 10) : 1,
       url: `https://www.building.govt.nz/assets/Uploads/resolving-problems/determinations/${year}/${year}-${num.padStart(3, "0")}.pdf`,
+    };
+  }
+
+  // NZS / AS/NZS standard citation (e.g. "NZS 3604:2011, Tables 4.1 and 4.3").
+  // Without this branch it falls through to the plans default and shows the wrong
+  // "FROM YOUR PLANS" label. The standards_handoff card beside the answer carries
+  // the tappable pages; this makes the inline citation label correctly, and for a
+  // demo account it opens the same page when the Source names a known table.
+  const stdRef = parts[0]?.match(/^((?:AS\/)?NZS\s*\d{3,4}(?:\.\d+)?(?::\s*\d{4})?)/i);
+  if (stdRef) {
+    const ref = stdRef[1].replace(/\s+/g, " ").trim();
+    const tbl = sourceLine.match(/\b(?:Table|Clause)\s+(\d+\.\d+(?:\.\d+)?)/i)?.[1];
+    const TBL_PAGE: Record<string, number> = { "4.1": 71, "4.3": 72, "8.8": 209, "8.9": 210, "8.10": 211, "4.5.1": 73 };
+    const pg = tbl ? TBL_PAGE[tbl] : undefined;
+    const rest = parts.slice(1).filter((p) => p !== ref).join(" · ");
+    return {
+      code: ref,
+      title: rest,
+      sub: "NZS standard",
+      ans: fmt(body),
+      hlTag: ref,
+      kind: "standard",
+      stdSlug: /3604/.test(ref) ? "nzs-3604-2011" : undefined,
+      page: pg,
+      url: /3604/.test(ref) ? "https://www.standards.govt.nz/shop/nzs-36042011" : "https://www.standards.govt.nz/",
     };
   }
 
