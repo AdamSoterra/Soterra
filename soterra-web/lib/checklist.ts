@@ -32,7 +32,7 @@ import { blockersFor } from "./inspectionOrder";
 
 const MODEL = "claude-opus-4-8";
 
-export type ChecklistKind = "inspection" | "ccc";
+export type ChecklistKind = "inspection" | "ccc" | "swms";
 
 // ─── The CCC evidence pack ───────────────────────────────────────────────
 // Second checklist type, same engine, different item source. These are the
@@ -175,6 +175,11 @@ export async function generateChecklistItems(
   scope: Scope,
   opts: { kind: ChecklistKind; inspectionCode: string | null; title: string }
 ): Promise<GenerateResult> {
+  // A safety plan (SWMS / JSA) is grounded in HSWA + WorkSafe good practice, not
+  // in this site's drawings, so it takes its own path — no plan/Code/manual
+  // retrieval, just the task.
+  if (opts.kind === "swms") return generateSwmsItems(opts.title);
+
   // The CCC pack is a fixed evidence list, not a retrieval problem — the
   // documents a council wants don't change per site.
   if (opts.kind === "ccc") {
@@ -282,6 +287,91 @@ export async function generateChecklistItems(
     return { ok: true, items };
   } catch (e) {
     console.error("checklist generation failed:", e);
+    const msg = e instanceof Anthropic.APIError && e.status === 400 && /credit balance/i.test(String(e.message))
+      ? "The assistant is out of credit — top up the Anthropic account and this will work again."
+      : "The assistant couldn't be reached just now. Give it a moment and try again.";
+    return { ok: false, reason: "failed", message: msg };
+  }
+}
+
+// ─── Safety plan (SWMS / JSA) ────────────────────────────────────────────
+//
+// Same interactive checklist, different source of authority. A Safe Work Method
+// Statement / Job Safety Analysis is grounded in the Health and Safety at Work
+// Act 2015 and WorkSafe NZ good practice, not in the site's drawings — so it has
+// no retrieval, just the task. Each item is a significant hazard with its
+// controls in hierarchy-of-controls order. It is deliberately framed as a DRAFT:
+// under HSWA the PCBU must finalise it WITH the workers doing the job.
+
+const SWMS_SCHEMA = {
+  type: "object",
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "The hazard, in the context of the task, under 14 words. Start with the risk: \"Fall from the first-floor slab edge during formwork\"." },
+          detail: { type: "string", description: "The practical controls, in HIERARCHY-OF-CONTROLS order (eliminate first, PPE last). Put the real control in, not \"be careful\". One to three sentences." },
+          source: { type: "string", enum: ["hsw", "code"], description: "\"hsw\" for a HSWA duty or WorkSafe good-practice control; \"code\" only when a specific NZ standard genuinely governs it." },
+          source_ref: { type: "string", description: "The named source, e.g. \"WorkSafe: Working at height\" or \"HSWA 2015 — hierarchy of controls\". NEVER invent a regulation clause number or an exposure/distance figure you are not sure of; name the guidance instead." },
+          category: { type: "string", description: "The hazard area, e.g. \"Working at height\", \"Electrical\", \"Excavation\", \"Mobile plant\", \"Manual handling\", \"Dust / silica\", \"Hazardous substances\", \"Public / site access\", \"Fire / hot work\"." },
+        },
+        required: ["title", "detail", "source", "source_ref", "category"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["items"],
+  additionalProperties: false,
+} as const;
+
+const SWMS_SYSTEM = `You write a site-specific Safe Work Method Statement (SWMS / JSA) for ONE New Zealand construction task, the way an experienced site safety lead drafts it before the job starts.
+
+Ground everything in the Health and Safety at Work Act 2015 (HSWA) and WorkSafe New Zealand good-practice guidance. Aotearoa New Zealand only — never Australian or UK rules.
+
+METHOD
+- Identify the SIGNIFICANT hazards for THIS specific task — the ones that actually hurt people on this kind of work. Do not pad with generic office-safety items.
+- For each hazard, give practical controls in the HIERARCHY OF CONTROLS order: eliminate the hazard first, then substitute, then isolate / engineer it out, then administrative controls (method, sequencing, training, exclusion zones, permits, spotters), and PPE LAST as the backstop — never PPE as the only control.
+- Lead with the highest-harm hazards: falls from height, electricity, excavation collapse, mobile plant and site traffic, structural or trench collapse — then the rest.
+- Where a well-established NZ standard or WorkSafe good-practice guide genuinely governs a control, name it (working at height, excavation, scaffolding, confined spaces, silica/dust, hazardous substances, hot work, temporary works, mobile plant). Do NOT invent a regulation clause number, an exposure limit or a distance you are not sure of — name the guidance instead.
+
+RULES
+- 8 to 16 items. This gets briefed to the crew at the start of the shift, not read like a manual. Ruthless beats exhaustive.
+- Put the actual control in the item. "Work safely" and "be careful" are not controls.
+- Write like a site safety lead talking to the crew. No filler, no "ensure that", no "it is recommended".
+- This is a DRAFT starting point. Under HSWA the PCBU must complete and agree it WITH the workers doing the job, adding the site-specific detail. Never imply it is final or that it replaces that conversation.`;
+
+async function generateSwmsItems(task: string): Promise<GenerateResult> {
+  const anthropic = new Anthropic({ maxRetries: 2 });
+  try {
+    const resp = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 8000,
+      thinking: { type: "adaptive" },
+      output_config: { effort: "high", format: { type: "json_schema", schema: SWMS_SCHEMA as unknown as Record<string, unknown> } },
+      system: SWMS_SYSTEM,
+      messages: [{ role: "user", content: `Write the Safe Work Method Statement for this task: ${task}` }],
+    });
+    const text = resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+    const parsed = JSON.parse(text) as { items?: Record<string, unknown>[] };
+    const items = (Array.isArray(parsed.items) ? parsed.items : [])
+      .map((r) => ({
+        title: String(r.title ?? "").trim(),
+        detail: String(r.detail ?? "").trim(),
+        source: r.source === "code" ? "code" : "hsw",
+        sourceRef: String(r.source_ref ?? "").trim() || null,
+        // Safety hazard areas are their own vocabulary, not the inspection
+        // CATEGORIES, so keep whatever the model named (used only for the dot).
+        category: String(r.category ?? "").trim() || "Other",
+      }))
+      .filter((r) => r.title.length > 2);
+    if (!items.length) {
+      return { ok: false, reason: "empty", message: "I couldn't draft a safety plan for that one. Try describing the job in a bit more detail — the work, where it is, and any plant or height involved." };
+    }
+    return { ok: true, items };
+  } catch (e) {
+    console.error("swms generation failed:", e);
     const msg = e instanceof Anthropic.APIError && e.status === 400 && /credit balance/i.test(String(e.message))
       ? "The assistant is out of credit — top up the Anthropic account and this will work again."
       : "The assistant couldn't be reached just now. Give it a moment and try again.";

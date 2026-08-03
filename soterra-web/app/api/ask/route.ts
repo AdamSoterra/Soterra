@@ -220,6 +220,18 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
     },
   },
   {
+    name: "create_safety_plan",
+    description:
+      "Create a REAL, interactive site safety plan — a Safe Work Method Statement (SWMS) / Job Safety Analysis (JSA) — for a specific construction TASK, as tickable hazard-and-control items saved to the site. Call this WHENEVER the user asks you to make/generate/prep a safety plan, SWMS, JSA, task or site risk assessment, method statement, hazard plan, or 'the H&S for <task>' ('SWMS for pouring the first-floor slab', 'safety plan for the roof work', 'JSA for the excavation', 'hazard assessment for the demolition', 'get me the H&S sorted for craning the panels'). It drafts the significant hazards and their controls in hierarchy-of-controls order, grounded in HSWA 2015 + WorkSafe NZ good practice, and returns a card the user taps to open, tick off and add site-specific detail. Do NOT write the plan out as prose yourself — this tool builds and saves the interactive version. A plain H&S question the user just wants answered ('do I need edge protection here?') is your own expertise, NOT this tool; use this only when they want a plan/SWMS/JSA built for a task.",
+    input_schema: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "The task the safety plan is for, in plain words, e.g. 'pouring the first-floor suspended slab' or 'working at height installing roof trusses'." },
+      },
+      required: ["task"],
+    },
+  },
+  {
     name: "create_event",
     description:
       "Add an event to the site calendar (inspection, delivery, pour, meeting, reminder…). SAVE-FIRST: as soon as you have a title + date, call this immediately. Compute relative dates yourself. Set `assignee` to a crew member's name when the user books something FOR a specific person ('book a delivery for the site manager'). Set `kind` only when the type is clear. Set `reminder` in this SAME call when they ask to be reminded — do not create then update.",
@@ -859,6 +871,21 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         };
       }
 
+      case "create_safety_plan": {
+        if (!ctx.scope) return { content: JSON.stringify({ error: "This site isn't set up with a company yet, so I can't save a safety plan to it." }), cards: [] };
+        const task = s(input.task) || "site task";
+        const title = `Safety plan — ${task}`;
+        // Same engine as the inspection checklist, kind "swms": grounded in HSWA
+        // + WorkSafe good practice rather than the drawings. Takes ~30-60s.
+        const gen = await generateChecklistItems(ctx.scope, { kind: "swms", inspectionCode: null, title: task });
+        if (!gen.ok) return { content: JSON.stringify({ error: gen.message }), cards: [] };
+        const row = await createChecklist(ctx.scope, { kind: "swms", title, createdByName: ctx.creatorName, items: gen.items });
+        return {
+          content: JSON.stringify({ ok: true, checklistId: row.id, itemCount: gen.items.length, note: "The interactive safety plan (SWMS/JSA) is created and shown as a card below your reply. Do NOT re-list the hazards as text — just tell the user it's ready to tap open, that each hazard has its controls in hierarchy-of-controls order and is tickable, and remind them in ONE plain sentence that under HSWA it should be finalised with the crew doing the job before work starts." }),
+          cards: [{ id: row.id, itemType: "checklist", action: "created", title, when: `${gen.items.length} hazard${gen.items.length === 1 ? "" : "s"}`, sub: "safety plan", kind: null, visibility: "team" }],
+        };
+      }
+
       case "create_event": {
         const [row] = await db.insert(events).values(eventInsertFromInput(input, ctx)).returning();
         return { content: JSON.stringify({ ok: true, id: row.id, created: "event", title: row.title, visibility: row.visibility, assignee: row.assigneeName }), cards: [card("event", "created", row)] };
@@ -1084,6 +1111,7 @@ SO THE RIGHT ANSWER SHAPE IS: give everything the Crown documents DO cover (the 
 PRIORITY — for anything about THIS project, search_plans comes first: it's the crew's own building, and their drawings govern. If the plans don't cover it, then the Code (search_code) or the maker's manual (search_manufacturer) as the question needs. When a question is purely about a GIB product or system (not tied to this project's drawings), go straight to search_manufacturer.
 5) INSPECTION HISTORY — answer "what have we been pulled up on before?" by calling search_history. It searches THIS COMPANY's own filed inspection reports (all their sites, council and consultant). Use it for "what failed on the last cavity wrap?", "do we keep failing passive fire?", "what did the inspector pick up at pre-line last time?", and whenever someone is preparing for an inspection. Answer from the rows it returns — say how many times a thing has come up and when it last did, because the repeat count is the point. It is this builder's own data, so be direct about it. Never present it as a code requirement; it's what happened.
 6) CALENDAR & TASKS — create, find, change, delete events and to-dos using the tools.
+7) CHECKS & SAFETY PLANS — these are interactive TOOLS, not prose. When the user asks you to make/generate/prep a QA or inspection checklist, call create_checklist. When they ask for a safety plan, SWMS, JSA, task/site risk assessment or "the H&S for <task>", call create_safety_plan (grounded in HSWA 2015 + WorkSafe good practice). Don't write either out as text yourself — the tool builds the tickable version and returns a card. A plain H&S question they just want answered ("do I need edge protection here?") is your own expertise (section 4), not a plan to build.
 
 If the user attaches a photo or PDF, read it and answer about it.
 
