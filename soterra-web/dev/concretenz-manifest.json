@@ -1,0 +1,13 @@
+{
+  "manufacturer": "Concrete NZ",
+  "licence": "demo",
+  "dir": "C:/Users/adam/Desktop/Soterra/Concrete NZ",
+  "docs": [
+    {
+      "file": "Concrete and Concrete Masonry Basement Design Guide.pdf",
+      "title": "Concrete NZ Basement Design Guide",
+      "url": "https://www.concretenz.org.nz/_files/ugd/7e53b4_5ecc935c0f234e91ac164af0a508e86a.pdf",
+      "exclude": []
+    }
+  ]
+}
