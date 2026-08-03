@@ -1217,10 +1217,30 @@ export async function POST(req: Request) {
   const anthropic = new Anthropic({ maxRetries: 3 });
   const MAX_ROUNDS = 10;
 
+  // Roll a single cache breakpoint onto the tail of the conversation before each
+  // call. Without it, every tool round re-pays full input price for the whole
+  // growing history (all prior retrieval payloads re-sent). With it, each round
+  // reads the cached prefix and only writes the newest turn. Keep exactly ONE
+  // rolling breakpoint here: the request already spends two static ones (the
+  // system prompt and the last tool) and Anthropic allows four.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cacheConversationTail = (msgs: any[]) => {
+    for (const m of msgs) {
+      if (Array.isArray(m.content)) for (const b of m.content) { if (b && typeof b === "object") delete b.cache_control; }
+    }
+    const last = msgs[msgs.length - 1];
+    if (!last) return;
+    if (typeof last.content === "string") last.content = [{ type: "text", text: last.content }];
+    const blocks = last.content;
+    const tail = blocks[blocks.length - 1];
+    if (tail && typeof tail === "object") tail.cache_control = { type: "ephemeral" };
+  };
+
   try {
     let answer = "";
     let ranOut = true; // cleared when the model stops of its own accord
     for (let round = 0; round < MAX_ROUNDS; round++) {
+      cacheConversationTail(messages);
       const resp = await anthropic.messages.create({
         model: MODEL,
         max_tokens: 8192,
@@ -1232,7 +1252,7 @@ export async function POST(req: Request) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         tools: [
           ...TOOLS.map((t, i) => (i === TOOLS.length - 1 ? { ...t, cache_control: { type: "ephemeral" as const } } : t)),
-          { type: "web_search_20260209", name: "web_search", max_uses: 5 },
+          { type: "web_search_20260209", name: "web_search", max_uses: 2 },
         ] as any,
         messages,
       });
@@ -1263,6 +1283,11 @@ export async function POST(req: Request) {
     // has to actually answer from what it already found, or say it couldn't.
     if (ranOut) {
       try {
+        const wrapMessages = [
+          ...messages,
+          { role: "user", content: "You've run out of search attempts. Answer now using only what you already found above, with the same citation rules. If it isn't enough to answer safely, say plainly what you couldn't confirm and what to check — never guess a clause, figure or product." },
+        ];
+        cacheConversationTail(wrapMessages);
         const wrap = await anthropic.messages.create({
           model: MODEL,
           max_tokens: 8192,
@@ -1271,10 +1296,7 @@ export async function POST(req: Request) {
             { type: "text", text: STATIC_PROMPT, cache_control: { type: "ephemeral" } },
             { type: "text", text: dynamicContext },
           ] as any,
-          messages: [
-            ...messages,
-            { role: "user", content: "You've run out of search attempts. Answer now using only what you already found above, with the same citation rules. If it isn't enough to answer safely, say plainly what you couldn't confirm and what to check — never guess a clause, figure or product." },
-          ],
+          messages: wrapMessages,
         });
         const t = wrap.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("").trim();
         if (t) answer = t;
