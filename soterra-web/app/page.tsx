@@ -13,7 +13,10 @@ type Cite = {
   // "determination" = an MBIE ruling on a real dispute. Its own card and viewer,
   // rendered from MBIE's public PDF and always shown with its year, because a
   // ruling can rest on an Acceptable Solution that has since changed.
-  kind?: "manufacturer" | "determination" | "standard";
+  // "code" = a Building Code / Acceptable Solution clause (B2, E2/AS1, …). We
+  // hold no rendered Code pages, so its chip links out to the free Code on
+  // building.govt.nz rather than opening the (blank) sheet viewer.
+  kind?: "manufacturer" | "determination" | "standard" | "code";
   mfr?: string; doc?: string; page?: number; url?: string;
   /** Determination reference, "2024/001". */
   ref?: string;
@@ -1846,10 +1849,10 @@ export default function Page() {
                                 <div className="cites-h">{m.cites.length} sources — tap any to open</div>
                               )}
                               {m.cites?.map((c, k) => (
-                                <div className="cite" key={k} onClick={() => setSheet(c)}>
-                                  <div className="cic">{c.kind === "manufacturer" ? "📕" : c.kind === "determination" ? "⚖️" : c.kind === "standard" ? "📘" : "📐"}</div>
+                                <div className="cite" key={k} onClick={() => (c.kind === "code" ? c.url && window.open(c.url, "_blank", "noopener") : setSheet(c))}>
+                                  <div className="cic">{c.kind === "manufacturer" ? "📕" : c.kind === "determination" ? "⚖️" : c.kind === "standard" ? "📘" : c.kind === "code" ? "📖" : "📐"}</div>
                                   <div className="ct"><b>{c.code}{c.title ? ` · ${c.title}` : ""}</b><small>{c.sub}</small></div>
-                                  <div className="ca">›</div>
+                                  <div className="ca">{c.kind === "code" ? "↗" : "›"}</div>
                                 </div>
                               ))}
                               {m.cards?.map((c, j) =>
@@ -3140,7 +3143,9 @@ function assistantMsg(content: string, cards?: AsstCard[], mfrDocs?: MfrDoc[]): 
           ? "⚖️ FROM AN MBIE DETERMINATION"
           : first.kind === "standard"
             ? `📘 FROM ${(first.code || "THE NZS STANDARD").toUpperCase()}`
-            : "📐 FROM YOUR PLANS"
+            : first.kind === "code"
+              ? "📖 FROM THE BUILDING CODE"
+              : "📐 FROM YOUR PLANS"
       : undefined,
     text: fmt(body),
     raw: body,
@@ -3285,9 +3290,27 @@ function makeCite(sourceLine: string, body: string, mfrDocs?: MfrDoc[]): Cite {
     };
   }
 
-  // Plan / Code citation. Carry doc + page so the viewer can render the actual
-  // uploaded sheet (a plan page has a private blob behind it; a Code page won't
-  // resolve and the viewer falls back to the placeholder).
+  // Building Code / Acceptable Solution citation (e.g. "B2 Durability AS1 (third
+  // edition) · … · page 12 of 40"). We hold no rendered Code pages, so unlike a
+  // plan sheet this must NOT fall through to the plans viewer (a blank card) or
+  // the "FROM YOUR PLANS" label. Identify it by the Acceptable Solution /
+  // Verification Method marker every Code doc carries (AS1, VM1, /AS2) — which a
+  // plan sheet name never does — and link out to the free Code on building.govt.nz.
+  const codeDoc = parts[0] || "";
+  if (/^(?:NZBC\s+)?[A-H]\d{0,2}\b/i.test(codeDoc) && /\b(?:AS|VM)\d\b|\/(?:AS|VM)\d/i.test(codeDoc)) {
+    return {
+      code: codeDoc,
+      title: "",
+      sub: "NZ Building Code",
+      ans: fmt(body),
+      hlTag: codeDoc,
+      kind: "code",
+      url: "https://www.building.govt.nz/building-code-compliance/",
+    };
+  }
+
+  // Plan citation. Carry doc + page so the viewer can render the actual uploaded
+  // sheet (a plan page has a private blob behind it).
   const doc = parts[0] || "Source";
   const code = parts.find((p, i) => i > 0 && /[A-Z]/.test(p) && /\d/.test(p)) || doc;
   const rest = parts.filter((p) => p !== doc && p !== code).join(" · ");
