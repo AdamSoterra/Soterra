@@ -467,6 +467,7 @@ export default function Page() {
   const [setupPersonName, setSetupPersonName] = useState("");
   const [setupTitle, setSetupTitle] = useState("");
   const [setupCompany, setSetupCompany] = useState("");
+  const [setupAccess, setSetupAccess] = useState("");
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupErr, setSetupErr] = useState<string | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
@@ -1114,7 +1115,7 @@ export default function Page() {
   };
 
   // ─── site create / join ───
-  const resetSetup = () => { setSetupName(""); setSetupCode(""); setSetupErr(null); setCreatedCode(null); setSetupMode("create"); setSetupPersonName(user?.firstName || ""); setSetupTitle(""); setSetupCompany(""); };
+  const resetSetup = () => { setSetupName(""); setSetupCode(""); setSetupErr(null); setCreatedCode(null); setSetupMode("create"); setSetupPersonName(user?.firstName || ""); setSetupTitle(""); setSetupCompany(""); setSetupAccess(""); };
   const closeSetup = () => { setSetupOpen(false); resetSetup(); };
   const createSite = async () => {
     const name = setupName.trim();
@@ -1124,9 +1125,10 @@ export default function Page() {
     // failure history stays one history instead of splitting in two.
     const firstSite = projects.length === 0;
     if (firstSite && !setupCompany.trim()) { setSetupErr("Enter your company name."); return; }
+    if (firstSite && !setupAccess.trim()) { setSetupErr("Enter your access code. No code yet? Email adam@soterra.co.nz."); return; }
     setSetupBusy(true); setSetupErr(null);
     try {
-      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name, companyName: setupCompany.trim() || null, personName: setupPersonName.trim() || null, title: setupTitle.trim() || null }) });
+      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name, companyName: setupCompany.trim() || null, accessCode: setupAccess.trim() || null, personName: setupPersonName.trim() || null, title: setupTitle.trim() || null }) });
       const data = await res.json();
       if (!res.ok || !data.project) throw new Error(data.error || "Couldn't create the site.");
       setProjects((ps) => [...ps, data.project]);
@@ -1684,6 +1686,8 @@ export default function Page() {
         setName={setSetupName}
         company={setupCompany}
         setCompany={setSetupCompany}
+        access={setupAccess}
+        setAccess={setSetupAccess}
         showCompany={projects.length === 0}
         code={setupCode}
         setCode={setSetupCode}
@@ -2959,7 +2963,9 @@ function SiteSetup(props: {
   setMode: (m: "create" | "join") => void;
   name: string; setName: (v: string) => void;
   company: string; setCompany: (v: string) => void;
-  /** Only the first site names the company — later ones inherit it. */
+  access: string; setAccess: (v: string) => void;
+  /** Only the first site names the company — later ones inherit it, and only
+   *  the first (a brand-new company) needs the access code. */
   showCompany: boolean;
   code: string; setCode: (v: string) => void;
   personName: string; setPersonName: (v: string) => void;
@@ -3027,6 +3033,9 @@ function SiteSetup(props: {
                     <>
                       <label className="ev-lbl">Your company</label>
                       <input className="ev-in" value={p.company} autoFocus onChange={(e) => p.setCompany(e.target.value)} placeholder="e.g. Kalmar Construction"
+                        onKeyDown={(e) => { if (e.key === "Enter") p.onCreate(); }} />
+                      <label className="ev-lbl">Access code</label>
+                      <input className="ev-in" value={p.access} onChange={(e) => p.setAccess(e.target.value)} placeholder="The code we gave you"
                         onKeyDown={(e) => { if (e.key === "Enter") p.onCreate(); }} />
                     </>
                   )}

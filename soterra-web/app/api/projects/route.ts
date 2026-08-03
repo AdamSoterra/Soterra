@@ -72,6 +72,20 @@ export async function POST(req: Request) {
   // genuinely new person.
   let company = await existingCompanyForUser(userId);
   if (!company) {
+    // Access-code gate. A brand-new company = a new customer, so we don't let
+    // anyone who downloaded the app self-provision the paid product and start
+    // burning AI spend before we've set them up. The code is handed out in
+    // outreach; joining an existing company by its site code is unaffected, and
+    // adding a SECOND site to a company you already belong to skips this. Free
+    // look-around users never reach here (they have no company at all).
+    const required = process.env.SOTERRA_ACCESS_CODE;
+    const accessCode = String(body.accessCode ?? "").trim();
+    if (!required || accessCode !== required) {
+      return Response.json(
+        { error: "Soterra is invite-only right now. Enter the access code we gave you, or join your team's site with its join code. No code yet? Email adam@soterra.co.nz and we'll get you set up." },
+        { status: 403 }
+      );
+    }
     const companyName = String(body.companyName ?? "").trim();
     if (!companyName) return Response.json({ error: "Enter your company name" }, { status: 400 });
     company = await createCompany(companyName);
