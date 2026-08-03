@@ -3117,6 +3117,13 @@ function assistantMsg(content: string, cards?: AsstCard[], mfrDocs?: MfrDoc[]): 
   const cites: Cite[] = [];
   for (const ref of refs) {
     const c = makeCite(ref, body, mfrDocs);
+    // A standard citation is already carried by the standards_handoff card
+    // beside the answer, which renders the real page images (demo account) or
+    // the free-to-download pointer (customer). The inline chip is pure
+    // duplication, and when the Source line names the standard without a Table
+    // number it has no page to render and falls back to a blank placeholder
+    // stamped with the project name. Drop it — the handoff card is canonical.
+    if (c.kind === "standard") continue;
     const key = `${c.kind || "plan"}|${(c.doc || c.code || "").toLowerCase()}|${c.page ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
