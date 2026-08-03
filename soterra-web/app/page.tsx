@@ -4,7 +4,7 @@ import { useUser, useClerk } from "@clerk/nextjs";
 import { upload } from "@vercel/blob/client";
 import Landing from "./landing";
 
-type Tab = "assistant" | "calendar" | "tasks" | "plans" | "upload" | "insights";
+type Tab = "assistant" | "calendar" | "tasks" | "inspections" | "plans" | "upload" | "insights";
 type Cite = {
   code: string; title: string; sub: string; ans: string; hlTag: string;
   // Set when the answer came from a manufacturer's manual (e.g. GIB) rather than
@@ -306,11 +306,10 @@ const I = {
 };
 const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "assistant", label: "Assistant", icon: I.chat },
-  { id: "calendar", label: "Calendar", icon: I.cal },
-  { id: "tasks", label: "Tasks", icon: I.tasks },
-  { id: "insights", label: "Insights", icon: I.insights },
+  { id: "inspections", label: "Inspections", icon: I.tasks },
   { id: "plans", label: "Plans", icon: I.plans },
   { id: "upload", label: "Upload", icon: I.up },
+  { id: "insights", label: "Insights", icon: I.insights },
 ];
 
 // Login-first screen shown when the app runs in app-mode (installed PWA / ?app=1),
@@ -719,14 +718,11 @@ export default function Page() {
   // Lazy-load each tab's data the first time it's opened (after a site is picked).
   useEffect(() => {
     if (!projectId) return;
-    // The assistant home shows a today-at-a-glance, so it needs events + tasks too.
-    if ((tab === "calendar" || tab === "assistant") && !evLoaded) loadEvents();
-    if ((tab === "tasks" || tab === "assistant") && !taskLoaded) loadTasks();
     if ((tab === "plans" || tab === "upload") && !docsLoaded) loadPlans();
-    if (tab === "insights" && !insightsLoaded) { loadInsights(); loadChecklists(); }
-    // The calendar needs the checklist counts to show which inspections are
-    // already prepped, so load them alongside events.
-    if (tab === "calendar" && !checklists.length) loadChecklists();
+    if (tab === "insights" && !insightsLoaded) loadInsights();
+    // The Inspections tab (and Insights, for the failure counts) needs the
+    // checklists — the pre-inspection QA checks and the safety plans.
+    if ((tab === "inspections" || tab === "insights") && !checklists.length) loadChecklists();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, evLoaded, taskLoaded, docsLoaded, insightsLoaded, projectId]);
 
@@ -1862,18 +1858,8 @@ export default function Page() {
                     box you're about to type in, and gets pushed down further
                     the more you have on. */}
                 <div className="home-scroll">
-                  <TodayGlance
-                    events={eventsByDay.get(todayKey()) ?? []}
-                    tasks={(tasksByDay.get(todayKey()) ?? []).filter((t) => !t.done)}
-                    loaded={evLoaded && taskLoaded}
-                    colorFor={colorFor}
-                    onToggle={toggleTask}
-                    onOpen={() => setTab("calendar")}
-                  />
-                  {/* A gap either side centres the greeting in whatever space
-                      the day leaves. Both collapse to their minimum on a busy
-                      day, so a long list pushes the greeting down rather than
-                      squashing it. */}
+                  {/* A gap either side centres the greeting in the available
+                      space. */}
                   <div className="home-gap" />
                   {/* Logo, greeting and the box you type in are one block, so
                       they stay together: centred on a quiet day, pushed down
@@ -2235,6 +2221,30 @@ export default function Page() {
           </div></div>
         )}
 
+        {tab === "inspections" && (
+          <div className="page"><div className="page-inner">
+            <div className="cal-top">
+              <div>
+                <div className="page-h">Inspections</div>
+                <div className="page-sub" style={{ marginBottom: 0 }}>
+                  Pre-inspection QA checks and site safety plans for {projName}. Tap one to open and tick it off on site.
+                </div>
+              </div>
+              <button className="cal-new" onClick={() => { setNewCl({ eventId: null, eventTitle: null }); setNewClKind("inspection"); setNewClCode(""); setClErr(null); }}>＋ New check</button>
+            </div>
+
+            {checklists.length === 0 ? (
+              <div className="page-sub" style={{ marginTop: 18 }}>
+                None yet on {projName}. Ask the assistant to get you ready for an inspection (&quot;what will I fail on at pre-line, build me the check&quot;) or to draft a safety plan for a task — or hit ＋ New check. Each is built from this site&apos;s drawings, the Building Code and your history, and you tick it off on your phone.
+              </div>
+            ) : (
+              <div style={{ marginTop: 18 }}>
+                {checklists.map((c) => <ChecklistRow key={c.id} c={c} onOpen={() => openChecklistById(c.id)} />)}
+              </div>
+            )}
+          </div></div>
+        )}
+
         {tab === "insights" && (
           <div className="page"><div className="page-inner">
             <div className="cal-top">
@@ -2245,28 +2255,10 @@ export default function Page() {
                   what you keep getting pulled up on, across {insights?.company.sites === 1 ? "your site" : `all ${insights?.company.sites ?? ""} sites`}
                 </div>
               </div>
-              <button className="cal-new" onClick={() => { setNewCl({ eventId: null, eventTitle: null }); setNewClKind("inspection"); setNewClCode(""); setClErr(null); }}>＋ New check</button>
             </div>
 
             <input ref={reportFileRef} type="file" accept="application/pdf" multiple style={{ display: "none" }}
               onChange={(e) => { const fs = filesFrom(e.target); if (reportFileRef.current) reportFileRef.current.value = ""; if (fs.length) onReportFiles(fs); }} />
-
-            {/* Pre-inspection checks — ALWAYS shown once the tab has loaded, even on a
-                site with no inspection reports yet. This block used to live inside the
-                "has reports" branch below, so a generated or completed check was
-                invisible on a fresh site until a report was uploaded. */}
-            {insightsLoaded && (
-              <div style={{ marginTop: 18 }}>
-                <IzToggle label="Pre-inspection checks" count={checklists.length} open={!izClosed.checks} onClick={() => izToggle("checks")} />
-                {!izClosed.checks && (checklists.length === 0 ? (
-                  <div className="page-sub">
-                    None yet on {projName}. A check is built from this site&apos;s drawings, the Building Code and your own history — tick it off on your phone before the inspector turns up.
-                  </div>
-                ) : (
-                  checklists.map((c) => <ChecklistRow key={c.id} c={c} onOpen={() => openChecklistById(c.id)} />)
-                ))}
-              </div>
-            )}
 
             {!insightsLoaded ? (
               <div className="page-sub" style={{ marginTop: 18 }}>Loading…</div>
