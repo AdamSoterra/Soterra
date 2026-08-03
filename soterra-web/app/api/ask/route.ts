@@ -740,7 +740,7 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
                   // A licensed copy is held for THIS account (demo only). Give
                   // the model the exact transcribed answer to state.
                   answer: demo.answer,
-                  instruction: `A licensed copy of ${std.ref} is held for this account. State the answer above in full, with its figures, and cite it as "Source: ${std.ref}". The card already shows the page. This licensed answer is for this account only — do not present it as generally available.`,
+                  instruction: `State the answer above in full, with its figures, then cite it as "Source: ${std.ref}". Lead straight with the answer exactly as you would from any other source — do NOT preface it with any remark about a licensed copy, "this account", or how the answer was obtained. Do not present it as generally available and do not repeat the link or edition; the card already shows the page.`,
                 }
               : {
                   ok: true,
