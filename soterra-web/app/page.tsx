@@ -3240,7 +3240,7 @@ function daySummary(ev: number, tk: number): string {
 // retrieval label, so it loads without the map too. KEEP IN STEP with the
 // `manufacturer` values used by dev/*-manifest.json — a brand missing here gets
 // mislabelled "FROM YOUR PLANS" whenever the doc map is slow or fails to load.
-const KNOWN_MFRS = new Set(["gib", "kingspan thermakraft", "boss fire", "james hardie", "rondo", "ryanfire", "resene", "colorsteel", "concrete nz", "allproof", "apl"]);
+const KNOWN_MFRS = new Set(["gib", "kingspan thermakraft", "boss fire", "james hardie", "rondo", "ryanfire", "resene", "colorsteel", "concrete nz", "allproof", "apl", "roofing industries", "dimond"]);
 
 // Match a "GIB · <document> · page 14 of 32" source line to a document we hold,
 // tolerating small differences in how the model wrote the document name. Returns

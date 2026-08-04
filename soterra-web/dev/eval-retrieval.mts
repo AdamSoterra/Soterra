@@ -66,6 +66,13 @@ const CASES: Case[] = [
   { q: "ColorSteel coastal environmental category warranty", mfr: "ColorSteel" },
   { q: "James Hardie Axon Panel fixing", mfr: "James Hardie" },
   { q: "Kingspan Thermakraft Covertek underlay", mfr: "Kingspan Thermakraft" },
+
+  // ── Roofing: two DIRECT competitors, so brand scoping has to be exact ──
+  { q: "minimum roof pitch for Multidek", mfr: "Roofing Industries" },
+  { q: "True Oak Corrugate purlin spans and fixing pattern", mfr: "Roofing Industries" },
+  { q: "Dimondek installation clip fixing", mfr: "Dimond" },
+  { q: "Dimond Styleline minimum pitch", mfr: "Dimond" },
+  { q: "Dimond fascia gutter downpipe installation", mfr: "Dimond" },
 ];
 
 const { pages, df } = await getManufacturerIndex();

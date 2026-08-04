@@ -5,7 +5,9 @@
   "docs": [
     { "file": "True Oak Corrugate - Product Technical Statement.pdf",
       "title": "Roofing Industries True Oak Corrugate Product Technical Statement",
-      "url": "https://www.roof.co.nz/product/true-oak-corrugate", "exclude": [] },
+      "url": "https://www.roof.co.nz/product/true-oak-corrugate",
+      "_note": "p11 excluded as a judgement call: its two thermal-movement tables are headed 'E2/AS1 Compliance' and 'MRM COP Compliance' and tabulate those third parties' length thresholds. Two adversarial checks REFUTED the flag (they read as Roofing Industries' own provisions organised by compliance pathway), so this is deliberately more cautious than the verdict. One page of twelve is cheap insurance in a permission conversation.",
+      "exclude": [11] },
 
     { "file": "Multidek - Product Technical Statement.pdf",
       "title": "Roofing Industries Multidek Product Technical Statement",
