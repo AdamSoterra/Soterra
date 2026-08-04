@@ -2458,7 +2458,7 @@ export default function Page() {
                       // (e.g. Resene's pages went from a blank live render to a
                       // stored pre-render), the same URL would keep showing the
                       // old frozen image. Bump this number after any such change.
-                      `/api/doc-page?m=${encodeURIComponent(sheet.mfr)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}&v=2`
+                      `/api/doc-page?m=${encodeURIComponent(sheet.mfr)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}&v=3`
                     : null
                   : sheet.kind === "determination"
                     ? sheet.ref && sheet.page
