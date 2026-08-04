@@ -36,7 +36,10 @@ export const STANDARD_DEMOS: StandardDemoSet[] = [
       { page: 211, label: "Table 8.10 — lintel supporting roof and wall" },
     ],
     answer:
-      "For a lintel supporting the roof only in a single-storey house, SG8 timber, over a 2.4 m clear opening (Table 8.9): with a LIGHT roof a 190 x 70 lintel is enough for a loaded dimension up to about 3 m (step up to 190 x 90 at a 4 m loaded dimension). With a HEAVY roof, use 240 x 70 up to a 2 m loaded dimension (240 x 90 for larger). Loaded dimension is roughly half the roof span bearing on the lintel, taken off the plans; these tables apply for all wind zones.",
+      // ⚠️ VERIFIED against the rendered Table 8.9 page 2026-08-04. The table
+      // gives MAXIMUM SPAN per lintel size per loaded dimension, so read down to
+      // the loaded dimension and across to the first size whose span is >= 2.4.
+      "For a lintel supporting the roof only in a single-storey house, SG8 timber, over a 2.4 m clear opening (Table 8.9): with a LIGHT roof a 190 x 70 covers a loaded dimension up to 3 m (its limit is 2.4 m span at that loaded dimension), 190 x 90 takes you to a 4 m loaded dimension, and at 6 m you need 240 x 90. With a HEAVY roof, 240 x 70 covers a loaded dimension up to 3 m, 240 x 90 to 4 m, and at 6 m you need 290 x 90. Loaded dimension is roughly half the roof span bearing on the lintel, taken off the plans; these tables apply for all wind zones.",
   },
   {
     ref: "NZS 3604:2011",
@@ -47,8 +50,14 @@ export const STANDARD_DEMOS: StandardDemoSet[] = [
       { page: 71, label: "Table 4.1 — fixings protection by corrosion zone" },
       { page: 72, label: "Table 4.3 — nails and screws by corrosion zone" },
     ],
+    // ⚠️ VERIFIED against the rendered pages 2026-08-04, after an earlier
+    // transcription of this answer was found to be WRONG. It had applied Table
+    // 4.1's "sheltered AND exposed → stainless" rule to nails and screws, but
+    // 4.1 explicitly EXCLUDES nails and screws — those are Table 4.3, where Zone
+    // D sheltered framing is galvanized, not stainless. The two tables must not
+    // be merged. Re-read both pages before ever editing this string.
     answer:
-      "In a sea-spray site (corrosion exposure Zone D), framing nails and screws must be Type 304 stainless steel in both sheltered and exposed areas (Tables 4.1 and 4.3). Plain hot-dip galvanised is only acceptable further inland, in the milder Zones B and C. So ordinary galvanised nails are NOT enough for exposed framing right on the coast.",
+      "In a sea-spray site (corrosion exposure Zone D) it depends on the fixing and on where it sits. For framing NAILS AND SCREWS (Table 4.3): stainless steel in EXPOSED areas, galvanized steel in SHELTERED areas, and mild steel in closed areas including roof spaces — stainless nails being minimum Type 304 with annular grooves. For other structural FIXINGS such as bolts, brackets, nail plates and wire dogs (Table 4.1, which excludes nails and screws): Type 304 stainless steel in both sheltered and exposed. \"Sheltered\" means above a 45-degree line drawn from the lower edge of a projecting weathertight structure such as a floor, roof or deck; \"exposed\" is below that line. So galvanised nails are NOT sufficient for EXPOSED framing on the coast, but they are acceptable in sheltered locations in Zone D. Note also that nails, screws and other fixings into piles within 600 mm of the ground must be stainless steel regardless.",
   },
   {
     ref: "NZS 3604:2011",
