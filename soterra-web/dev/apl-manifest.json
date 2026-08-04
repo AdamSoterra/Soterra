@@ -1,0 +1,38 @@
+{
+  "manufacturer": "APL",
+  "licence": "demo",
+  "dir": "C:/Users/adam/Desktop/Soterra/APL",
+  "docs": [
+    { "file": "Centrafix-Booklet-08_23a.pdf",
+      "title": "APL Centrafix Installation System Guide",
+      "url": "https://www.aplnz.co.nz/centrafix-resources", "exclude": [] },
+
+    { "file": "APL-Architectural-Thermal-Heart-Awning-Window-Drawings-v4.pdf",
+      "title": "APL Architectural Series ThermalHEART Awning Window Drawings",
+      "url": "https://www.aplnz.co.nz/architects-and-specifiers", "exclude": [] },
+
+    { "file": "APL-Architectural-Thermal-Heart-Hinged-Door-Square-Cut-Panel.pdf",
+      "title": "APL Architectural Series ThermalHEART Hinged Door (Square Cut Panel) Drawings",
+      "url": "https://www.aplnz.co.nz/architects-and-specifiers", "exclude": [] },
+
+    { "file": "APL-Architectural-Thermal-Heart-Hinged-Door-Mitred-Panel.pdf",
+      "title": "APL Architectural Series ThermalHEART Hinged Door (Mitred Panel) Drawings",
+      "url": "https://www.aplnz.co.nz/architects-and-specifiers", "exclude": [] },
+
+    { "file": "APL BPIR 4 - Residential Thermal.pdf",
+      "title": "APL BPIR - Residential Windows and Doors (Thermally Insulated)",
+      "url": "https://www.altherm.co.nz/BPIR-documents", "exclude": [] },
+
+    { "file": "APL BPIR 3 - Residential Non-Thermal.pdf",
+      "title": "APL BPIR - Residential Windows and Doors (Non-Thermal)",
+      "url": "https://www.altherm.co.nz/BPIR-documents", "exclude": [] },
+
+    { "file": "APL BPIR 2 - Commercial Thermal.pdf",
+      "title": "APL BPIR - Commercial Windows and Doors (Thermally Insulated)",
+      "url": "https://www.altherm.co.nz/BPIR-documents", "exclude": [] },
+
+    { "file": "APL BPIR 1 - Commercial Non-Thermal.pdf",
+      "title": "APL BPIR - Commercial Windows and Doors (Non-Thermal)",
+      "url": "https://www.altherm.co.nz/BPIR-documents", "exclude": [] }
+  ]
+}
