@@ -20,19 +20,19 @@
       "url": "https://www.aplnz.co.nz/architects-and-specifiers", "exclude": [] },
 
     { "file": "APL BPIR 4 - Residential Thermal.pdf",
-      "title": "APL BPIR - Residential Windows and Doors (Thermally Insulated)",
+      "title": "APL BPIR - Windows and Doors for Residential Purposes, Thermally Insulated",
       "url": "https://www.altherm.co.nz/BPIR-documents", "exclude": [] },
 
     { "file": "APL BPIR 3 - Residential Non-Thermal.pdf",
-      "title": "APL BPIR - Residential Windows and Doors (Non-Thermal)",
+      "title": "APL BPIR - Windows and Doors for Residential Purposes",
       "url": "https://www.altherm.co.nz/BPIR-documents", "exclude": [] },
 
     { "file": "APL BPIR 2 - Commercial Thermal.pdf",
-      "title": "APL BPIR - Commercial Windows and Doors (Thermally Insulated)",
+      "title": "APL BPIR - Commercial Windows, Thermally Improved",
       "url": "https://www.altherm.co.nz/BPIR-documents", "exclude": [] },
 
     { "file": "APL BPIR 1 - Commercial Non-Thermal.pdf",
-      "title": "APL BPIR - Commercial Windows and Doors (Non-Thermal)",
+      "title": "APL BPIR - Commercial Windows and Doors",
       "url": "https://www.altherm.co.nz/BPIR-documents", "exclude": [] }
   ]
 }
