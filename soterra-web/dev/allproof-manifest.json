@@ -1,0 +1,19 @@
+{
+  "manufacturer": "Allproof",
+  "licence": "demo",
+  "dir": "C:/Users/adam/Desktop/Soterra/Allproof",
+  "docs": [
+    { "file": "Vision Install Sheet (1).pdf",
+      "title": "Allproof Vision Shower Channel Install Guide",
+      "url": "https://allproof.co.nz/product/vision-shower-channel/", "exclude": [] },
+    { "file": "Vision Install-Concrete.pdf",
+      "title": "Allproof Vision Channel Install Detail (Concrete)",
+      "url": "https://allproof.co.nz/product/vision-shower-channel/", "exclude": [] },
+    { "file": "Vision Install-Timber.pdf",
+      "title": "Allproof Vision Channel Install Detail (Timber)",
+      "url": "https://allproof.co.nz/product/vision-shower-channel/", "exclude": [] },
+    { "file": "MBIE-BPIR-Floor Wastes.pdf",
+      "title": "Allproof Floor Wastes BPIR Statement",
+      "url": "https://allproof.co.nz/product/vision-shower-channel/", "exclude": [] }
+  ]
+}
