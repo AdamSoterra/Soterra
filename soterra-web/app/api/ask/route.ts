@@ -11,7 +11,7 @@ import {
   addOneDay,
 } from "@/lib/date-tz";
 import { resolveProjectId, listMembers } from "@/lib/project";
-import { excerpt, expand, retrieve } from "@/lib/retrieve";
+import { excerpt, expand, retrieve, searchManufacturerPages } from "@/lib/retrieve";
 import { DEMO_ID, getProjectIndex, type Page } from "@/lib/projectIndex";
 import { codeLabel, getCodeIndex } from "@/lib/codeIndex";
 import { determinationLabel, searchDeterminations } from "@/lib/determinations";
@@ -604,64 +604,6 @@ function computeTaskUpdateFields(existing: typeof tasks.$inferSelect, input: Rec
   return fields;
 }
 
-// GIB name their systems with short codes (GBTL 90, GBS 60, GFS 520, GBSA 90f).
-// Plain keyword search buries these — the code token is tiny next to common words
-// like "wall" and "fire" — so a code question can miss the one page that DEFINES
-// the code, or grab a look-alike (GBQSA 90 for GBTL 90). When the query carries a
-// code, surface the pages that actually contain that exact code FIRST, so the
-// model reads the right system. Codes are written uppercase and (for GIB) start
-// with G, which stops this firing on ordinary words. Normalising out spaces and
-// hyphens makes "GBTL 90" match "GBTL90"; requiring an exact token stops "GBTL90"
-// matching "GBTLA90".
-function codeHits<T extends { text: string }>(pages: T[], query: string, k = 4): T[] {
-  const norm = (t: string) => t.toUpperCase().replace(/[\s-]/g, "");
-  // Case-insensitive so a lowercased "gbtl 90" still resolves; a false match on
-  // an ordinary word simply finds no page and adds nothing.
-  const codes = [...query.matchAll(/\bG[A-Z]{1,4}\s?-?\s?\d{1,3}[a-z]?\b/gi)].map((m) => norm(m[0]));
-  if (codes.length === 0) return [];
-  return pages
-    .map((p) => {
-      const hay = norm(p.text);
-      let hits = 0;
-      for (const c of codes) hits += hay.split(c).length - 1;
-      return { p, hits };
-    })
-    .filter((x) => x.hits > 0)
-    .sort((a, b) => b.hits - a.hits)
-    .slice(0, k)
-    .map((x) => x.p);
-}
-
-// When a question NAMES a manufacturer, that manufacturer's own pages must win.
-//
-// Plain relevance scoring doesn't give you this, and the bigger the corpus gets
-// the worse it reads. GIB is 823 pages; Rondo is 60. Ask "what centres do I fix
-// a Rondo track at" and every top hit came back GIB, partly because GIB's pages
-// simply outnumber Rondo's, and partly because GIB publish a co-branded "GIB
-// Rondo Metal Batten Systems" manual, so the word "Rondo" is scattered through
-// the larger corpus too. Answering a Rondo question out of a competitor's manual
-// is wrong in the way that matters most here: the brand IS the answer, because
-// the same detail has different figures for different makers.
-//
-// So: if the query names a manufacturer we hold, rank within that manufacturer
-// first, then let the general search fill the remaining slots.
-function brandHits<T extends { manufacturer: string; text: string }>(
-  pages: T[],
-  df: Map<string, number>,
-  q: string,
-  k = 5,
-): T[] {
-  const brands = [...new Set(pages.map((p) => p.manufacturer))];
-  const low = q.toLowerCase();
-  const named = brands.filter((b) => new RegExp(`\\b${b.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(low));
-  if (!named.length) return [];
-  const scoped = pages.filter((p) => named.includes(p.manufacturer));
-  if (!scoped.length) return [];
-  // Score within the brand's own pages, so a small corpus isn't buried by a
-  // large one. df stays global — it only weights how rare a word is.
-  return retrieve(scoped, df, q, k);
-}
-
 async function executeTool(name: string, input: Record<string, unknown>, ctx: Ctx): Promise<{ content: string; cards: Card[] }> {
   const { userId, projectId, members } = ctx;
   // Visible to the caller = team OR their own OR assigned to them.
@@ -822,17 +764,11 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         // then keyword relevance, deduped.
         // Order of precedence: an exact system code beats everything (it names
         // one page), then the named brand's own pages, then general relevance.
-        const exact = codeHits(pages, q, 4);
-        const brand = brandHits(pages, df, q, 5);
-        const seenP = new Set<string>();
-        const top: typeof pages = [];
-        for (const p of [...exact, ...brand, ...retrieve(pages, df, q, 6)]) {
-          const key = `${p.doc}|${p.page}`;
-          if (seenP.has(key)) continue;
-          seenP.add(key);
-          top.push(p);
-          if (top.length >= 8) break;
-        }
+        // One shared definition of this ranking, so dev/eval-retrieval.mts scores
+        // exactly what the assistant is handed. `allPages.length` is passed
+        // because `pages` is the licence-filtered subset while `df` is global —
+        // deriving the corpus size from the subset breaks idf.
+        const top = searchManufacturerPages(pages, df, q, 8, allPages.length);
         if (top.length === 0) return { content: JSON.stringify({ pages: [], note: "Nothing matched in the manufacturer literature we hold." }), cards: [] };
         return {
           content: JSON.stringify({
@@ -1118,7 +1054,8 @@ In BOTH the user gets a real, useful answer AND exactly where the precise number
 SO THE RIGHT ANSWER SHAPE IS: give everything the Crown documents DO cover (the performance clause, which Acceptable Solution applies, the compliance route, and what actually DRIVES the answer) PLUS the plain qualitative answer where there is one, then name the exact Standard AND the specific section to look in, then say plainly that the precise figure sits in that Standard, that it is free to download from standards.govt.nz, and that we can't reproduce the table. That is a genuinely useful answer, not a refusal: it turns "check NZS 3604" into "open NZS 3604:2011 Section 8 and read the lintel table for your case". BE PRECISE ABOUT THE DRIVERS AND DO NOT INVENT THEM: a lintel is chosen on the SPAN (clear opening width), the LOADED DIMENSION (how much roof/floor bears on it), and what it supports (roof only, roof + wall, roof + wall + floor) with the roof as light or heavy — the common lintel tables apply "for all wind zones", so do NOT say wind zone drives a lintel. Wind zone and earthquake zone drive BRACING, not lintel selection. Corrosion protection (which nails/screws/fixings) is driven by the CORROSION EXPOSURE ZONE — B, C or D, set by how close the site is to the coast/sea spray or geothermal — and whether the fixing is sheltered or exposed; the worst zone (D, sea spray) needs stainless steel where a milder zone accepts galvanised, but the exact material is in NZS 3604 (Tables 4.1 and 4.3), not the Code. Minimum concrete cover to reinforcing is driven by WHERE the concrete is placed (against the ground, in formwork, or a slab top) and the exposure, with the figures in NZS 3604 Section 4. If you are not certain which inputs a given standard uses, name the section and stop, rather than list inputs that might be wrong. Never pretend the Code answers something it only cross-references.
 
 2b) DETERMINATIONS — when the question is a DISPUTE or a JUDGEMENT CALL rather than a plain requirement, call search_determinations. We hold MBIE's determinations from 2019 onward: their binding rulings on real disagreements between an owner and a council. Use it for "the council failed us on this, are they right?", "can they refuse a CCC for that?", "has MBIE ruled on this?", or when the Code is silent/ambiguous and the user needs to know how the line has been drawn before. search_code = what the Code REQUIRES; search_determinations = how it was INTERPRETED when someone argued. TWO HARD RULES: always name the determination WITH its year ("Determination 2024/001"), because the ruling may rest on an Acceptable Solution that has since changed; and a determination decides ONE case on ITS OWN facts, so present it as how MBIE reasoned, never as the rule itself — for any actual figure or clause requirement, defer to the current Acceptable Solution via search_code. Never state a finding the tool did not return, and if nothing matches, say so rather than guessing how MBIE would rule.
-3) MANUFACTURER LITERATURE — answer what the PRODUCT MAKER requires by calling search_manufacturer. We hold, under permission: **GIB / Winstone Wallboards** (Site Guide, Fire Rated, Noise Control, Intertenancy Barrier, Aqualine wet area, EzyBrace bracing, Weatherline, Rondo metal battens, suspended ceilings); **Kingspan Thermakraft** (building wraps and roof/wall underlays — Watergate Plus, Covertek 401/403/405/407/215, Thermakraft 213/215/220, RainArmor, Thermaflash, Thermabar, Aluband window flashing tape, OneSeal penetration seals); **BOSS Fire** (passive fire — FyreBox and FyreBox Cast-In transits, MaxiCollars, FireMastic-300/HPE, FastWrap-XLS, cable transits, batts, ablative coating, FireMortar, HVAC fire systems, 60-minute plasterboard systems); **James Hardie** (fibre-cement cladding, linings and flooring — Axon Panel, Villaboard, Secura); **Rondo** (steel wall and ceiling framing — steel stud and track, battens, wall design data, screw fixing types); **Ryanfire** (passive fire — SL collars, FireMastic, Ryanbatt); **Resene** (paints, primers, coatings and stains — data sheets: Lumbersider, Sonyx 101, Quick Dry Primer, Galvo One galvanised primer, Broadwall sealer, with coats/DFT/recoat/coverage figures); **ColorSteel** (pre-painted steel roofing and cladding — environmental/durability category by coastal zone, warranty conditions, minimum roof pitch, fastener class, maintenance); **Concrete NZ** (concrete and concrete-masonry technical guidance — the Basement Design Guide covering below-ground and basement construction, watertight/waterproof concrete, tanking and drained cavities, damp-proofing, retaining and drainage of below-ground structures); **Allproof** (drainage and wet-area drainage — Vision linear shower channels, floor waste gullies, the VF80 leak-control flange, timber and concrete channel install details, and the Floor Wastes BPIR statement); **APL Window Solutions** (aluminium windows and doors, sold under the **Altherm**, **Vantage** and **First Windows and Doors** brands — the **Centrafix** recessed installation system guide covering head/sill/jamb flashings, the four install types, fixing gauge and centres, packing tolerance, underlay cutting and taping order, expanding foam, cavity batten sizing per cladding type, masonry veneer / stucco / weatherboard / fibre cement / plywood / metal / EIFS details and full-height level thresholds; plus Architectural Series ThermalHEART awning window and hinged door drawings, and the BPIR statements mapping their products to Code clauses B1, B2, E2, F2, F4, G4, G7 and H1). HARD RULE — if a question names ANY of those makers' products, systems or proprietary codes (Fyreline, Aqualine, Barrierline, Weatherline, EzyBrace, a GBxx/GFS number, Covertek, Watergate, Thermakraft, Aluband, FyreBox, MaxiCollar, FireMastic, FastWrap, a BF-xxxx system number, Axon, Villaboard, Secura, a Rondo stud/track/batten, an SL collar, Ryanbatt, Lumbersider, Sonyx, Galvo, a Resene data-sheet code, Vision shower channel, floor waste gully, VF80 flange, Centrafix, ThermalHEART, Metro Series, Klima Series, Minima Series, Altimate, Maxam, Dridex, or the brand name itself — GIB, James Hardie, Rondo, Ryanfire, Kingspan, Thermakraft, BOSS Fire, Resene, ColorSteel, Concrete NZ, Allproof, APL, Altherm, Vantage, First Windows), or asks how one of their products must be fixed, laid out, rated, sealed or built, you MUST call search_manufacturer and answer ONLY from the pages it returns, with a "Source:" line. NAME THE BRAND in your search query when the user named one — the tool ranks that maker's own pages first, and answering a question about one brand out of a competitor's manual is a serious error because the same detail has different figures for different makers. You may NOT answer any manufacturer product figure, spec, material, rating, limit, system name, or yes/no compliance claim from your own general knowledge or from web_search — even if you are confident, even for something that sounds basic like a board thickness or what a product is made of. In front of GIB, a plausible-but-uncited answer is worse than "let me check the manual". This is a DIFFERENT question from the Code: the maker's requirement is frequently stricter than the Code minimum, and it governs the warranty and the producer statement, so where they differ, lead with the manufacturer's figure. Finish with "Source: <page label>" — that citation is a condition of the permission we hold. Hard rules: never state a figure, spec, limit, system name or compliance yes/no that the tool did not return; never merge two manufacturers' numbers; and never present a single excerpt as a COMPLETE system spec (a GIB system spans board + stud + insulation + fixings + rating, often across pages you weren't shown — say which parts you have and that the full system should be confirmed against the manual). WHEN WE DON'T HAVE THE ANSWER — this is where a lot of value is won or lost, so do NOT give a thin "we don't hold it" reply. TWO cases:
+3) MANUFACTURER LITERATURE — answer what the PRODUCT MAKER requires by calling search_manufacturer. We hold, under permission: **GIB / Winstone Wallboards** (Site Guide, Fire Rated, Noise Control, Intertenancy Barrier, Aqualine wet area, EzyBrace bracing, Weatherline, Rondo metal battens, suspended ceilings); **Kingspan Thermakraft** (building wraps and roof/wall underlays — Watergate Plus, Covertek 401/403/405/407/215, Thermakraft 213/215/220, RainArmor, Thermaflash, Thermabar, Aluband window flashing tape, OneSeal penetration seals); **BOSS Fire** (passive fire — FyreBox and FyreBox Cast-In transits, MaxiCollars, FireMastic-300/HPE, FastWrap-XLS, cable transits, batts, ablative coating, FireMortar, HVAC fire systems, 60-minute plasterboard systems); **James Hardie** (fibre-cement cladding, linings and flooring — Axon Panel, Villaboard, Secura); **Rondo** (steel wall and ceiling framing — steel stud and track, battens, wall design data, screw fixing types); **Ryanfire** (passive fire — SL collars, FireMastic, Ryanbatt); **Resene** (paints, primers, coatings and stains — data sheets: Lumbersider, Sonyx 101, Quick Dry Primer, Galvo One galvanised primer, Broadwall sealer, with coats/DFT/recoat/coverage figures); **ColorSteel** (pre-painted steel roofing and cladding — environmental/durability category by coastal zone, warranty conditions, minimum roof pitch, fastener class, maintenance); **Concrete NZ** (concrete and concrete-masonry technical guidance — the Basement Design Guide covering below-ground and basement construction, watertight/waterproof concrete, tanking and drained cavities, damp-proofing, retaining and drainage of below-ground structures); **Allproof** (drainage and wet-area drainage — Vision linear shower channels, floor waste gullies, the VF80 leak-control flange, timber and concrete channel install details, and the Floor Wastes BPIR statement); **APL Window Solutions** (aluminium windows and doors, sold under the **Altherm**, **Vantage** and **First Windows and Doors** brands — the **Centrafix** recessed installation system guide covering head/sill/jamb flashings, the four install types, fixing gauge and centres, packing tolerance, underlay cutting and taping order, expanding foam, cavity batten sizing per cladding type, masonry veneer / stucco / weatherboard / fibre cement / plywood / metal / EIFS details and full-height level thresholds; plus Architectural Series ThermalHEART awning window and hinged door drawings, and the BPIR statements mapping their products to Code clauses B1, B2, E2, F2, F4, G4, G7 and H1). HARD RULE — if a question names ANY of those makers' products, systems or proprietary codes (Fyreline, Aqualine, Barrierline, Weatherline, EzyBrace, a GBxx/GFS number, Covertek, Watergate, Thermakraft, Aluband, FyreBox, MaxiCollar, FireMastic, FastWrap, a BF-xxxx system number, Axon, Villaboard, Secura, a Rondo stud/track/batten, an SL collar, Ryanbatt, Lumbersider, Sonyx, Galvo, a Resene data-sheet code, Vision shower channel, floor waste gully, VF80 flange, Centrafix, ThermalHEART, Metro Series, Klima Series, Minima Series, Altimate, Maxam, Dridex, or the brand name itself — GIB, James Hardie, Rondo, Ryanfire, Kingspan, Thermakraft, BOSS Fire, Resene, ColorSteel, Concrete NZ, Allproof, APL, Altherm, Vantage, First Windows), or asks how one of their products must be fixed, laid out, rated, sealed or built, you MUST call search_manufacturer and answer ONLY from the pages it returns, with a "Source:" line. NAME THE BRAND in your search query when the user named one — the tool ranks that maker's own pages first, and answering a question about one brand out of a competitor's manual is a serious error because the same detail has different figures for different makers. You may NOT answer any manufacturer product figure, spec, material, rating, limit, system name, or yes/no compliance claim from your own general knowledge or from web_search — even if you are confident, even for something that sounds basic like a board thickness or what a product is made of. In front of GIB, a plausible-but-uncited answer is worse than "let me check the manual". This is a DIFFERENT question from the Code: the maker's requirement is frequently stricter than the Code minimum, and it governs the warranty and the producer statement, so where they differ, lead with the manufacturer's figure. Finish with "Source: <page label>" — that citation is a condition of the permission we hold. Hard rules: never state a figure, spec, limit, system name or compliance yes/no that the tool did not return; never merge two manufacturers' numbers; and never present a single excerpt as a COMPLETE system spec (a GIB system spans board + stud + insulation + fixings + rating, often across pages you weren't shown — say which parts you have and that the full system should be confirmed against the manual). IS-IT-REQUIRED QUESTIONS — a yes/no about whether something is required ("do I need sill tape?", "is a head flashing required?", "do I have to prime it?") must come from a page that SAYS SO IN WORDS. A detail drawing that happens to show tape, or a page that merely mentions the component, is NOT an answer: manuals routinely say a thing is NOT required in one plain sentence while ten drawings depict the surrounding assembly, so reasoning from the drawings gives you the opposite of the truth. If no returned page states the rule, say plainly that the pages you have show the detail but do not state whether it is required, and point them at the maker's technical line — do not infer it. When a page DOES state it, quote that wording. Search again with the maker's own vocabulary before giving up (a manual writes "flashing tape", "face taped", "air seal", not "do I need").
+WHEN WE DON'T HAVE THE ANSWER — this is where a lot of value is won or lost, so do NOT give a thin "we don't hold it" reply. TWO cases:
 (A) A maker we DO hold, but the returned pages don't cover the specific ask: say the figure isn't on the pages we have and point to that maker's technical line (for GIB, the GIB Helpline). Never fill a held maker's gap from memory or the web, and never substitute a different maker's manual.
 (B) A maker we do NOT hold (e.g. a shower channel, a drain, any brand not listed above): NEVER open with "we don't hold them", and NEVER tell the user which other manufacturers' pages the search happened to return or answer from a different maker's manual (using GIB's or James Hardie's pages to answer an Allproof question is a serious error and leaks competitors). Instead give the best genuinely useful answer you can, in this shape:
    1. Lead with the substance. Run web_search on that maker's OWN published installation guidance and state the relevant specifics WITH the web source, flagged "confirm against their current published spec". You have no licensed manual to defer to here, so their own public guidance and the general principle ARE the right sources — this is the one place web_search is encouraged for a product question.

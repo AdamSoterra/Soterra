@@ -95,10 +95,44 @@ export function computeDf(pages: { text: string }[]): Map<string, number> {
 
 const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export function retrieve<T extends { text: string }>(pages: T[], df: Map<string, number>, q: string, k = 6): T[] {
+// BM25 parameters. k1 controls how fast a repeated term stops earning more;
+// b controls how hard a long page is penalised for its length.
+//
+// These matter more here than in ordinary search, because of what our "pages"
+// are. A page that ANSWERS a question usually says so ONCE, in one plain
+// sentence ("there is no requirement for the application of sill tapes"). A
+// page that merely concerns the same topic — a detail drawing — repeats the
+// word ten times as labels. Raw frequency scoring therefore ranks the drawing
+// above the rule, which is exactly backwards, and it is how the assistant came
+// to answer the same question two opposite ways depending on how it happened to
+// word its search. Saturation fixes the repetition; normalisation stops a long
+// page winning on sheer volume.
+const K1 = 1.2;
+const B = 0.75;
+
+/**
+ * `nDocs` is the size of the corpus `df` was built from, which is NOT always
+ * `pages.length`: brandHits scores one manufacturer's pages, and a customer sees
+ * only the licence-visible subset, while `df` is always global. Deriving N from
+ * the subset made idf(t) = log((N+1)/(df+1))+1 go to zero or NEGATIVE for any
+ * term commoner than the subset is large — so inside a brand-scoped search the
+ * words that mattered scored nothing and the ranking collapsed (a BPIR cover
+ * page outranked the page that answered the question). Pass the real corpus size
+ * whenever `pages` is a subset.
+ */
+export function retrieve<T extends { text: string }>(pages: T[], df: Map<string, number>, q: string, k = 6, nDocs?: number): T[] {
   const terms = expand(q);
-  const N = pages.length || 1;
+  const N = nDocs ?? pages.length ?? 1;
   const idf = (t: string) => Math.log((N + 1) / ((df.get(t) || 0) + 1)) + 1;
+
+  // Average page length across whatever set we were handed (the whole corpus, or
+  // one manufacturer's pages when called from brandHits) — the baseline a page
+  // is judged long or short against.
+  // (Deliberately over `pages`, not N: length is judged against the candidates
+  // we are actually ranking, whereas idf is a property of the whole corpus.)
+  let total = 0;
+  for (const p of pages) total += p.text.length;
+  const avgLen = total / (pages.length || 1) || 1;
 
   // The literal words the user typed, in order, before synonym expansion. Used
   // for the adjacency bonus below — synonyms must not take part, or "screw
@@ -108,10 +142,11 @@ export function retrieve<T extends { text: string }>(pages: T[], df: Map<string,
   const scored = pages
     .map((p) => {
       const low = p.text.toLowerCase();
+      const norm = K1 * (1 - B + B * (p.text.length / avgLen));
       let s = 0;
       for (const t of terms) {
         const c = (low.match(new RegExp(`\\b${esc(t)}`, "g")) || []).length;
-        if (c) s += (1 + Math.log(c)) * idf(t);
+        if (c) s += idf(t) * ((c * (K1 + 1)) / (c + norm));
       }
 
       // Adjacency bonus. Bag-of-words scoring ranks a page that LISTS fifty
@@ -121,9 +156,18 @@ export function retrieve<T extends { text: string }>(pages: T[], df: Map<string,
       // page is the wrong answer. So pay for consecutive query words appearing
       // adjacent in the text. Weighted by idf, which keeps it near-silent for
       // ordinary phrases and decisive for a rare code.
+      //
+      // No trailing \b: the phrase must START on a word boundary, but it may end
+      // mid-word, so "sill tape" still matches the manual's "sill tapes". With
+      // the boundary there, the one page stating the sill-tape rule scored no
+      // phrase bonus at all, purely because the manual wrote it in the plural.
+      // (Single terms above are matched the same way, so this is consistent.)
       for (let i = 0; i < literal.length - 1; i++) {
         const [a, b] = [literal[i], literal[i + 1]];
-        if (new RegExp(`\\b${esc(a)}[\\s\\-]?${esc(b)}\\b`).test(low)) s += 2 * Math.min(idf(a), idf(b));
+        const hits = (low.match(new RegExp(`\\b${esc(a)}[\\s\\-]?${esc(b)}`, "g")) || []).length;
+        // Capped: a phrase appearing twice is a strong signal, appearing twenty
+        // times is a drawing legend, not a stronger answer.
+        if (hits) s += Math.min(hits, 3) * 1.5 * Math.min(idf(a), idf(b));
       }
 
       return { s, p };
@@ -131,6 +175,117 @@ export function retrieve<T extends { text: string }>(pages: T[], df: Map<string,
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s);
   return scored.slice(0, k).map((x) => x.p);
+}
+
+// ─── Manufacturer search ─────────────────────────────────────────────────
+//
+// Lifted out of the ask route so the exact ranking the assistant sees can be
+// evaluated directly (dev/eval-retrieval.mts) rather than only through a live
+// chat. The route now calls searchManufacturerPages().
+
+// GIB name their systems with short codes (GBTL 90, GBS 60, GFS 520, GBSA 90f).
+// Plain keyword search buries these — the code token is tiny next to common words
+// like "wall" and "fire" — so a code question can miss the one page that DEFINES
+// the code, or grab a look-alike (GBQSA 90 for GBTL 90). When the query carries a
+// code, surface the pages that actually contain that exact code FIRST, so the
+// model reads the right system. Codes are written uppercase and (for GIB) start
+// with G, which stops this firing on ordinary words. Normalising out spaces and
+// hyphens makes "GBTL 90" match "GBTL90"; requiring an exact token stops "GBTL90"
+// matching "GBTLA90".
+export function codeHits<T extends { text: string }>(pages: T[], query: string, k = 4): T[] {
+  const norm = (t: string) => t.toUpperCase().replace(/[\s-]/g, "");
+  const codes = [...query.matchAll(/\bG[A-Z]{1,4}\s?-?\s?\d{1,3}[a-z]?\b/gi)].map((m) => norm(m[0]));
+  if (codes.length === 0) return [];
+  return pages
+    .map((p) => {
+      const hay = norm(p.text);
+      let hits = 0;
+      for (const c of codes) hits += hay.split(c).length - 1;
+      return { p, hits };
+    })
+    .filter((x) => x.hits > 0)
+    .sort((a, b) => b.hits - a.hits)
+    .slice(0, k)
+    .map((x) => x.p);
+}
+
+/** Product and system names that identify a manufacturer as surely as the brand
+ *  name does. This matters because nobody on site asks about "APL" or "GIB" —
+ *  they ask about "Centrafix" or "Fyreline". Without these, a question named
+ *  purely by product competes against the whole corpus, and the largest
+ *  manufacturer's pages win on sheer volume — which is how a Centrafix question
+ *  ends up ranked against 800-odd pages of someone else's manual.
+ *  KEEP IN STEP with the brand/product list in the ask route's static prompt. */
+const BRAND_ALIASES: Record<string, string[]> = {
+  GIB: ["fyreline", "aqualine", "braceline", "noiseline", "barrierline", "weatherline", "ezybrace"],
+  APL: ["centrafix", "thermalheart", "altherm", "vantage", "first windows", "metro series", "klima", "minima"],
+  Allproof: ["vision channel", "vision shower", "floor waste gully", "vf80"],
+  "BOSS Fire": ["fyrebox", "maxicollar", "firemastic", "fastwrap", "firemortar"],
+  "James Hardie": ["axon", "villaboard", "secura", "linea"],
+  Ryanfire: ["ryanbatt", "sl collar"],
+  "Kingspan Thermakraft": ["covertek", "watergate", "thermakraft", "rainarmor", "thermaflash", "thermabar", "aluband", "oneseal"],
+  Resene: ["lumbersider", "sonyx", "galvo", "broadwall"],
+  ColorSteel: ["colorcote", "maxam", "dridex"],
+};
+
+// When a question NAMES a manufacturer (or one of its products), that
+// manufacturer's own pages must win.
+//
+// Plain relevance scoring doesn't give you this, and the bigger the corpus gets
+// the worse it reads. GIB is 823 pages; Rondo is 60. Ask "what centres do I fix
+// a Rondo track at" and every top hit came back GIB, partly because GIB's pages
+// simply outnumber Rondo's, and partly because GIB publish a co-branded "GIB
+// Rondo Metal Batten Systems" manual, so the word "Rondo" is scattered through
+// the larger corpus too. Answering a Rondo question out of a competitor's manual
+// is wrong in the way that matters most here: the brand IS the answer, because
+// the same detail has different figures for different makers.
+export function brandHits<T extends { manufacturer: string; text: string }>(
+  pages: T[],
+  df: Map<string, number>,
+  q: string,
+  k = 5,
+  nDocs?: number,
+): T[] {
+  const brands = [...new Set(pages.map((p) => p.manufacturer))];
+  const low = q.toLowerCase();
+  const named = brands.filter((b) => {
+    if (new RegExp(`\\b${esc(b.toLowerCase())}\\b`).test(low)) return true;
+    // Only aliases for a manufacturer we actually hold pages for, so a demo-tier
+    // brand that has been filtered out for this user can't be resurrected here.
+    return (BRAND_ALIASES[b] || []).some((a) => new RegExp(`\\b${esc(a)}`).test(low));
+  });
+  if (!named.length) return [];
+  const scoped = pages.filter((p) => named.includes(p.manufacturer));
+  if (!scoped.length) return [];
+  // Score within the brand's own pages, so a small corpus isn't buried by a
+  // large one. df stays global — it only weights how rare a word is — so the
+  // corpus size must stay global with it.
+  return retrieve(scoped, df, q, k, nDocs ?? pages.length);
+}
+
+/** Exactly what the assistant is handed for a manufacturer question: exact
+ *  system codes first, then the named brand's own pages, then general relevance,
+ *  deduped. One definition, so the eval measures the real thing. */
+export function searchManufacturerPages<T extends { manufacturer: string; doc: string; page: number; text: string }>(
+  pages: T[],
+  df: Map<string, number>,
+  q: string,
+  k = 8,
+  /** Size of the corpus `df` was built from — pass it when `pages` has been
+   *  filtered (e.g. licence-gated for this user), or idf goes wrong. */
+  nDocs?: number,
+): T[] {
+  const n = nDocs ?? pages.length;
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const p of [...codeHits(pages, q, 4), ...brandHits(pages, df, q, 5, n), ...retrieve(pages, df, q, 6, n)]) {
+    const key = `${p.doc}|${p.page}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+    if (out.length >= k) break;
+  }
+  return out;
 }
 
 // We can't hand the model a whole page — long pages blow the token budget. The
