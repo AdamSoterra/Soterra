@@ -559,10 +559,16 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .iz-bar.on{background:rgba(65,195,255,.12)}
 .iz-bl{width:90px;flex-shrink:0;font-size:12px;font-weight:500;color:var(--navy);display:flex;align-items:center;gap:7px;line-height:1.15}
 .iz-bl span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.iz-bt{flex:1;height:20px;background:var(--line2);border-radius:7px;overflow:hidden}
-.iz-bf{height:100%;border-radius:7px;transition:width .5s cubic-bezier(.2,.7,.3,1),opacity .15s}
-.iz-bar:not(.on) .iz-bf{opacity:.5}
-.iz-bn{width:28px;flex-shrink:0;text-align:right;font-size:14px;font-weight:700;color:var(--navy)}
+/* The fill is a <span>, so it MUST be blockified: width and height do not apply
+   to a non-replaced inline element, so the computed width was silently thrown
+   away and every bar rendered as an empty grey track. The track itself only
+   showed because it is a flex item (flex items get blockified for free). */
+.iz-bt{flex:1;min-width:0;display:block;height:10px;background:var(--line2);border-radius:6px;overflow:hidden}
+.iz-bf{display:block;height:100%;min-width:6px;border-radius:6px;transition:width .5s cubic-bezier(.2,.7,.3,1),opacity .15s}
+.iz-bar:not(.on) .iz-bf{opacity:.6}
+.iz-bar:hover .iz-bf{opacity:1}
+/* tabular-nums so the counts line up in a column instead of jittering. */
+.iz-bn{min-width:30px;flex-shrink:0;text-align:right;font-size:14px;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums}
 .iz-cardf{padding:2px 20px 15px;font-size:12px;color:var(--mut)}
 
 .iz-ddh{padding:17px 20px 14px;border-bottom:1px solid var(--line2);display:flex;align-items:center;gap:12px}
@@ -649,3 +655,7 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .sub-k:first-child{margin-top:2px}
 .sub-k span{font-size:11px;font-weight:700;color:var(--mut);background:rgba(146,166,190,.14);border-radius:20px;padding:2px 8px}
 .sub-k::after{content:"";flex:1;height:1px;background:var(--line2)}
+
+/* The choose-files pills are real buttons now (keyboard + assistive tech), so
+   strip the default button chrome and keep the pill look. */
+.drop button.soon{border:none;font-family:inherit;cursor:pointer}

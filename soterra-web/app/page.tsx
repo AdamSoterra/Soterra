@@ -499,6 +499,14 @@ export default function Page() {
   const [upCurrent, setUpCurrent] = useState<{ name: string; phase: string; pct: number } | null>(null);
   const [upItems, setUpItems] = useState<{ name: string; ok: boolean; note: string }[]>([]);
   const [dragOver, setDragOver] = useState(false);
+// A file input hidden with display:none is removed from the layout tree, and
+  // some browsers, WebViews and desktop shells then refuse a programmatic
+  // .click() on it — which is exactly why "Choose files" did nothing while
+  // drag-and-drop worked. Visually hidden but still laid out fixes it everywhere.
+  const HIDDEN_INPUT: React.CSSProperties = {
+    position: "absolute", width: 1, height: 1, padding: 0, margin: -1,
+    overflow: "hidden", clipPath: "inset(50%)", whiteSpace: "nowrap", border: 0,
+  };
   const planFileRef = useRef<HTMLInputElement>(null);
   const planFolderRef = useRef<HTMLInputElement>(null);
 
@@ -1735,8 +1743,8 @@ export default function Page() {
         }}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
       />
-      <input ref={fileInputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={onFilePick} />
-      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onFilePick} />
+      <input ref={fileInputRef} type="file" accept="image/*,application/pdf" style={HIDDEN_INPUT} onChange={onFilePick} />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={HIDDEN_INPUT} onChange={onFilePick} />
       {attachErr && <div className="cerr">{attachErr}</div>}
       <div className="crow">
         <span className="hint">
@@ -2169,15 +2177,15 @@ export default function Page() {
                 ? `Add or update a sheet on ${projName} — drop the revised version and the assistant answers from the latest, treating the old one as superseded.`
                 : `Load ${projName}'s plans — drop the whole set at once. Soterra reads & indexes every page (private to your site).`}
             </div>
-            <input ref={planFileRef} type="file" accept="application/pdf" multiple style={{ display: "none" }}
+            <input ref={planFileRef} type="file" accept="application/pdf" multiple style={HIDDEN_INPUT}
               onChange={(e) => { const fs = filesFrom(e.target); if (planFileRef.current) planFileRef.current.value = ""; if (fs.length) onPlanFiles(fs); }} />
             {/* Folder picker: returns the whole tree (subfolders included). No `accept`
                 here — webkitdirectory ignores it, so onPlanFiles filters to PDFs. */}
-            <input ref={planFolderRef} type="file" multiple style={{ display: "none" }}
+            <input ref={planFolderRef} type="file" multiple style={HIDDEN_INPUT}
               onChange={(e) => { const fs = filesFrom(e.target); if (planFolderRef.current) planFolderRef.current.value = ""; if (fs.length) onPlanFiles(fs); }} />
             <div
               className="drop"
-              onClick={() => { if (!upCurrent) planFileRef.current?.click(); }}
+              onClick={(e) => { if (e.target !== e.currentTarget) return; if (!upCurrent) planFileRef.current?.click(); }}
               onDragOver={(e) => { e.preventDefault(); if (!upCurrent) setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={(e) => {
@@ -2196,8 +2204,8 @@ export default function Page() {
               )}
               {!upCurrent && (
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-                  <span className="soon" style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); planFolderRef.current?.click(); }}>📁 Choose folder</span>
-                  <span className="soon" style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); planFileRef.current?.click(); }}>Choose files</span>
+                  <button type="button" className="soon" onClick={(e) => { e.stopPropagation(); planFolderRef.current?.click(); }}>📁 Choose folder</button>
+                  <button type="button" className="soon" onClick={(e) => { e.stopPropagation(); planFileRef.current?.click(); }}>Choose files</button>
                 </div>
               )}
             </div>
@@ -2261,7 +2269,7 @@ export default function Page() {
               </div>
             </div>
 
-            <input ref={reportFileRef} type="file" accept="application/pdf" multiple style={{ display: "none" }}
+            <input ref={reportFileRef} type="file" accept="application/pdf" multiple style={HIDDEN_INPUT}
               onChange={(e) => { const fs = filesFrom(e.target); if (reportFileRef.current) reportFileRef.current.value = ""; if (fs.length) onReportFiles(fs); }} />
 
             {!insightsLoaded ? (
@@ -2898,7 +2906,7 @@ export default function Page() {
       )}
 
       {/* Camera/gallery picker for checklist photos — one input, reused. */}
-      <input ref={photoInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+      <input ref={photoInputRef} type="file" accept="image/*" capture="environment" style={HIDDEN_INPUT}
         onChange={(e) => { const f = filesFrom(e.target)[0]; if (photoInputRef.current) photoInputRef.current.value = ""; if (f) onPhotoPicked(f); }} />
 
       {/* ─── one past inspection, and what it picked up ─── */}

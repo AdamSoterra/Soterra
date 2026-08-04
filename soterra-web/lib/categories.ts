@@ -131,7 +131,14 @@ export function typeQuery(code: string | null | undefined): string | null {
 // Each rule is [regex, category]. FIRST MATCH WINS, so the exceptions
 // ("fire lining", "fire damper", "emergency lighting") sit above the general
 // rules they'd otherwise be swallowed by.
-const RULES: [RegExp, Category][] = [
+// An optional THIRD element is a veto: the rule matches, but is skipped when
+// the veto also matches. It exists for one recurring problem — THE SUBJECT
+// OUTRANKS THE MODIFIER. "Acoustic" is usually an adjective in inspector
+// wording ("gaps in acoustic insulation around sanitary pipework"), and the
+// element that is actually defective decides the trade, because the element
+// decides who goes back to site to fix it. Without the veto that item filed
+// under Acoustic, which put a whole trade in Insights that was never inspected.
+const RULES: [RegExp, Category, RegExp?][] = [
   // ── Fire first: it steals words from nearly every other category. Passive
   //    fire is by far the most-failed thing in the sample set (30+ line items).
   [/\bpassive fire|fire ?stop|firestop|fire collar|fire wrap|fire sleeve|fire seal|fire lin(?:ing|ed)|fire rated|fire[- ]resist|fire wall|fire cell|frr\b|fire curtain|fire damper|fire door|smoke door|smoke seal|intumescent|fire glazing|fire design|fire report|fire alarm|manual call point|smoke detector|heat detector|exit sign|emergency light|sprinkler|hydrant|fire service|non-?combustib|penetration.*fire|fire.*penetration|service penetration|final exit|fire blocked|fire protection/i, "Fire"],
@@ -141,7 +148,16 @@ const RULES: [RegExp, Category][] = [
   [/\bseismic|sway brace|service restraint|restrained? (?:for|against) earthquake|bracing of services|seismic (?:gap|clearance|restraint)/i, "Seismic"],
 
   // ── Acoustic before Interior: "intertenancy walls- acoustic system".
-  [/\bacoustic|\bstc\b|\biic\b|sound (?:seal|insulation|transmission|rating)|noise (?:level|control)|inter-?tenancy/i, "Acoustic"],
+  //    Vetoed when the item names the services element that is actually
+  //    defective — lagging around sanitary pipework is the plumber's item, not
+  //    the acoustic consultant's. Acoustic keeps anything about acoustic
+  //    PERFORMANCE (an STC/IIC figure, an intertenancy system), which is where
+  //    it genuinely is the acoustic engineer's problem.
+  [
+    /\bacoustic|\bstc\b|\biic\b|sound (?:seal|insulation|transmission|rating)|noise (?:level|control)|inter-?tenancy/i,
+    "Acoustic",
+    /sanitary|\bpipe(?:s|work)?\b|soil ?pipe|waste ?pipe|\bdrain(?:age|s)?\b|\bduct(?:s|work|ing)?\b/i,
+  ],
 
   // ── Weathertightness: the cavity/wrap/flashing/membrane family.
   [/\bcavity|building wrap|rigid air barrier|\brab\b|flashing|weather ?(?:tight|proof)|\bcladding\b|membrane|saddle|upstand|apron|brick (?:rebate|veneer|tie)|capillary gap|deck\/?balcony|threshold step|roof(?:ing)? (?:underlay|junction|penetration)|soffit|spouting|gutter|downpipe|tanking|waterproof|damp ?proof|\bdpc\b|joinery.*(?:tape|air seal)|window (?:flashing|seal)|vermin proof|drainage enabled|wrap (?:restraint|lapped|returned)/i, "Weathertightness / Cladding"],
@@ -151,7 +167,7 @@ const RULES: [RegExp, Category][] = [
 
   // ── Electrical. Note the fire rules above already took the intumescent
   //    flush-box pads, which the council files under passive fire.
-  [/\belectric(?:al|ity)?\b|flush box|switchboard|distribution board|\bcable(?:s|way|tray)?\b|conduit|earth(?:ing|ed|bond)|\bsocket|luminaire|light fitting|\blighting\b|power (?:outlet|supply|point)|\bcomms?\b|data (?:cabling|outlet)|\bmeter box/i, "Electrical"],
+  [/\belectric(?:al|ity)?\b|flush box|switchboard|\bswitch(?:es)?\b|\bipx\d?\b|distribution board|\bcable(?:s|way|tray)?\b|conduit|earth(?:ing|ed|bond)|\bsocket|luminaire|light fitting|\blighting\b|power (?:outlet|supply|point)|\bcomms?\b|data (?:cabling|outlet)|\bmeter box/i, "Electrical"],
 
   // ── Mechanical.
   [/\bhvac\b|mechanical (?:services|plant)|ventilation|\bduct(?:s|work|ing)?\b|extract(?:or|ion)|air ?condition|heat pump|\bfan\b|make-?up air|\bdamper/i, "Mechanical"],
@@ -180,7 +196,11 @@ const RULES: [RegExp, Category][] = [
 export function categoryFromText(text: string): Category | null {
   const t = (text || "").trim();
   if (!t) return null;
-  for (const [re, cat] of RULES) if (re.test(t)) return cat;
+  for (const [re, cat, unless] of RULES) {
+    if (!re.test(t)) continue;
+    if (unless?.test(t)) continue; // the subject outranks the modifier
+    return cat;
+  }
   return null;
 }
 

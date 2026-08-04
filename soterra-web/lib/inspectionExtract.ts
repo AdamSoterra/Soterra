@@ -276,16 +276,27 @@ ${trimForModel(clean)}`;
   };
 
   const runPass = async (insist: boolean) => {
-    const resp = await anthropic.messages.create({
-      model: MODEL,
-      // A 40-page register of 50 items is a lot of JSON, and adaptive thinking
-      // spends from the same budget. 16k truncated real reports; 32k doesn't.
-      max_tokens: 32000,
-      thinking: { type: "adaptive" },
-      output_config: { effort: "high", format: { type: "json_schema", schema: ITEM_SCHEMA as unknown as Record<string, unknown> } },
-      system: SYSTEM,
-      messages: [{ role: "user", content: userContent(insist) }],
-    });
+    // STREAMED, deliberately. The SDK refuses a non-streaming request whose
+    // worst-case duration could pass 10 minutes, and it derives that from
+    // max_tokens — so at 32k this threw "Streaming is required for operations
+    // that may take longer than 10 minutes" before it ever reached the API, and
+    // EVERY report ingest failed with it. Dropping max_tokens instead would
+    // truncate a long register mid-JSON, which is the thing the ceiling check
+    // below exists to prevent. finalMessage() gives us the same Message back,
+    // so nothing downstream changes.
+    const resp = await anthropic.messages
+      .stream({
+        model: MODEL,
+        // A 40-page register of 50 items is a lot of JSON, and adaptive thinking
+        // spends from the same budget. 16k truncated real reports; 32k doesn't.
+        max_tokens: 32000,
+        thinking: { type: "adaptive" },
+        output_config: { effort: "high", format: { type: "json_schema", schema: ITEM_SCHEMA as unknown as Record<string, unknown> } },
+        system: SYSTEM,
+        messages: [{ role: "user", content: userContent(insist) }],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+      .finalMessage();
     // Hitting the ceiling means the JSON is cut off mid-register. Treat it as a
     // failure rather than parsing whatever survived.
     if (resp.stop_reason === "max_tokens") throw new Error("response hit the token ceiling");
