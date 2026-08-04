@@ -226,6 +226,13 @@ const BRAND_ALIASES: Record<string, string[]> = {
   "Kingspan Thermakraft": ["covertek", "watergate", "thermakraft", "rainarmor", "thermaflash", "thermabar", "aluband", "oneseal"],
   Resene: ["lumbersider", "sonyx", "galvo", "broadwall"],
   ColorSteel: ["colorcote", "maxam", "dridex"],
+  // Roofing is the first category where we hold two DIRECT competitors, so these
+  // are deliberately only the profile names unique to one maker. "Corrugate",
+  // "standing seam" and "trapezoidal" are shapes BOTH of them sell, so they are
+  // left out on purpose: a question naming only those must not silently scope to
+  // one brand, it should be settled by the project's own spec or by asking.
+  "Roofing Industries": ["true oak", "multidek", "trimrib", "snaplok"],
+  Dimond: ["dimondek", "styleline", "veedek", "bb900", "brownbuilt"],
 };
 
 // When a question NAMES a manufacturer (or one of its products), that

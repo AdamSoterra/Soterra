@@ -1,0 +1,22 @@
+{
+  "manufacturer": "Dimond",
+  "licence": "demo",
+  "dir": "C:/Users/adam/Desktop/Soterra/Dimond",
+  "docs": [
+    { "file": "Dimond Roofing - The Installers Guide.pdf",
+      "title": "Dimond Roofing The Installers Guide",
+      "url": "https://www.dimond.co.nz/", "exclude": [] },
+
+    { "file": "Dimond Technical Manual - Roofing and Cladding Components.pdf",
+      "title": "Dimond Technical Manual - Roofing and Cladding Components",
+      "url": "https://www.dimond.co.nz/", "exclude": [] },
+
+    { "file": "Dimond Corrugate - Residential Roofing Details.pdf",
+      "title": "Dimond Corrugate Residential Roofing Details",
+      "url": "https://www.dimond.co.nz/", "exclude": [] },
+
+    { "file": "Dimond - Fascia Gutters and Downpipes Installers Guide.pdf",
+      "title": "Dimond Fascia, Gutters and Downpipes Installers Guide",
+      "url": "https://www.dimond.co.nz/", "exclude": [] }
+  ]
+}

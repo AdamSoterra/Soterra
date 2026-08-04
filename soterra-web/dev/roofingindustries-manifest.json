@@ -1,0 +1,18 @@
+{
+  "manufacturer": "Roofing Industries",
+  "licence": "demo",
+  "dir": "C:/Users/adam/Desktop/Soterra/Roofing Industries",
+  "docs": [
+    { "file": "True Oak Corrugate - Product Technical Statement.pdf",
+      "title": "Roofing Industries True Oak Corrugate Product Technical Statement",
+      "url": "https://www.roof.co.nz/product/true-oak-corrugate", "exclude": [] },
+
+    { "file": "Multidek - Product Technical Statement.pdf",
+      "title": "Roofing Industries Multidek Product Technical Statement",
+      "url": "https://www.roof.co.nz/product/multidek", "exclude": [] },
+
+    { "file": "Roofing Cladding and Rainwater Systems - Profile and Specification Guide.pdf",
+      "title": "Roofing Industries Roofing, Cladding and Rainwater Systems Profile and Specification Guide",
+      "url": "https://www.roof.co.nz/", "exclude": [] }
+  ]
+}
