@@ -1,0 +1,172 @@
+# Codemagic CI/CD for the Soterra iOS app — builds a signed IPA and uploads it
+# to TestFlight. Adam has no Mac, so every iOS step happens here.
+#
+# Modelled on the working Montázs pipeline, with four deliberate differences.
+# Read these before "fixing" anything to match Montázs:
+#
+#  1. COCOAPODS, NOT SPM. Montázs uses Capacitor 8's default Swift Package
+#     Manager path. Soterra cannot: @capacitor-community/speech-recognition
+#     7.0.1 ships no root Package.swift, and under SPM the Capacitor CLI
+#     SILENTLY DROPS any plugin without one — one warning line, then an IPA
+#     with no speech plugin, no mic button, and voice dead on iPhone. That is
+#     the exact bug we just fixed on Android. CocoaPods reads the podspec,
+#     which does exist, so all four plugins come through. Montázs works around
+#     this with a patch-package patch; that patch cancels the recognition task
+#     before ending audio, which is fine for its partialResults:true listener
+#     but would discard Soterra's transcript on every attempt.
+#     Consequence: the build target is App.xcworkspace, NOT App.xcodeproj, and
+#     `pod install` must run before it.
+#
+#  2. NO PUSH ENTITLEMENT. Montázs passes
+#     --archive-xcargs "CODE_SIGN_ENTITLEMENTS=App/App.entitlements" for its
+#     aps-environment file. Soterra has no push notifications and no
+#     entitlements file, so that flag would fail the archive on a missing path.
+#     Do NOT enable Push Notifications on the App ID and do NOT create an APNs
+#     key.
+#
+#  3. MANUAL TRIGGER. Montázs builds on every push to main. Soterra pushes to
+#     main after every web change, and an IPA per commit would burn build
+#     minutes and spam TestFlight for changes that never touch the binary —
+#     the app loads soterra.co.nz live, so web fixes reach it with no rebuild.
+#     Build from the Codemagic UI when the NATIVE side actually changes.
+#
+#  4. PATHS ARE PREFIXED. Montázs's repo root is its app root. Soterra's app
+#     lives in soterra-web/, so npm and Capacitor both run from there.
+#
+# ── One-time setup in the Codemagic UI (needs Adam's Apple account) ──
+#   1. Teams → Integrations → App Store Connect → add an integration named
+#      exactly `codemagic-asc-key` (Issuer ID + Key ID + the AuthKey .p8).
+#      If Soterra ships under the same Apple team as Montázs, that existing
+#      integration can be reused as-is.
+#   2. Apple Developer → Identifiers → register `nz.co.soterra.app`.
+#      Add NO capabilities. (No push, no in-app purchase.)
+#   3. App Store Connect → create the app record → copy its numeric Apple ID
+#      into APP_STORE_APPLE_ID below (it is a placeholder right now).
+#   4. App Store Connect → TestFlight → create an Internal Testing group named
+#      exactly `Internal Testers` and add Adam to it.
+
+workflows:
+  ios-testflight:
+    name: Soterra iOS TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    integrations:
+      app_store_connect: codemagic-asc-key
+
+    environment:
+      # No `ios_signing:` block on purpose. It runs a pre-flight that expects
+      # certs and profiles to already exist and aborts before scripts run — on
+      # a first build there are none. Signing is handled in the scripts below
+      # via `app-store-connect fetch-signing-files --create`.
+      vars:
+        # ⚠️ PLACEHOLDER. Replace with the real numeric App Store Connect app
+        # ID once the app record exists. Until then the build still succeeds —
+        # the build-number lookup falls back to 0 — but publishing will fail.
+        APP_STORE_APPLE_ID: 0000000000
+        # CocoaPods, so the build target is the WORKSPACE. See note 1.
+        XCODE_WORKSPACE: "soterra-web/ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+        BUNDLE_ID: "nz.co.soterra.app"
+      node: 24.4.0
+      cocoapods: default
+      # Pinned rather than `latest`. A first iOS build has enough unknowns
+      # without Xcode rolling forward underneath it; raise this deliberately.
+      xcode: 16.2
+
+    triggering:
+      # Intentionally empty — manual builds only. See note 3.
+      events: []
+
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/soterra-web"
+          npm ci
+
+      - name: Capacitor sync iOS
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/soterra-web"
+          # Regenerates the native config and re-writes the Podfile from the
+          # installed plugins. Must run on the Mac: the Podfile committed from
+          # Windows is fine (Capacitor normalises its paths), but this keeps
+          # the plugin list honest if a dependency changed.
+          npx cap sync ios
+
+      - name: Install CocoaPods dependencies
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/soterra-web/ios/App"
+          # This is what produces App.xcworkspace/contents.xcworkspacedata.
+          # The repo only carries the workspace shell, so without this step the
+          # workspace opens with no Pods project and the build fails to find
+          # the Capacitor pods.
+          pod install --repo-update
+
+      - name: Set build number
+        script: |
+          set -e
+          # agvtool must run from the directory holding the .xcodeproj.
+          cd "$CM_BUILD_DIR/soterra-web/ios/App"
+          # First build: no app record yet, the lookup fails, `|| echo 0`
+          # makes this build 1.
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" || echo "0")
+          agvtool new-version -all $(($LATEST + 1))
+          echo "Build number set to $(($LATEST + 1))"
+
+      - name: Fetch and create signing files
+        script: |
+          set -e
+          keychain initialize
+          # `app-store-connect certificates create` does NOT generate a private
+          # key — it signs a CSR built from one you supply. So make the key
+          # first, then hand it over with the @file: syntax.
+          KEY_PATH="$HOME/distribution_private_key.pem"
+          if [ ! -f "$KEY_PATH" ]; then
+            openssl genrsa -out "$KEY_PATH" 2048
+          fi
+          # ⚠️ Apple caps Distribution certificates at 2 per account. This
+          # creates one per build when none is reusable, so if builds start
+          # failing on the cap, revoke the stale certs — or better, upload one
+          # persistent .p12 to Codemagic and drop this create step.
+          app-store-connect certificates create \
+            --type IOS_DISTRIBUTION \
+            --certificate-key=@file:"$KEY_PATH" \
+            --save \
+            || echo "Cert create skipped (one already exists)"
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform IOS \
+            --type IOS_APP_STORE \
+            --certificate-key=@file:"$KEY_PATH" \
+            --create
+          keychain add-certificates
+
+      - name: Apply signing certificates and profiles
+        script: |
+          set -e
+          xcode-project use-profiles
+
+      - name: Build iOS .ipa
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+          # --workspace, not --project. See note 1. No --archive-xcargs: there
+          # is no entitlements file and adding one would fail the archive.
+          xcode-project build-ipa \
+            --workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Internal testers see the build straight away, no Apple review.
+        # External testers would need Beta App Review (~24-48h first time).
+        submit_to_testflight: true
+        beta_groups:
+          - Internal Testers

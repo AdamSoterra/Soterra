@@ -999,17 +999,27 @@ export default function Page() {
     if (typeof window === "undefined") return;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).Capacitor?.isNativePlatform?.()) {
+    const cap = (window as any).Capacitor;
+    if (cap?.isNativePlatform?.()) {
       let cancelled = false;
       (async () => {
         try {
           const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
           const { available } = await SpeechRecognition.available();
-          if (cancelled || !available) return;
+          if (cancelled) return;
+          // We trust available() on Android, where it asks the OS whether a
+          // recognition service is actually installed. On iOS it builds a bare
+          // SFSpeechRecognizer with the DEVICE's default locale, before we have
+          // asked for authorisation — so a false here means "not ready yet",
+          // not "unsupported", and hiding the button on it would recreate the
+          // exact invisible-mic bug we are fixing. On iOS the plugin answering
+          // at all is enough; a genuine failure surfaces on the first tap with
+          // a message, which is far better than a button that never appears.
+          if (!available && cap.getPlatform?.() !== "ios") return;
           sttNativeRef.current = true;
           setSttSupported(true);
         } catch {
-          // No speech engine on this device. Leave the mic hidden rather than
+          // No speech plugin in this build. Leave the mic hidden rather than
           // showing a button that can't work — the old failure mode.
         }
       })();
@@ -1083,16 +1093,42 @@ export default function Page() {
         setIsRecording(true);
         // popup:false keeps it in our own UI — the composer already says
         // "Listening… speak now", so Android's dialog would be a second,
-        // conflicting one. partialResults:false means start() resolves with the
-        // finished transcript, so there's no listener to leak.
-        const res = await SpeechRecognition.start({
-          language: "en-NZ", maxResults: 1, partialResults: false, popup: false,
-        });
+        // conflicting one. (popup is ignored on iOS, which has no such dialog.)
+        // partialResults:false means start() resolves with the finished
+        // transcript, so there's no listener to leak.
+        //
+        // The two platforms END differently and the UI has to suit both:
+        // Android's recognizer detects the end of speech and finalises itself,
+        // while iOS keeps the request open until stop() is called. Tapping the
+        // mic again hits the isRecording branch above and calls stop(), which
+        // resolves this same pending promise — so tap-to-stop works on iOS and
+        // is simply redundant on Android.
+        //
+        // The race guards a silent hang: iOS returns nil from
+        // SFSpeechRecognizer(locale:) for a locale it doesn't support and then
+        // never resolves OR rejects, which would strand the button in
+        // "Listening…" forever with nothing to catch.
+        const res = await Promise.race([
+          SpeechRecognition.start({
+            language: "en-NZ", maxResults: 1, partialResults: false, popup: false,
+          }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("stt-timeout")), 60_000)),
+        ]);
         const transcript = (res as { matches?: string[] } | undefined)?.matches?.[0] ?? "";
         if (transcript) setInput((prev) => (prev.trim() ? prev + " " : "") + transcript);
-      } catch {
-        // Includes the user simply saying nothing, so keep it low-key.
-        setAttachErr("Voice didn't catch that. Try again, or type your message.");
+      } catch (e) {
+        // iOS checkPermissions() only reports the SPEECH authorisation — it
+        // never looks at the microphone. So the guard above can pass while the
+        // mic itself is denied, and the refusal arrives here instead. Read it,
+        // or we'd tell someone to "try again" when the fix is in Settings.
+        const msg = String((e as Error)?.message ?? e).toLowerCase();
+        if (msg.includes("denied") || msg.includes("permission"))
+          setAttachErr("Microphone is blocked. Allow mic access for Soterra in your phone's settings, then try again.");
+        else if (msg.includes("stt-timeout"))
+          setAttachErr("Voice didn't respond. Try again, or type your message.");
+        else
+          // Includes the user simply saying nothing, so keep it low-key.
+          setAttachErr("Voice didn't catch that. Try again, or type your message.");
       } finally {
         setIsRecording(false);
       }

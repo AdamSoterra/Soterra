@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+        <string>Soterra</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<!-- Usage descriptions. iOS does not throw a catchable error when one of
+	     these is missing — it kills the process. All three are reachable from
+	     the chat composer, so all three must be here before the first build:
+	       • Speech + Microphone → the mic button (voice dictation).
+	         iOS asks TWICE, speech first then microphone, so both strings are
+	         shown to the user and both must make sense on their own.
+	       • Camera → the "Take a photo" button, which is a plain
+	         <input type="file" capture>; WKWebView invokes the host app's
+	         camera, so the permission is ours to declare.
+	     Deliberately NOT declaring NSPhotoLibraryUsageDescription: the file
+	     picker uses PHPickerViewController, which needs no permission, and an
+	     unused string only invites App Review questions. Same reasoning as the
+	     READ_MEDIA_IMAGES omission in AndroidManifest.xml. -->
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Soterra converts your speech to text so you can ask a question on site without typing.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Soterra uses the microphone so you can dictate a question instead of typing it.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Soterra uses the camera so you can attach a photo of the work to a question or an inspection check.</string>
+	<!-- Answers the export-compliance question at upload time. Without it every
+	     TestFlight build sits in "Missing Compliance" and can't be distributed
+	     until someone answers it by hand in App Store Connect. Soterra uses only
+	     standard HTTPS, which is exempt. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+    <false/>
+    <key>UISceneConfigurations</key>
+    <dict>
+      <key>UIWindowSceneSessionRoleApplication</key>
+      <array>
+        <dict>
+            <key>UISceneConfigurationName</key>
+            <string>Default Configuration</string>
+            <key>UISceneDelegateClassName</key>
+            <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+            <key>UISceneStoryboardFile</key>
+            <string>Main</string>
+        </dict>
+      </array>
+    </dict>
+	</dict>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv7</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+</dict>
+</plist>

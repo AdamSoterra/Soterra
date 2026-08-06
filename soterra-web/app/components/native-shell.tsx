@@ -7,6 +7,13 @@ import { useEffect } from "react";
 // overlay the WebView, and sets dark icons for our light header. Without the
 // overlay call, env(safe-area-inset-top) reports 0 on Android and the header
 // clashes with the clock/wifi/battery. No-op on web.
+//
+// ⚠️ Style.Light is correct here and Style.Dark is not, despite how it reads.
+// The enum names the CONTENT BEHIND the bar, not the icons: Style.Light means
+// "light background, so draw dark icons". .topnav is white, so we want Light.
+// Style.Dark was the old value and gave WHITE icons on a WHITE header on BOTH
+// platforms — Android maps it to setAppearanceLightStatusBars(false), iOS to
+// .lightContent. Don't "correct" this back.
 export function NativeShell() {
   useEffect(() => {
     void (async () => {
@@ -17,7 +24,7 @@ export function NativeShell() {
         document.documentElement.classList.add("is-capacitor");
         const { StatusBar, Style } = await import("@capacitor/status-bar");
         await StatusBar.setOverlaysWebView({ overlay: true });
-        await StatusBar.setStyle({ style: Style.Dark }); // dark icons on our light header
+        await StatusBar.setStyle({ style: Style.Light }); // dark icons on our light header
       } catch {
         /* web / plugin unavailable */
       }
