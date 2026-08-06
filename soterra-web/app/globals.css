@@ -76,6 +76,19 @@ button,input,textarea{font-family:var(--font)}
   .asst-inner{padding:20px 12px 8px}
   .bub{padding:12px 15px}
 }
+/* iPhone home-screen web app (Safari "Add to Home Screen"), which is the whole
+   iOS channel — there is no App Store build. No Capacitor here, but the same
+   home indicator sits over the composer: .composer-wrap only has the composer's
+   own 26px, against a 34px indicator, so send/mic/camera land in the system
+   swipe-up strip. Kept as its own block ABOVE .is-capacitor so the Android app's
+   rules always win if both were ever present, and so nothing here can regress it.
+   The .topnav rule is belt-and-braces: with statusBarStyle "default" the top
+   inset is 0, and min-height (not height) means it can only ever add space. */
+html.is-standalone .topnav{flex:0 0 auto;height:auto;min-height:64px;padding-top:env(safe-area-inset-top)}
+html.is-standalone .composer-wrap{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+/* With no browser chrome, rubber-banding a scroller drags the whole app. */
+html.is-standalone .asst-scroll,html.is-standalone .page,html.is-standalone .form-body{overscroll-behavior:contain}
+
 /* Native app (Capacitor): the status bar overlays the WebView, so reserve its
    space at the top of the header and the home indicator's at the bottom.
    Scoped to .is-capacitor so the website never gets this padding. */
@@ -329,8 +342,14 @@ html,body{overflow-x:hidden}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ════════ SHEET MODAL ════════ */
-.scrim{position:fixed;inset:0;background:rgba(12,42,71,.5);backdrop-filter:blur(3px);z-index:80;display:flex;align-items:center;justify-content:center;padding:24px}
-.sheet{width:100%;max-width:680px;max-height:88vh;background:#fff;border-radius:20px;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;box-shadow:0 40px 90px rgba(12,42,71,.42)}
+/* Modal sheets. The checklist and inspection sheets are the tallest surfaces in
+   the app and the ones used on site, so they get the insets too — otherwise the
+   ✕ crowds the status bar and the footer action row lands in the home
+   indicator. min() means desktop is unchanged: min(88vh, 100dvh-48px) is 88vh
+   in any normal window. */
+.scrim{position:fixed;inset:0;background:rgba(12,42,71,.5);backdrop-filter:blur(3px);z-index:80;display:flex;align-items:center;justify-content:center;
+  padding:calc(env(safe-area-inset-top, 0px) + 24px) 24px calc(env(safe-area-inset-bottom, 0px) + 24px)}
+.sheet{width:100%;max-width:680px;max-height:min(88vh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 48px));background:#fff;border-radius:20px;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;box-shadow:0 40px 90px rgba(12,42,71,.42)}
 /* Header pinned while the viewer scrolls, so one scrollbar reaches the very
    bottom — the page image, the answer and the "open the full document" link. */
 .sh-top{height:58px;flex:0 0 58px;position:sticky;top:0;z-index:3;background:#fff;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line);border-top-left-radius:20px;border-top-right-radius:20px}
@@ -362,12 +381,17 @@ html,body{overflow-x:hidden}
    the top/left in an overflow container. */
 .zoomscrim{position:fixed;inset:0;z-index:120;background:rgba(8,20,34,.94);display:flex;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px;cursor:zoom-out}
 .zoomimg{margin:auto;height:auto;object-fit:contain;box-shadow:0 20px 60px rgba(0,0,0,.55);border-radius:3px}
-.zoomctl{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:121;display:flex;align-items:center;gap:2px;background:rgba(0,0,0,.62);border-radius:13px;padding:4px 6px}
+/* Full-screen plan viewer. The safe-area insets matter here more than anywhere
+   else in the app: this is the standing-at-the-wall screen. Without them the
+   −/+ buttons sit inside the home indicator, where a slightly low press is a
+   home gesture instead of a zoom, and the ✕ (the only obvious way out) hides
+   behind the status bar. The 0px fallbacks keep desktop pixel-identical. */
+.zoomctl{position:fixed;bottom:calc(env(safe-area-inset-bottom, 0px) + 20px);left:50%;transform:translateX(-50%);z-index:121;display:flex;align-items:center;gap:2px;background:rgba(0,0,0,.62);border-radius:13px;padding:4px 6px}
 .zoomctl button{width:46px;height:40px;font-size:24px;line-height:1;background:none;border:none;color:#fff;cursor:pointer;border-radius:9px}
 .zoomctl button:active{background:rgba(255,255,255,.16)}
 .zoomctl span{color:#fff;font-size:13px;font-weight:600;min-width:56px;text-align:center}
 .cerr{color:var(--red);font-size:12.5px;line-height:1.4;margin:2px 6px 9px}
-.zoomx{position:fixed;top:16px;right:16px;width:42px;height:42px;border-radius:12px;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:18px;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.zoomx{position:fixed;top:calc(env(safe-area-inset-top, 0px) + 16px);right:calc(env(safe-area-inset-right, 0px) + 16px);width:42px;height:42px;border-radius:12px;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:18px;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .zoomx:hover{background:rgba(255,255,255,.28)}
 .sh-ans .src{margin-bottom:8px}
 .sh-ans p{font-size:14px;line-height:1.62;color:var(--ink)}.sh-ans p b{color:var(--navy)}

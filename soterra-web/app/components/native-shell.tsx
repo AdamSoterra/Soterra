@@ -16,6 +16,21 @@ import { useEffect } from "react";
 // .lightContent. Don't "correct" this back.
 export function NativeShell() {
   useEffect(() => {
+    // iPhone home-screen web app (Safari → Add to Home Screen). There is no
+    // Capacitor bridge here, so `is-capacitor` never lands and every safe-area
+    // rule scoped to it does nothing — yet the same home indicator still sits
+    // over the composer. Mark it separately, BEFORE the native check below.
+    // Its own class rather than reusing is-capacitor, so the live Android app's
+    // rules stay exactly as they are.
+    try {
+      const standalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+      if (standalone) document.documentElement.classList.add("is-standalone");
+    } catch {
+      /* ignore */
+    }
+
     void (async () => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

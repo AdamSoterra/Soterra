@@ -487,6 +487,10 @@ export default function Page() {
   /** True in the installed app, where dictation goes through the phone's own
    *  speech engine instead of the browser's (which the WebView doesn't have). */
   const sttNativeRef = useRef(false);
+  /** Watchdog for the browser engine, which on an iPhone home-screen app can
+   *  accept start() and then deliver nothing at all — no result, no error, no
+   *  end — stranding the composer on "Listening…" until the app is force-quit. */
+  const sttTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -1034,18 +1038,33 @@ export default function Page() {
     rec.lang = "en-NZ";
     rec.continuous = false;
     rec.interimResults = false;
+    // Any sign of life disarms the watchdog armed in toggleRecording.
+    const clearStt = () => {
+      if (sttTimerRef.current) { clearTimeout(sttTimerRef.current); sttTimerRef.current = null; }
+    };
+    rec.onstart = () => clearStt();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onresult = (e: any) => {
+      clearStt();
       const transcript = e.results?.[0]?.[0]?.transcript ?? "";
       if (transcript) setInput((prev) => (prev.trim() ? prev + " " : "") + transcript);
     };
-    rec.onend = () => setIsRecording(false);
+    rec.onend = () => { clearStt(); setIsRecording(false); };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onerror = (e: any) => {
+      clearStt();
       setIsRecording(false);
       // Silent failure was the bug — a dead mic button with no reason. Surface it.
       const err = e?.error;
-      if (err === "not-allowed" || err === "service-not-allowed")
+      // On an iPhone home-screen app WebKit exposes webkitSpeechRecognition but
+      // can refuse to run it, because the fix needs a usage description in the
+      // HOST app's Info.plist and a web app has no host app. Sending someone to
+      // Settings for a switch that doesn't exist is worse than saying nothing —
+      // so point at the iPhone keyboard's own mic key, which dictates into any
+      // text field including this one.
+      if (err === "service-not-allowed")
+        setAttachErr("Voice dictation isn't available in the home-screen app. Use the microphone key on the iPhone keyboard instead, or just type.");
+      else if (err === "not-allowed")
         setAttachErr("Microphone is blocked. Allow mic access for this app in your device/browser settings, then try again.");
       else if (err === "audio-capture")
         setAttachErr("No microphone found — check one is connected.");
@@ -1138,6 +1157,7 @@ export default function Page() {
     // ─── browser: Web Speech API ───
     const r = recognitionRef.current;
     if (!r) return;
+    if (sttTimerRef.current) { clearTimeout(sttTimerRef.current); sttTimerRef.current = null; }
     if (isRecording) {
       try { r.stop(); } catch { /* ignore */ }
       setIsRecording(false);
@@ -1147,6 +1167,14 @@ export default function Page() {
     try {
       r.start();
       setIsRecording(true);
+      // Cleared by onstart the moment the service actually engages, so a working
+      // session is never cut short — this only fires when nothing comes back at
+      // all, which is the iPhone home-screen failure mode.
+      sttTimerRef.current = setTimeout(() => {
+        try { r.stop(); } catch { /* ignore */ }
+        setIsRecording(false);
+        setAttachErr("Voice didn't start. Use the microphone key on the iPhone keyboard, or type your message.");
+      }, 6000);
     } catch {
       /* already started — ignore */
     }
@@ -2898,7 +2926,8 @@ export default function Page() {
       {/* ─── the check itself: ticked off on site ─── */}
       {openChecklist && (
         <div className="scrim" onClick={() => setOpenChecklist(null)}>
-          <div className="sheet" style={{ maxWidth: 560, maxHeight: "90vh" }} onClick={(e) => e.stopPropagation()}>
+          {/* maxHeight left to .sheet, which subtracts the iPhone safe areas. */}
+          <div className="sheet" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
             <div className="sh-top">
               <div className="ti">
                 <b>{openChecklist.checklist.title}</b>
@@ -2990,7 +3019,8 @@ export default function Page() {
       {/* ─── one past inspection, and what it picked up ─── */}
       {openInspection && (
         <div className="scrim" onClick={() => setOpenInspection(null)}>
-          <div className="sheet" style={{ maxWidth: 560, maxHeight: "88vh" }} onClick={(e) => e.stopPropagation()}>
+          {/* maxHeight left to .sheet, which subtracts the iPhone safe areas. */}
+          <div className="sheet" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
             <div className="sh-top">
               <div className="ti">
                 <b>{openInspection.inspection.inspectionType || openInspection.inspection.doc}</b>

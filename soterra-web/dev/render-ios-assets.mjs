@@ -21,6 +21,7 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 const SRC = "public/icon-512.png";
 const ICON_OUT = "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png";
+const TOUCH_OUT = "public/apple-touch-icon.png";
 const SPLASH_DIR = "ios/App/App/Assets.xcassets/Splash.imageset";
 const WHITE = [255, 255, 255];
 
@@ -122,6 +123,14 @@ console.log(`mark bounds in ${SRC}: ${b.w}x${b.h} at ${b.x},${b.y}`);
 // two platforms look like the same app on a home screen.
 fs.writeFileSync(ICON_OUT, encodeRGB(flatten(compose(img, b, 1024, 0.72)), 1024, 1024));
 console.log(`wrote ${ICON_OUT} — 1024x1024, RGB, no alpha channel`);
+
+// iPhone home-screen icon. This is the ONE that matters most on iOS, because
+// Add to Home Screen is the whole iOS channel — there is no App Store build.
+// iOS ignores the manifest icons for the home screen and uses this. The old one
+// was the bare mark at 45% width on white (17% ink), which reads as a bookmark
+// next to full-bleed app icons; same 0.72 coverage as the other two platforms.
+fs.writeFileSync(TOUCH_OUT, encodeRGB(flatten(compose(img, b, 180, 0.72)), 180, 180));
+console.log(`wrote ${TOUCH_OUT} — 180x180, RGB, no alpha channel`);
 
 // Splash sits behind a brief launch; the mark is small and centred.
 const splash = compose(img, b, 2732, 0.16);

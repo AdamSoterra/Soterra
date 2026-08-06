@@ -17,7 +17,14 @@ export const metadata: Metadata = {
   title: "Soterra, AI project assistant for construction",
   description:
     "Soterra reads your drawings, specs and schedules so your team can find answers, book inspections and keep the project moving. Every answer cited to the source sheet.",
-  appleWebApp: { capable: true, title: "Soterra", statusBarStyle: "black-translucent" },
+  // ⚠️ "default", not "black-translucent". black-translucent runs the web view
+  // edge-to-edge UNDER the status bar and Dynamic Island, which put the 64px
+  // white .topnav at physical y=0 — the wordmark behind the clock, the menu
+  // button behind the battery, and iOS drawing white glyphs on a near-white
+  // header so the clock vanished. "default" makes iOS reserve that strip and
+  // draw the glyphs itself with guaranteed contrast. iPhone-only setting;
+  // Android and the Capacitor app are unaffected (they use the StatusBar plugin).
+  appleWebApp: { capable: true, title: "Soterra", statusBarStyle: "default" },
   // favicon.ico carries 16→256px: it's what Windows uses for the taskbar/title
   // bar of the installed app, which the PNG alone wasn't covering.
   icons: {
