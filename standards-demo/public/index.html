@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Soterra demo for Standards New Zealand</title>
+<style>
+  :root{
+    --bg:#EEF3F9; --surface:#fff; --ink:#0F2440; --ink-2:#4B5F77; --ink-3:#7186A0;
+    --line:#DCE6F1; --accent:#2E6BF0; --accent-ink:#1B4EC0; --navy:#0E2138;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#0A1421; --surface:#122238; --ink:#EAF1FB; --ink-2:#A2B4CB; --ink-3:#7C90AA;
+           --line:#22374F; --accent:#5C8CFF; --accent-ink:#A8C4FF; --navy:#0B1626; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:900px;margin:0 auto;padding:clamp(20px,5vw,52px) clamp(16px,4vw,32px)}
+  header{display:flex;align-items:center;gap:12px;padding-bottom:18px;
+    border-bottom:2px solid var(--ink);margin-bottom:28px}
+  .word{font-size:25px;font-weight:800;letter-spacing:-.02em}
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-ink)}
+  h1{font-size:clamp(21px,3.4vw,27px);line-height:1.25;margin:0 0 10px;letter-spacing:-.01em;text-wrap:balance}
+  .lede{font-size:16px;color:var(--ink-2);margin:0 0 26px;max-width:64ch}
+  .player{background:#000;border-radius:14px;overflow:hidden;border:1px solid var(--line);
+    box-shadow:0 1px 2px rgba(16,37,64,.06),0 12px 34px rgba(16,37,64,.10)}
+  video{display:block;width:100%;height:auto;background:#000}
+  .note{margin-top:22px;background:var(--surface);border:1px solid var(--line);
+    border-radius:12px;padding:18px 20px}
+  .note h2{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-3);margin:0 0 10px}
+  .note ul{margin:0;padding-left:18px}
+  .note li{margin:7px 0;font-size:14.5px;color:var(--ink)}
+  .note li b{font-weight:700}
+  footer{margin-top:28px;padding-top:18px;border-top:1px solid var(--line);
+    font-size:13px;color:var(--ink-3);display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  a{color:var(--accent-ink)}
+  @media (max-width:520px){ header{gap:10px} .word{font-size:22px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="word">Soterra</div>
+      <div class="eyebrow">Prepared for Standards New Zealand</div>
+    </div>
+  </header>
+
+  <h1>How Soterra would present standards content</h1>
+  <p class="lede">
+    The assistant answering a real site question, citing the standard and the section it came
+    from, and pointing the user back to standards.govt.nz.
+  </p>
+
+  <div class="player">
+    <video controls playsinline preload="metadata" src="soterra-nzs3604-demo.mp4"></video>
+  </div>
+
+  <div class="note">
+    <h2>Two notes on the clip</h2>
+    <ul>
+      <li>This is the <b>real application</b>, exactly what a site team or inspector would use. It is not a mockup.</li>
+      <li>The answer takes a few seconds to come back. That has been left in rather than cut, so
+          you are seeing it run as it actually runs, nothing sped up or edited.</li>
+    </ul>
+  </div>
+
+  <footer>
+    <span>Adam Domok, Co-Founder, Soterra</span>
+    <span><a href="mailto:adam@soterra.co.nz">adam@soterra.co.nz</a> &middot; <a href="https://soterra.co.nz">soterra.co.nz</a></span>
+  </footer>
+
+</div>
+</body>
+</html>
