@@ -48,4 +48,18 @@
          @capacitor/local-notifications, so they're not repeated here. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- Voice dictation in the composer. RECORD_AUDIO was missing, which is half
+         of why the mic did nothing in the installed app; the other half was that
+         Android's WebView has no Web Speech API, so it now goes through the
+         phone's own speech engine (@capacitor-community/speech-recognition).
+         The <queries> block is required on Android 11+ (package visibility):
+         without it the plugin cannot see the device's speech service and
+         available() reports false. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 </manifest>

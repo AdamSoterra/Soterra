@@ -484,6 +484,9 @@ export default function Page() {
   const [attachErr, setAttachErr] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  /** True in the installed app, where dictation goes through the phone's own
+   *  speech engine instead of the browser's (which the WebView doesn't have). */
+  const sttNativeRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -985,9 +988,34 @@ export default function Page() {
     }
   }, []);
 
-  // Web Speech API setup (desktop browsers). Native STT (Capacitor) comes later.
+  // Voice dictation runs on two different engines, because they are two genuinely
+  // different problems:
+  //   • Browser → the Web Speech API, which is Chrome's own cloud service.
+  //   • Installed app → the phone's OWN speech engine, through Capacitor.
+  // Android's System WebView does not implement the Web Speech API at all, so in
+  // the installed app the browser path either doesn't exist or fails "network".
+  // That was the dead mic button: not a bug in the button, a missing engine.
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).Capacitor?.isNativePlatform?.()) {
+      let cancelled = false;
+      (async () => {
+        try {
+          const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
+          const { available } = await SpeechRecognition.available();
+          if (cancelled || !available) return;
+          sttNativeRef.current = true;
+          setSttSupported(true);
+        } catch {
+          // No speech engine on this device. Leave the mic hidden rather than
+          // showing a button that can't work — the old failure mode.
+        }
+      })();
+      return () => { cancelled = true; };
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
@@ -1012,7 +1040,7 @@ export default function Page() {
       else if (err === "audio-capture")
         setAttachErr("No microphone found — check one is connected.");
       else if (err === "network")
-        setAttachErr("Voice dictation isn't available inside the installed app (it needs the browser's speech service). Open soterra.co.nz in Chrome to dictate, or just type.");
+        setAttachErr("Voice dictation couldn't reach the browser's speech service. Check your connection, or just type.");
       else if (err && err !== "no-speech" && err !== "aborted")
         setAttachErr(`Voice didn't start (${err}). Type your message for now.`);
     };
@@ -1031,7 +1059,47 @@ export default function Page() {
     });
   };
 
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
+    // ─── installed app: the phone's own speech engine ───
+    if (sttNativeRef.current) {
+      const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
+      if (isRecording) {
+        try { await SpeechRecognition.stop(); } catch { /* ignore */ }
+        setIsRecording(false);
+        return;
+      }
+      setAttachErr(null);
+      try {
+        // Ask only when we don't already hold it, so a returning user taps the
+        // mic and speaks rather than tapping through a prompt every time.
+        const held = await SpeechRecognition.checkPermissions();
+        if (held.speechRecognition !== "granted") {
+          const asked = await SpeechRecognition.requestPermissions();
+          if (asked.speechRecognition !== "granted") {
+            setAttachErr("Microphone is blocked. Allow mic access for Soterra in your phone's settings, then try again.");
+            return;
+          }
+        }
+        setIsRecording(true);
+        // popup:false keeps it in our own UI — the composer already says
+        // "Listening… speak now", so Android's dialog would be a second,
+        // conflicting one. partialResults:false means start() resolves with the
+        // finished transcript, so there's no listener to leak.
+        const res = await SpeechRecognition.start({
+          language: "en-NZ", maxResults: 1, partialResults: false, popup: false,
+        });
+        const transcript = (res as { matches?: string[] } | undefined)?.matches?.[0] ?? "";
+        if (transcript) setInput((prev) => (prev.trim() ? prev + " " : "") + transcript);
+      } catch {
+        // Includes the user simply saying nothing, so keep it low-key.
+        setAttachErr("Voice didn't catch that. Try again, or type your message.");
+      } finally {
+        setIsRecording(false);
+      }
+      return;
+    }
+
+    // ─── browser: Web Speech API ───
     const r = recognitionRef.current;
     if (!r) return;
     if (isRecording) {
