@@ -76,11 +76,25 @@ const CASES: Case[] = [
 ];
 
 const { pages, df } = await getManufacturerIndex();
-console.log(`corpus: ${pages.length} pages, ${new Set(pages.map((p) => p.manufacturer)).size} manufacturers\n`);
+const held = new Set(pages.map((p) => p.manufacturer));
+console.log(`corpus: ${pages.length} pages, ${held.size} manufacturers\n`);
 
+// A demo-tier manufacturer is DELETED once its demo has been recorded and sent —
+// that is the policy, and it is what makes the "they are now deleted" line in
+// each permission email true. So a case for a brand we no longer hold is not a
+// retrieval failure, and counting it as one is worse than useless: it buries a
+// real regression under expected noise. Skip those, name them, and keep the
+// score meaningful. If the brand later grants permission and is re-ingested,
+// its cases start being asserted again automatically, with no edit here.
 let pass = 0;
 let fail = 0;
+const skipped: string[] = [];
 for (const c of CASES) {
+  if (!held.has(c.mfr)) {
+    skipped.push(c.q);
+    console.log(`SKIP  ${c.q}\n      ${c.mfr} — not in the corpus (demo-tier, removed after its demo)`);
+    continue;
+  }
   const k = c.k ?? 8;
   const top = searchManufacturerPages(pages as any, df, c.q, k) as any[];
   const brands = top.map((p) => p.manufacturer);
@@ -101,5 +115,11 @@ for (const c of CASES) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${c.q}\n      ${c.mfr}${detail}`);
 }
 
-console.log(`\n${pass} passed, ${fail} failed, ${CASES.length} total`);
+console.log(
+  `\n${pass} passed, ${fail} failed` +
+    (skipped.length ? `, ${skipped.length} skipped (brand not held)` : "") +
+    `, ${CASES.length} cases`
+);
+// Only a real failure is a failure. Skips are the corpus being smaller than the
+// case list on purpose, not retrieval getting worse.
 process.exit(fail ? 1 : 0);
