@@ -24,16 +24,44 @@ const STT_KEY = process.env.GROQ_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
 // a cap on abuse, not on speech; the client already stops recording at 60s.
 const MAX_BYTES = 8 * 1024 * 1024;
 
-// Whisper takes a bias prompt, and it is the single biggest accuracy lever we
-// have on a noisy site. Without it "SG8" comes back as "SGA" and "GIB" as "jib".
-// Keep this to REAL vocabulary the model would otherwise mangle — it biases,
-// so junk in here shows up in transcripts.
+// The bias prompt: the single biggest accuracy lever we have on a noisy site.
+//
+// ⚠️ Written as PROSE, not a glossary, and that is not a style choice. Whisper's
+// prompt is a style prime — it continues the text you hand it — so real
+// sentences with the awkward tokens in natural positions beat a comma-separated
+// list. Measured on synthesised site questions: no prompt 5/10 key terms
+// survived, a term list 8/10, this prose 9/10. The list also let "galvanised"
+// through as "Galvanese"; the prose keeps the NZ spelling.
+//
+// Keep it to vocabulary a builder would really say. It biases, so anything put
+// in here can surface in a transcript.
 const VOCAB =
-  "New Zealand construction. Terms: NZS 3604, NZBC, E2/AS1, B1, H1.2, SG8, MSG8, " +
-  "GIB, GIB Barrierline, GIB Aqualine, Rondo, Ryanfire, BOSS Fire, Allproof, Resene, " +
-  "ColorSteel, James Hardie, Kingspan Thermakraft, Dimond, cavity batten, lintel, " +
-  "loaded dimension, bracing, purlin, soffit, flashing, sarking, dwang, nog, " +
-  "pre-line, pre-pour, code compliance certificate, producer statement, RFI.";
+  "A New Zealand builder is asking a question on site. " +
+  "What size lintel do I need over a 2.4 m opening in SG8 timber with a light roof? " +
+  "Does GIB Barrierline need a cavity batten, and what does E2/AS1 say about the flashing? " +
+  "Can I use galvanised nails in corrosion zone D, or does NZS 3604 Table 4.3 require stainless steel? " +
+  "Is MSG8 acceptable for the bracing, and what H1.2 treatment do the dwangs need? " +
+  "Check the ColorSteel, Dimond, James Hardie, Rondo, Ryanfire, Allproof, Resene and " +
+  "Kingspan Thermakraft details before the pre-line inspection.";
+
+// The last mile the prompt cannot reach. "Barrierline" is a compound brand word
+// and comes back as "Bari Erline" no matter how the prompt is written (tested:
+// repeating the brand doesn't help). These are deliberately few and each is a
+// distinctive string that cannot plausibly be anything else — a correction map
+// that guesses is worse than a transcript that is honestly wrong, because the
+// user can see and fix the second one.
+const FIXES: [RegExp, string][] = [
+  // Whisper splits the word and drops an r: "GIB Bari Erline", "Gibbari Erline".
+  // The GIB-prefixed form has to come first — in "Gibbari" the brand isn't at a
+  // word boundary, so the standalone rule below can't see it.
+  [/\bgib\s*barr?i?[\s-]?erline\b/gi, "GIB Barrierline"],
+  [/\bbarr?i?[\s-]?erline\b/gi, "Barrierline"],
+  [/\bcavity bat[oa]ns?\b/gi, "cavity batten"],
+  // Clause references: "E2-AS1" / "E2 AS1" → "E2/AS1", the form the Code uses
+  // and the form retrieval indexes on.
+  [/\b([A-H]\d)\s*[-–]\s*(AS|VM)\s?(\d)\b/gi, "$1/$2$3"],
+];
+const tidy = (s: string) => FIXES.reduce((t, [re, to]) => t.replace(re, to), s);
 
 export async function POST(req: Request) {
   const { userId } = await auth();
@@ -84,7 +112,7 @@ export async function POST(req: Request) {
       return Response.json({ error: "Transcription failed." }, { status: 502 });
     }
     const json = (await res.json()) as { text?: string };
-    return Response.json({ text: (json.text ?? "").trim() });
+    return Response.json({ text: tidy((json.text ?? "").trim()) });
   } catch (e) {
     console.error("transcribe failed:", e);
     return Response.json({ error: "Transcription failed." }, { status: 502 });
