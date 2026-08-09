@@ -3282,7 +3282,16 @@ function SiteSetup(props: {
                   {p.showCompany && (
                     <>
                       <label className="ev-lbl">Your company</label>
-                      <input className="ev-in" value={p.company} autoFocus onChange={(e) => p.setCompany(e.target.value)} placeholder="e.g. Kalmar Construction"
+                      {/* ⚠️ No named example here, ever. This used to read "e.g.
+                          Kalmar Construction" — a real Auckland commercial
+                          builder whose sectors (retirement, apartments,
+                          heritage, seismic, healthcare) are the same ones our
+                          prospects work in, so we were showing customers a
+                          competitor's name in their own signup form. Every
+                          plausible NZ construction name turns out to belong to
+                          somebody; the label already says "Your company", so
+                          the field needs a prompt, not an example. */}
+                      <input className="ev-in" value={p.company} autoFocus onChange={(e) => p.setCompany(e.target.value)} placeholder="Your company's name"
                         onKeyDown={(e) => { if (e.key === "Enter") p.onCreate(); }} />
                       <label className="ev-lbl">Access code</label>
                       <input className="ev-in" value={p.access} onChange={(e) => p.setAccess(e.target.value)} placeholder="The code we gave you"
