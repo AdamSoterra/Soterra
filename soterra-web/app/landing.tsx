@@ -27,8 +27,8 @@ const DO_NOW = [
   "Answers construction questions from your documents and the Building Code.",
   "Helps write and review RFIs.",
   "Checks plans for missing or conflicting information.",
-  "Runs project communication through a shared calendar.",
-  "Assigns tasks, deliveries and bookings.",
+  "Generates a pre-inspection QA check your crew ticks off on site.",
+  "Writes safety plans and the CCC evidence pack.",
 ];
 
 // Layer 2 — the kind of insight the learning engine surfaces over time.
@@ -91,8 +91,10 @@ function LogoCIS() {
 }
 
 // ─── Layer 1 phone demo — a sped-up, looping construction conversation that
-// shows the two sources (plans + NZ Building Code) and a calendar action.
-// Facts signed off by Adam 2026-07-16. ───
+// shows the two sources (plans + NZ Building Code) and then a generated check.
+// The last turn used to book an inspection onto a shared calendar; that was cut
+// from the product, and the assistant is now instructed to refuse it, so the
+// site must not sell it. Facts signed off by Adam 2026-07-16. ───
 type DemoTurn = { q: string; src: string | null; ans: ReactNode; cite?: { code: string; sub: string }; tag?: string };
 const DEMO_TURNS: DemoTurn[] = [
   {
@@ -108,10 +110,10 @@ const DEMO_TURNS: DemoTurn[] = [
     cite: { code: "E2/AS1 · External Moisture", sub: "NZ Building Code" },
   },
   {
-    q: "Book the pre-line inspection for Tuesday 9am.",
+    q: "Get me ready for the pre-line inspection.",
     src: null,
-    ans: <>Booked. <b>Pre-line inspection, Tue 9:00 AM.</b> Crew notified.</>,
-    tag: "✓ Added to the shared calendar",
+    ans: <>Done. <b>14 checks</b>, each cited to your plans, the Code or the GIB manual.</>,
+    tag: "✓ Saved as a check you can tick off on site",
   },
 ];
 
@@ -295,18 +297,21 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
 
         <div className="frow rev rv">
           <div className="ftext">
-            <div className="fk">Run the site</div>
-            <h3>Inspections, deliveries and pours, booked from one chat.</h3>
-            <p>Just say it, &ldquo;pre-line inspection Tuesday 9am&rdquo;, and it&apos;s on the shared calendar with the crew notified. Nothing slips, nobody double-books.</p>
+            <div className="fk">Checks before the inspection</div>
+            <h3>Generated from your drawings, the Code and the manufacturer&apos;s manual, with a photo and a note on every item.</h3>
           </div>
           <div className="fvis">
+            {/* The check itself. Reuses the .cal-* styles the calendar block
+                used: the day column carries the tick state and the event row
+                carries the item plus where it came from, so the citation shows
+                in the picture and not only in the copy. */}
             <div className="tablet cal">
-              <div className="cal-h">This week</div>
-              <div className="cal-row"><span className="cal-d">Mon</span><span className="cal-ev b">Steel delivery · 7:30</span></div>
-              <div className="cal-row"><span className="cal-d">Tue</span><span className="cal-ev a">Council inspection · 9:00</span></div>
-              <div className="cal-row"><span className="cal-d">Wed</span><span className="cal-ev" /></div>
-              <div className="cal-row"><span className="cal-d">Thu</span><span className="cal-ev g">Blocklayers on site</span></div>
-              <div className="cal-row"><span className="cal-d">Fri</span><span className="cal-ev p">Slab pour · 6 crew</span></div>
+              <div className="cal-h">Pre-line check · 14 items</div>
+              <div className="cal-row"><span className="cal-d">✓</span><span className="cal-ev g">Fyreline to the correct face · GIB p36</span></div>
+              <div className="cal-row"><span className="cal-d">✓</span><span className="cal-ev g">Screw centres to studs · GIB p82</span></div>
+              <div className="cal-row"><span className="cal-d">!</span><span className="cal-ev a">Penetrations fire-stopped · C/AS2</span></div>
+              <div className="cal-row"><span className="cal-d">✓</span><span className="cal-ev g">Insulation, no gaps at dwangs</span></div>
+              <div className="cal-row"><span className="cal-d">✓</span><span className="cal-ev b">Pre-line plumbing signed off · AC1229</span></div>
             </div>
           </div>
         </div>
