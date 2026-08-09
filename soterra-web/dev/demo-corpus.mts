@@ -19,6 +19,13 @@
  * Deliberately blunt: this deletes rows rather than flipping them to
  * `withdrawn`, because a "no" from someone who never granted anything in the
  * first place should leave no trace of their material in our database.
+ *
+ * ⚠️ It deletes the RENDERED PAGE IMAGES too, and it must. For a long time it
+ * only dropped the rows, which made the content unreachable but left hundreds
+ * of page images of a non-consenting manufacturer's copyrighted documents
+ * sitting in Blob — while the permission email told them it was deleted. The
+ * rows are what makes it unreachable; the images are what makes the sentence
+ * true. Removal is not finished until both are gone.
  */
 import fs from "node:fs";
 
@@ -80,12 +87,46 @@ async function promote(manufacturer: string, licence: string) {
   console.log(`promoted ${res.length} page(s) of ${manufacturer} from demo → ${licence}`);
 }
 
+/** Same slug the renderer built the Blob paths with (dev/render-store.mts). */
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+
+/** Delete every rendered page image under docpage/<manufacturer>/ in Blob.
+ *  Called after the rows go, so "we deleted your material" is true of the
+ *  storage and not just the database. */
+async function removeImages(manufacturer: string) {
+  const { list, del } = await import("@vercel/blob");
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) {
+    console.error(`⚠️  BLOB_READ_WRITE_TOKEN missing — the rows for ${manufacturer} are gone but its page`);
+    console.error("   IMAGES are still stored. Set the token and run: npx tsx dev/prune-orphan-docpages.mts --delete");
+    return;
+  }
+  const prefix = `docpage/${slug(manufacturer)}/`;
+  const urls: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await list({ token, cursor, limit: 1000, mode: "expanded", prefix });
+    urls.push(...page.blobs.map((b) => b.url));
+    cursor = page.cursor;
+  } while (cursor);
+  if (urls.length === 0) return void console.log(`no stored page images for ${manufacturer}.`);
+  for (let i = 0; i < urls.length; i += 100) await del(urls.slice(i, i + 100), { token });
+  console.log(`deleted ${urls.length} stored page image(s) for ${manufacturer}.`);
+}
+
 async function remove(manufacturer?: string) {
   const where = manufacturer
     ? and(eq(manufacturerPages.manufacturer, manufacturer), eq(manufacturerPages.licence, "demo"))
     : eq(manufacturerPages.licence, "demo");
+  // Read the names FIRST — after the delete there is nothing left to tell us
+  // whose images to clear, which is exactly how they got orphaned before.
+  const target = await db
+    .selectDistinct({ manufacturer: manufacturerPages.manufacturer })
+    .from(manufacturerPages)
+    .where(where);
   const res = await db.delete(manufacturerPages).where(where).returning({ id: manufacturerPages.id });
   console.log(`removed ${res.length} demo page(s)${manufacturer ? ` for ${manufacturer}` : ""}.`);
+  for (const t of target) await removeImages(t.manufacturer);
   console.log("The live app drops them when its cached index next reloads (a deploy, or a cold start).");
 }
 

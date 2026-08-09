@@ -478,15 +478,22 @@ export default function Page() {
 
   // ─── voice + file attach (chat composer) ───
   const [isRecording, setIsRecording] = useState(false);
+  const [sttBusy, setSttBusy] = useState(false);
   const [sttSupported, setSttSupported] = useState(false);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [attachBusy, setAttachBusy] = useState(false);
   const [attachErr, setAttachErr] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
-  /** True in the installed app, where dictation goes through the phone's own
-   *  speech engine instead of the browser's (which the WebView doesn't have). */
-  const sttNativeRef = useRef(false);
+  /** Which of the three dictation engines this device gets:
+   *   "native"   — the installed Android app: the phone's own speech engine.
+   *   "recorder" — iPhone: record the audio and transcribe it server-side,
+   *                because Apple exposes the Web Speech API in a home-screen
+   *                app and then refuses to run it.
+   *   "web"      — everywhere else: the browser's own Web Speech API, free. */
+  const sttModeRef = useRef<"native" | "recorder" | "web" | null>(null);
+  const mediaRecRef = useRef<MediaRecorder | null>(null);
+  const mediaStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Watchdog for the browser engine, which on an iPhone home-screen app can
    *  accept start() and then deliver nothing at all — no result, no error, no
    *  end — stranding the composer on "Listening…" until the app is force-quit. */
@@ -1020,7 +1027,7 @@ export default function Page() {
           // at all is enough; a genuine failure surfaces on the first tap with
           // a message, which is far better than a button that never appears.
           if (!available && cap.getPlatform?.() !== "ios") return;
-          sttNativeRef.current = true;
+          sttModeRef.current = "native";
           setSttSupported(true);
         } catch {
           // No speech plugin in this build. Leave the mic hidden rather than
@@ -1030,9 +1037,27 @@ export default function Page() {
       return () => { cancelled = true; };
     }
 
+    // iPhone. Apple EXPOSES webkitSpeechRecognition in a home-screen web app and
+    // then does nothing with it — no prompt, no result, no error — while
+    // getUserMedia in the same app records perfectly. Feature detection can't
+    // see the difference, so it has to be decided by platform: record here, and
+    // transcribe on the server. Covers Safari tabs too, so a phone behaves the
+    // same however it was opened.
+    const isIos =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    // navigator.mediaDevices is undefined outside a secure context, which is the
+    // check that actually matters here.
+    if (isIos && navigator.mediaDevices && typeof MediaRecorder !== "undefined") {
+      sttModeRef.current = "recorder";
+      setSttSupported(true);
+      return;
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
+    sttModeRef.current = "web";
     setSttSupported(true);
     const rec = new SR();
     rec.lang = "en-NZ";
@@ -1088,9 +1113,91 @@ export default function Page() {
     });
   };
 
+  /** Release the mic. Called on every exit path, including failure: an iOS web
+   *  app that holds a MediaStream across a suspension can come back unable to
+   *  record until the phone is rebooted. */
+  const releaseMic = (stream: MediaStream | null) => {
+    try { stream?.getTracks().forEach((t) => t.stop()); } catch { /* ignore */ }
+  };
+
+  /** iPhone: record, then transcribe on the server. */
+  const toggleRecorder = async () => {
+    if (mediaStopRef.current) { clearTimeout(mediaStopRef.current); mediaStopRef.current = null; }
+    const live = mediaRecRef.current;
+    if (live) {
+      // Second tap: stop. onstop does the upload.
+      mediaRecRef.current = null;
+      try { live.stop(); } catch { /* ignore */ }
+      return;
+    }
+
+    setAttachErr(null);
+    let stream: MediaStream | null = null;
+    try {
+      // A FRESH stream every time, never one kept between recordings.
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // iOS wrote MP4/AAC only until 18.4, so a hardcoded webm fails on most
+      // iPhones in the field. Ask for what this device actually supports.
+      const mime = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find(
+        (t) => MediaRecorder.isTypeSupported?.(t)
+      );
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      const chunks: BlobPart[] = [];
+      rec.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
+      rec.onstop = async () => {
+        const captured = stream;
+        stream = null;
+        releaseMic(captured);
+        mediaRecRef.current = null;
+        setIsRecording(false);
+        if (!chunks.length) return;
+        setSttBusy(true);
+        try {
+          const body = new FormData();
+          body.append("audio", new Blob(chunks, { type: rec.mimeType || "audio/mp4" }));
+          const res = await fetch("/api/transcribe", { method: "POST", body });
+          if (res.status === 503) {
+            // No transcription key configured. Voice still works on an iPhone,
+            // just not through us — so send them somewhere that does.
+            setAttachErr("Voice isn't set up yet. Use the microphone key on your keyboard, or type.");
+            return;
+          }
+          if (!res.ok) {
+            setAttachErr("Couldn't turn that into text. Try again, use the microphone key on your keyboard, or type.");
+            return;
+          }
+          const { text } = (await res.json()) as { text?: string };
+          if (text) setInput((prev) => (prev.trim() ? prev + " " : "") + text);
+          else setAttachErr("Didn't catch that. Try again, or type your message.");
+        } catch {
+          setAttachErr("Couldn't turn that into text. Try again, or type your message.");
+        } finally {
+          setSttBusy(false);
+        }
+      };
+      rec.start();
+      mediaRecRef.current = rec;
+      setIsRecording(true);
+      // Nobody asks a 60-second question, and an app left recording in a pocket
+      // is both a cost and a privacy problem.
+      mediaStopRef.current = setTimeout(() => {
+        const r = mediaRecRef.current;
+        mediaRecRef.current = null;
+        try { r?.stop(); } catch { /* ignore */ }
+      }, 60_000);
+    } catch {
+      releaseMic(stream);
+      mediaRecRef.current = null;
+      setIsRecording(false);
+      setAttachErr("Microphone is blocked. Allow it for Soterra in your iPhone settings, or use the microphone key on your keyboard.");
+    }
+  };
+
   const toggleRecording = async () => {
+    if (sttModeRef.current === "recorder") return toggleRecorder();
+
     // ─── installed app: the phone's own speech engine ───
-    if (sttNativeRef.current) {
+    if (sttModeRef.current === "native") {
       const { SpeechRecognition } = await import("@capacitor-community/speech-recognition");
       if (isRecording) {
         try { await SpeechRecognition.stop(); } catch { /* ignore */ }
@@ -1876,7 +1983,8 @@ export default function Page() {
       {attachErr && <div className="cerr">{attachErr}</div>}
       <div className="crow">
         <span className="hint">
-          {isRecording ? "Listening… speak now"
+          {isRecording ? "Listening… tap the mic again when you're done"
+            : sttBusy ? "Writing that down…"
             : attachBusy ? "Attaching…"
             : "Enter to send · Shift+Enter for a new line"}
         </span>
