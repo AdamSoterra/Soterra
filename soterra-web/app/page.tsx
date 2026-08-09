@@ -20,6 +20,8 @@ type Cite = {
   mfr?: string; doc?: string; page?: number; url?: string;
   /** Determination reference, "2024/001". */
   ref?: string;
+  /** Standard demo page: the slug (e.g. "nzs-3604-2011") for /api/standard-page. */
+  stdSlug?: string;
 };
 type AsstCard = {
   id: string;
@@ -32,9 +34,11 @@ type AsstCard = {
   visibility: "team" | "private";
   assigneeName?: string | null;
   /** "standard" cards: where to get a figure we are not licensed to reproduce.
-   *  We hold no standard content at all — the card points at the document. */
+   *  `demo` is set only for a demo-corpus account (personal-use evaluation of the
+   *  account's own licensed copy) — a customer never receives it. */
   std?: {
     ref: string; title: string; section: string | null; holds: string; url: string;
+    demo?: { slug: string; pages: { page: number; label: string }[] };
   };
 };
 // A manufacturer document we hold, from /api/manufacturer-docs. Drives reliable
@@ -2166,9 +2170,31 @@ export default function Page() {
                                         {c.std.section ? <span className="stdsec">{c.std.section}</span> : null}
                                         {c.std.holds}
                                       </div>
-                                      <div className="stdredact" aria-label="Content withheld pending licence">
-                                        <span>content withheld pending licence</span>
-                                      </div>
+                                      {c.std.demo ? (
+                                        // Personal-use evaluation: your own licensed copy, this
+                                        // account only. Tap to read the real table.
+                                        <div className="stdpages">
+                                          <div className="stdpages-h">Your licensed copy</div>
+                                          {c.std.demo.pages.map((pg) => (
+                                            <button
+                                              key={pg.page}
+                                              className="stdpage"
+                                              onClick={() => setSheet({
+                                                code: c.std!.ref, title: pg.label, sub: c.std!.title, ans: "", hlTag: c.std!.ref,
+                                                kind: "standard", stdSlug: c.std!.demo!.slug, page: pg.page, url: c.std!.url,
+                                              })}
+                                            >
+                                              <span className="stdpage-ic">▤</span>
+                                              <span>{pg.label}</span>
+                                              <span className="stdpage-go">›</span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="stdredact" aria-label="Content withheld pending licence">
+                                          <span>content withheld pending licence</span>
+                                        </div>
+                                      )}
                                     </div>
                                     <a className="stdget" href={c.std.url} target="_blank" rel="noopener noreferrer">
                                       Free to download from Standards NZ ↗
@@ -2686,10 +2712,10 @@ export default function Page() {
                     ? sheet.ref && sheet.page
                       ? `/api/determination-page?ref=${encodeURIComponent(sheet.ref)}&p=${sheet.page}`
                       : null
-                    : // We hold no rendered pages of any standard, so a standard
-                      // citation never has an image to show.
-                      sheet.kind === "standard"
-                      ? null
+                    : sheet.kind === "standard"
+                      ? sheet.stdSlug && sheet.page
+                        ? `/api/standard-page?ref=${encodeURIComponent(sheet.stdSlug)}&p=${sheet.page}`
+                        : null
                       : projectId && sheet.doc && sheet.page
                         ? `/api/plan-page?project=${encodeURIComponent(projectId)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}`
                         : null;
@@ -3554,11 +3580,15 @@ function makeCite(sourceLine: string, body: string, mfrDocs?: MfrDoc[]): Cite {
 
   // NZS / AS/NZS standard citation (e.g. "NZS 3604:2011, Tables 4.1 and 4.3").
   // Without this branch it falls through to the plans default and shows the wrong
-  // "FROM YOUR PLANS" label. We hold no pages of any standard, so this labels the
-  // inline citation and links out to the free copy — there is nothing to render.
+  // "FROM YOUR PLANS" label. The standards_handoff card beside the answer carries
+  // the tappable pages; this makes the inline citation label correctly, and for a
+  // demo account it opens the same page when the Source names a known table.
   const stdRef = parts[0]?.match(/^((?:AS\/)?NZS\s*\d{3,4}(?:\.\d+)?(?::\s*\d{4})?)/i);
   if (stdRef) {
     const ref = stdRef[1].replace(/\s+/g, " ").trim();
+    const tbl = sourceLine.match(/\b(?:Table|Clause)\s+(\d+\.\d+(?:\.\d+)?)/i)?.[1];
+    const TBL_PAGE: Record<string, number> = { "4.1": 71, "4.3": 72, "8.8": 209, "8.9": 210, "8.10": 211, "4.5.1": 73 };
+    const pg = tbl ? TBL_PAGE[tbl] : undefined;
     const rest = parts.slice(1).filter((p) => p !== ref).join(" · ");
     return {
       code: ref,
@@ -3567,6 +3597,8 @@ function makeCite(sourceLine: string, body: string, mfrDocs?: MfrDoc[]): Cite {
       ans: fmt(body),
       hlTag: ref,
       kind: "standard",
+      stdSlug: /3604/.test(ref) ? "nzs-3604-2011" : undefined,
+      page: pg,
       url: /3604/.test(ref) ? "https://www.standards.govt.nz/shop/nzs-36042011" : "https://www.standards.govt.nz/",
     };
   }
