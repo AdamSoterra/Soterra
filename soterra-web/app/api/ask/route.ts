@@ -1028,10 +1028,36 @@ async function buildContext(userId: string, projectId: string, projectName: stri
   const tkList = openTasks.length
     ? openTasks.map((t) => `- ${taskWhen(t.dueAt, t.endsAt)} — ${t.title}${t.assigneeName ? ` → ${t.assigneeName}` : ""} (${visLabel(t.visibility)})`).join("\n")
     : "(no open tasks)";
+
+  // ⭐ The manufacturers THIS account can actually search, read from the corpus
+  // rather than trusted from the prompt. The static prompt names every brand we
+  // have ever held, but what is searchable varies: demo-tier brands are hidden
+  // from ordinary accounts, and a brand can be removed outright when its demo
+  // ends. Without this line the assistant confidently offers a brand, searches,
+  // finds nothing, and looks broken — in front of the customer, on the brand
+  // they actually use. Naming the real list costs a few tokens and removes the
+  // whole failure mode.
+  let mfrLine = "(none loaded)";
+  try {
+    const { pages } = await getManufacturerIndex();
+    const held = [...new Set(visibleTo(pages, userId).map((p) => p.manufacturer))].sort();
+    if (held.length) mfrLine = held.join(", ");
+  } catch {
+    /* leave the fallback; a context line is not worth failing the answer over */
+  }
+
   return `CONTEXT (today: ${todayIso}, now: ${nowHM} ${PROJECT_TZ} time):
 
 Site: ${projectName}
 Crew on this site (names you can assign to): ${crew}
+
+MANUFACTURER LITERATURE AVAILABLE TO THIS ACCOUNT: ${mfrLine}
+That list is the truth and it OVERRIDES any brand named in your instructions.
+Only these can be searched. If asked about a maker not on this list, do not say
+we hold them and do not search for them — say plainly that we don't hold that
+maker's literature yet, answer from the Building Code and general practice
+instead, and offer to have it added. Never answer one maker's question from
+another maker's manual.
 
 Upcoming events (next 12 months, that you can see):
 ${evList}

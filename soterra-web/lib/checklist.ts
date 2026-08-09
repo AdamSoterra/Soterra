@@ -7,7 +7,7 @@ import { CATEGORIES, CONSULTANT_TYPES, INSPECTION_CODES, codeName, inspectionTyp
 import { historyForCode, searchHistory, topItems } from "./history";
 import { getProjectIndex } from "./projectIndex";
 import { getCodeIndex, codeLabel } from "./codeIndex";
-import { getManufacturerIndex, manufacturerLabel } from "./manufacturerIndex";
+import { getManufacturerIndex, manufacturerLabel, visibleTo } from "./manufacturerIndex";
 import { excerpt, retrieve } from "./retrieve";
 import { blockersFor } from "./inspectionOrder";
 
@@ -213,7 +213,13 @@ export async function generateChecklistItems(
 
   const planPages = retrieve(projectIdx.pages, projectIdx.df, q, 6);
   const codeHits = retrieve(codeIdx.pages, codeIdx.df, q, 6);
-  const mfrHits = retrieve(mfrIdx.pages, mfrIdx.df, q, 6);
+  // ⚠️ visibleTo, exactly as the assistant's own search does. Without it a
+  // checklist could quote a demo-tier manufacturer to an account that must
+  // never see one: those brands have NOT granted permission, several are
+  // competitors of each other, and one of them has staff with accounts here.
+  // The gate has to hold on every path that reads this index, not just on
+  // search_manufacturer.
+  const mfrHits = retrieve(visibleTo(mfrIdx.pages, scope.userId), mfrIdx.df, q, 6);
 
   const planLabel = (p: (typeof planPages)[number]) =>
     [p.doc, p.code, p.title].filter(Boolean).join(" · ") + ` · page ${p.page} of ${p.npages}`;
