@@ -112,9 +112,24 @@ html,body{overflow-x:hidden}
 .newchat:hover{border-color:rgba(14,143,230,.4);color:var(--brand-d)}
 .rail-k{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin:18px 6px 8px}
 .rail-list{list-style:none;display:flex;flex-direction:column;gap:2px}
-.rail-item{font-size:13.5px;color:var(--slate);padding:9px 11px;border-radius:9px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail-item{font-size:13.5px;color:var(--slate);padding:9px 11px;border-radius:9px;cursor:pointer;display:flex;align-items:center;gap:6px}
 .rail-item:hover{background:rgba(14,143,230,.06);color:var(--navy)}
 .rail-item.act{background:rgba(65,195,255,.14);color:var(--brand-d);font-weight:600}
+.rail-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The ✕ appears on hover so the rail stays calm when you're just reading it,
+   but stays visible once its row is asking to be confirmed. */
+.rail-x{flex-shrink:0;width:20px;height:20px;border:none;background:none;color:var(--mut);font-size:12px;line-height:1;border-radius:6px;cursor:pointer;opacity:0;transition:opacity .12s}
+.rail-item:hover .rail-x{opacity:1}
+.rail-x:hover{background:rgba(220,38,38,.12);color:#dc2626}
+.rail-krow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.rail-clear{border:none;background:none;font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);cursor:pointer;padding:0}
+.rail-clear:hover{color:#dc2626}
+.rail-conf{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.rail-conf button{border:none;background:none;font-family:var(--font);font-size:11px;font-weight:700;cursor:pointer;padding:2px 5px;border-radius:6px;letter-spacing:0;text-transform:none}
+.rail-conf button:first-child{color:#dc2626}
+.rail-conf button:first-child:hover{background:rgba(220,38,38,.12)}
+.rail-conf button:last-child{color:var(--mut)}
+.rail-conf button:last-child:hover{background:var(--bg)}
 .rail-head{display:flex;align-items:center;gap:8px}
 .rail-head .newchat{flex:1}
 .rail-collapse{width:36px;height:38px;flex-shrink:0;border:1px solid var(--line);background:#fff;border-radius:10px;color:var(--slate);cursor:pointer;display:flex;align-items:center;justify-content:center}

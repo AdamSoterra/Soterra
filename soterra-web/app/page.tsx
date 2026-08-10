@@ -517,6 +517,10 @@ export default function Page() {
 
   // ─── saved conversations (threads) ───
   const [threads, setThreads] = useState<{ id: string; title: string | null; updatedAt: string }[]>([]);
+  /** Which conversation is asking "delete this?" — an inline confirm, because a
+   *  deleted chat cannot be recovered and the ✕ sits next to the row you click
+   *  to open it. "all" confirms clearing every conversation. */
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [railOpen, setRailOpen] = useState(false); // mobile drawer
   const [railCollapsed, setRailCollapsed] = useState(false); // desktop collapse
@@ -776,6 +780,29 @@ export default function Page() {
       }
     } catch {
       /* ignore */
+    }
+  };
+
+  // Delete a saved conversation, or all of them. The server scopes both to this
+  // user and this site, so nothing else can be reached from here. If the open
+  // conversation is the one removed, drop back to an empty chat rather than
+  // leaving a thread on screen that no longer exists.
+  const deleteThread = async (id: string | "all") => {
+    const q = id === "all" ? "all=1" : `id=${encodeURIComponent(id)}`;
+    try {
+      const res = await apiFetch(`/api/threads?${q}`, { method: "DELETE" });
+      if (!res.ok) return;
+      if (id === "all") {
+        setThreads([]);
+        newChat();
+      } else {
+        setThreads((ts) => ts.filter((t) => t.id !== id));
+        if (threadId === id) newChat();
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setConfirmDel(null);
     }
   };
 
@@ -2127,7 +2154,19 @@ export default function Page() {
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
                     </button>
                   </div>
-                  {threads.length > 0 && <div className="rail-k">Recent</div>}
+                  {threads.length > 0 && (
+                    <div className="rail-k rail-krow">
+                      <span>Recent</span>
+                      {confirmDel === "all" ? (
+                        <span className="rail-conf">
+                          <button onClick={() => deleteThread("all")} title="Delete them all">Clear all?</button>
+                          <button onClick={() => setConfirmDel(null)} title="Keep them">No</button>
+                        </span>
+                      ) : (
+                        <button className="rail-clear" onClick={() => setConfirmDel("all")}>Clear</button>
+                      )}
+                    </div>
+                  )}
                   <ul className="rail-list">
                     {threads.map((th) => (
                       <li
@@ -2136,7 +2175,22 @@ export default function Page() {
                         onClick={() => loadThread(th.id)}
                         title={th.title || "Conversation"}
                       >
-                        {th.title || "Conversation"}
+                        <span className="rail-t">{th.title || "Conversation"}</span>
+                        {confirmDel === th.id ? (
+                          <span className="rail-conf" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => deleteThread(th.id)} title="Delete this chat">Delete</button>
+                            <button onClick={() => setConfirmDel(null)} title="Keep it">No</button>
+                          </span>
+                        ) : (
+                          <button
+                            className="rail-x"
+                            title="Delete this chat"
+                            aria-label="Delete this chat"
+                            onClick={(e) => { e.stopPropagation(); setConfirmDel(th.id); }}
+                          >
+                            ✕
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>
