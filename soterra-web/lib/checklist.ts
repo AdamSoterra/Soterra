@@ -198,8 +198,29 @@ export async function generateChecklistItems(
   // category, because a fire engineer's report and a council post-line
   // inspection both produce Fire items and both are worth surfacing.
   const type = inspectionType(opts.inspectionCode);
+  // The free-text path used to hardcode count: 1 on every row, so the prompt —
+  // which tells the model these items "matter most" — was fed a fabricated
+  // frequency ("failed 1 time") for things that may have run open across six
+  // inspections. searchHistory returns one row per appearance, so fold the
+  // rows by title and count for real: same shape topItems returns, honestly
+  // derived rather than invented.
   const historyQuery = !opts.inspectionCode
-    ? searchHistory(scope, opts.title, { limit: 10 }).then((rows) => rows.map((r) => ({ title: r.title, category: r.category, count: 1, lastSeen: r.inspectedOn })))
+    ? searchHistory(scope, opts.title, { limit: 30 }).then((rows) => {
+        const key = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").slice(0, 5).join(" ");
+        const byTitle = new Map<string, { title: string; category: string; count: number; firstSeen: string | null; lastSeen: string | null }>();
+        for (const r of rows) {
+          const k = key(r.title);
+          const cur = byTitle.get(k);
+          if (cur) {
+            cur.count += 1;
+            if (r.inspectedOn && (!cur.lastSeen || r.inspectedOn > cur.lastSeen)) cur.lastSeen = r.inspectedOn;
+            if (r.inspectedOn && (!cur.firstSeen || r.inspectedOn < cur.firstSeen)) cur.firstSeen = r.inspectedOn;
+          } else {
+            byTitle.set(k, { title: r.title, category: r.category, count: 1, firstSeen: r.inspectedOn, lastSeen: r.inspectedOn });
+          }
+        }
+        return [...byTitle.values()].sort((a, b) => b.count - a.count).slice(0, 10);
+      })
     : type?.group === "consultant"
       ? topItems(scope, { category: type.category, limit: 10 })
       : historyForCode(scope, opts.inspectionCode, 10);
@@ -235,7 +256,17 @@ export async function generateChecklistItems(
       ? `THE MANUFACTURER'S MANUAL\n${mfrHits.map((p) => `--- PAGE LABEL: ${manufacturerLabel(p)}\n${excerpt(p.text, q, 2200)}`).join("\n\n")}`
       : "THE MANUFACTURER'S MANUAL\n(nothing matched — do not invent a manufacturer figure)",
     history.length
-      ? `THIS COMPANY'S OWN HISTORY — already failed on these\n${history.map((h) => `- ${h.title} [${h.category}] — failed ${h.count} time${h.count === 1 ? "" : "s"}${h.lastSeen ? `, last ${h.lastSeen}` : ""}`).join("\n")}`
+      ? // "came up on N inspections", not "failed N times": one open item rides
+        // the council's carried-forward register across every later report, so
+        // appearances are inspections it stayed open through, not fresh
+        // failures. The first→last span says how LONG it stayed open, which is
+        // the number that actually costs money at CCC time.
+        `THIS COMPANY'S OWN HISTORY — pulled up on these before\n${history
+          .map((h) => {
+            const span = h.firstSeen && h.lastSeen && h.firstSeen !== h.lastSeen ? `, open ${h.firstSeen} → ${h.lastSeen}` : h.lastSeen ? `, last ${h.lastSeen}` : "";
+            return `- ${h.title} [${h.category}] — came up on ${h.count} inspection${h.count === 1 ? "" : "s"}${span}`;
+          })
+          .join("\n")}`
       : "THIS COMPANY'S OWN HISTORY\n(no inspection history filed yet)",
   ].join("\n\n════════\n\n");
 

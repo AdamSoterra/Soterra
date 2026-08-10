@@ -17,14 +17,29 @@
 
 const EMAIL = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
 // NZ mobiles and landlines, with or without spaces/dashes/+64.
-const PHONE = /(?:\+?64[ -]?)?(?:\(0\d\)|0\d)[ -]?\d{3}[ -]?\d{3,5}\b|\b02\d[ -]?\d{3}[ -]?\d{3,5}\b/g;
+//
+// The third alternative is the international form WITHOUT the leading zero
+// ("+64 21 446 725"), which is how the council prints the inspector's mobile
+// on the outcome statement. The old pattern demanded a 0 after the country
+// code, so that exact number — the single most personal string on the page —
+// survived scrubbing in every council report in the corpus. The 64-form
+// requires the "+" or a word boundary plus separator so a "64" inside a longer
+// figure can't trigger it.
+const PHONE =
+  /(?:\+?64[ -]?)?(?:\(0\d\)|0\d)[ -]?\d{3}[ -]?\d{3,5}\b|\b02\d[ -]?\d{3}[ -]?\d{3,5}\b|\+?\b64[ -]?\(?\d\d?\)?(?:[ -]?\d){6,8}\b/g;
 
 // Labelled fields in the council template whose VALUE is a person. The value
 // runs until the next field label, so we anchor on the labels we know follow.
 const NAMED_FIELDS: { label: RegExp; replace: string }[] = [
   { label: /(Person on site \(name\)\s*)([^\n]{0,80}?)(?=\s*(?:Outcome|Inspection|Page \d|$))/gi, replace: "[PERSON]" },
   { label: /(Outcome statement recipient email\s*)([^\s]{0,120}?)(?=\s|$)/gi, replace: "[EMAIL]" },
-  { label: /(Inspector(?:'s)? name\s*[:\-]?\s*)([^\n]{0,60}?)(?=\s*(?:Date|Signature|Page \d|$))/gi, replace: "[INSPECTOR]" },
+  // The stop-set must include the field that actually FOLLOWS the name on the
+  // real template: "Inspector's email". PDF text arrives collapsed onto one
+  // line, so the old lookahead (Date|Signature|Page|$) never fired and the
+  // inspector's full name sailed through — while the adjacent "Person on site"
+  // scrubbed fine because its stop-set happened to match. Phone/mobile are in
+  // the set for the same reason on other layouts.
+  { label: /(Inspector(?:'s)? name\s*[:\-]?\s*)([^\n]{0,60}?)(?=\s*(?:Date|Signature|Page \d|Inspector(?:'s)? (?:email|phone|mobile)|Email|Phone|Mobile|$))/gi, replace: "[INSPECTOR]" },
   { label: /(LBP Name\s*(?:\( if applicable \))?\s*)([^\n]{0,60}?)(?=\s*(?:LBP Number|LBP Class|Documents|Page \d|$))/gi, replace: "[LBP]" },
   { label: /(Signed(?: by)?\s*[:\-]?\s*)([^\n]{0,60}?)(?=\s*(?:Date|Page \d|$))/gi, replace: "[PERSON]" },
 ];

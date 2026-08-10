@@ -57,7 +57,10 @@ type PlanDoc = { doc: string; npages: number; indexed: number; file: string | nu
 
 // ─── Inspection history + checklists ───
 type CategoryCount = { category: string; count: number };
-type TopItem = { title: string; category: string; count: number; lastSeen: string | null };
+/** count = how many INSPECTIONS the item appeared on (not rows — the council's
+ *  carried-forward register repeats an open item on every later report).
+ *  firstSeen→lastSeen is how long it stayed open. */
+type TopItem = { title: string; category: string; count: number; firstSeen: string | null; lastSeen: string | null };
 type InspectionRow = {
   id: string; doc: string; projectId: string; projectName: string | null;
   source: string; inspectionCode: string | null; inspectionType: string | null;
@@ -2716,6 +2719,12 @@ export default function Page() {
                               <div className="iz-item" key={i}>
                                 <div className="iz-im">
                                   <div className="iz-it">{t.title}</div>
+                                  {/* The span an item stayed open matters more than its
+                                      count — open time is what delays the CCC. Only shown
+                                      when it genuinely spans more than one date. */}
+                                  {t.firstSeen && t.lastSeen && t.firstSeen !== t.lastSeen && (
+                                    <div className="iz-ispan">open {t.firstSeen} → {t.lastSeen}</div>
+                                  )}
                                   <div className="iz-itk"><div className="iz-itf" style={{ width: `${Math.round((t.count / maxN) * 100)}%`, background: catColor(selCat) }} /></div>
                                 </div>
                                 <div className="iz-ic">{t.count}<small>×</small></div>
@@ -2723,7 +2732,7 @@ export default function Page() {
                             ))}
                           </div>
                         )}
-                        <div className="iz-ddf"><span className="more">{more > 0 ? `+ ${more} more ${selCat} item${more === 1 ? "" : "s"}` : "All items shown"}</span><span>the number is how many times it came up</span></div>
+                        <div className="iz-ddf"><span className="more">{more > 0 ? `+ ${more} more ${selCat} item${more === 1 ? "" : "s"}` : "All items shown"}</span><span>the number is how many inspections it came up on</span></div>
                       </div>
                     </div>
                   );

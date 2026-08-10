@@ -167,7 +167,7 @@ const RULES: [RegExp, Category, RegExp?][] = [
 
   // ── Electrical. Note the fire rules above already took the intumescent
   //    flush-box pads, which the council files under passive fire.
-  [/\belectric(?:al|ity)?\b|flush box|switchboard|\bswitch(?:es)?\b|\bipx\d?\b|distribution board|\bcable(?:s|way|tray)?\b|conduit|earth(?:ing|ed|bond)|\bsocket|luminaire|light fitting|\blighting\b|power (?:outlet|supply|point)|\bcomms?\b|data (?:cabling|outlet)|\bmeter box/i, "Electrical"],
+  [/\belectric(?:al|ity)?\b|flush box|switchboard|\bswitch(?:es)?\b|\bipx\d?\b|distribution board|\bcable(?:s|way|tray)?\b|conduit|earth(?:ing|ed)\b|earth[ -]?bond|\bsocket|luminaire|light fitting|\blighting\b|power (?:outlet|supply|point)|\bcomms?\b|data (?:cabling|outlet)|\bmeter box/i, "Electrical"],
 
   // ── Mechanical.
   [/\bhvac\b|mechanical (?:services|plant)|ventilation|\bduct(?:s|work|ing)?\b|extract(?:or|ion)|air ?condition|heat pump|\bfan\b|make-?up air|\bdamper/i, "Mechanical"],

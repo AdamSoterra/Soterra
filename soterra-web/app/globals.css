@@ -619,6 +619,8 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .iz-item:hover{background:var(--bg)}
 .iz-im{flex:1;min-width:0}
 .iz-it{font-size:13.5px;font-weight:500;color:var(--navy);margin-bottom:8px;line-height:1.25}
+/* How long an item stayed open — shown only when it spans more than one date. */
+.iz-ispan{font-size:11px;color:var(--mut);margin:-5px 0 7px}
 .iz-itk{height:8px;background:var(--line2);border-radius:5px;overflow:hidden}
 .iz-itf{height:100%;border-radius:5px;transition:width .5s cubic-bezier(.2,.7,.3,1)}
 .iz-ic{width:44px;flex-shrink:0;text-align:right;font-size:16px;font-weight:700;color:var(--navy)}

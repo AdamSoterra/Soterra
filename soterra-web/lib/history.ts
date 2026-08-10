@@ -85,7 +85,32 @@ export async function saveInspection(
 }
 
 export type CategoryCount = { category: Category; count: number };
-export type TopItem = { title: string; category: Category; count: number; lastSeen: string | null };
+export type TopItem = {
+  title: string;
+  category: Category;
+  /** How many INSPECTIONS this item appeared on — not how many rows it filed.
+   *  Council reports carry a rolling "items to be resolved" register, so one
+   *  unfixed fire door reappears on every subsequent report. Counting rows
+   *  turned one defect into "failed 23 times", which is wrong by an order of
+   *  magnitude on the founder's own data. Distinct inspections is the honest
+   *  number, and first→last seen is the genuinely useful one: how long the
+   *  thing stayed open. */
+  count: number;
+  firstSeen: string | null;
+  lastSeen: string | null;
+};
+
+/** The shared grouping key: the first 5 words of the title, lowercased, with
+ *  every run of punctuation and whitespace collapsed to ONE space.
+ *
+ *  Two bugs lived here. Punctuation was replaced character-by-character with a
+ *  space and the empty strings were kept, so "Head/ sill/ jamb" burned three of
+ *  the window's slots on nothing and identical defects split into separate
+ *  groups. And the window was 6 words, so "Cavity battens as per plan" (5
+ *  words) could never merge with "Cavity battens as per plan and installed
+ *  correctly" — the exact pair the old comment claimed it merged. */
+const TITLE_GROUP = (col: unknown) =>
+  sql<string>`lower(array_to_string((string_to_array(trim(regexp_replace(${col}, '[^a-zA-Z0-9]+', ' ', 'g')), ' '))[1:5], ' '))`;
 
 /** Failed items per category, company-wide. This IS the Insights page. */
 export async function categoryCounts(scope: Scope): Promise<CategoryCount[]> {
@@ -99,8 +124,9 @@ export async function categoryCounts(scope: Scope): Promise<CategoryCount[]> {
 }
 
 /** The individual things this company keeps failing, most-repeated first.
- *  Grouped on a normalised title so "Cavity battens as per plan" and
- *  "Cavity battens as per plan and installed correctly" don't split the count. */
+ *  Grouped on the normalised title (see TITLE_GROUP) and counted by DISTINCT
+ *  INSPECTION, so a rolling carried-forward register can't inflate one open
+ *  item into a pile of "failures". */
 export async function topItems(scope: Scope, opts: { category?: string | null; limit?: number } = {}): Promise<TopItem[]> {
   const limit = Math.min(Math.max(opts.limit ?? 12, 1), 100);
   const where = opts.category
@@ -109,21 +135,20 @@ export async function topItems(scope: Scope, opts: { category?: string | null; l
 
   const rows = await db
     .select({
-      // Fold to the first 6 words, lowercased — enough to merge the same defect
-      // written two ways without merging two different defects.
-      grp: sql<string>`lower(array_to_string((string_to_array(regexp_replace(${inspectionItems.title}, '[^a-zA-Z0-9 ]', ' ', 'g'), ' '))[1:6], ' '))`,
+      grp: TITLE_GROUP(inspectionItems.title),
       title: sql<string>`min(${inspectionItems.title})`,
       category: sql<string>`min(${inspectionItems.category})`,
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`count(distinct ${inspectionItems.inspectionId})::int`,
+      firstSeen: sql<string | null>`min(${inspectionItems.inspectedOn})`,
       lastSeen: sql<string | null>`max(${inspectionItems.inspectedOn})`,
     })
     .from(inspectionItems)
     .where(where)
     .groupBy(sql`1`)
-    .orderBy(sql`count(*) desc`)
+    .orderBy(sql`count(distinct ${inspectionItems.inspectionId}) desc`)
     .limit(limit);
 
-  return rows.map((r) => ({ title: r.title, category: r.category as Category, count: r.count, lastSeen: r.lastSeen }));
+  return rows.map((r) => ({ title: r.title, category: r.category as Category, count: r.count, firstSeen: r.firstSeen, lastSeen: r.lastSeen }));
 }
 
 /** Past inspections — the bottom half of the Insights page. Company-wide by
@@ -180,14 +205,41 @@ export async function inspectionDetail(scope: Scope, inspectionId: string) {
  * engineer's requirement. Surfacing "we asked this before" there is a silent
  * killer. See BUILD-PLAN.md §4.
  */
+/** Question words and glue that carry no meaning in an item title. Without
+ *  this, "what failed on the last cavity wrap?" searched for "the" — and since
+ *  ILIKE '%the%' is a substring match, it scored a hit inside
+ *  "Weathertightness", ranking an unrelated row equal to the real one. */
+const SEARCH_STOPWORDS = new Set([
+  "the", "and", "for", "was", "were", "what", "when", "where", "which", "with",
+  "this", "that", "these", "those", "from", "have", "has", "had", "not", "are",
+  "you", "your", "our", "did", "does", "doing", "how", "why", "who", "get",
+  "got", "can", "could", "would", "should", "there", "here", "been", "being",
+  "about", "any", "all", "last", "next", "time", "keep", "keeps", "kept",
+]);
+
+/** Turn a question into search terms: meaningful words only, folded to their
+ *  singular so "flashings" finds "flashing". The fold matters more than it
+ *  looks: ILIKE '%flashing%' matches "flashings", but '%flashings%' does NOT
+ *  match "flashing" — the plural excluded the right rows from the WHERE
+ *  entirely, not just ranked them low. Exported so it can be tested as a pure
+ *  function. */
+export function historySearchTerms(query: string): string[] {
+  const words = query.toLowerCase().match(/[a-z0-9]{3,}/g) || [];
+  const terms = words
+    .filter((w) => !SEARCH_STOPWORDS.has(w))
+    // Strip a plural s, but not from "ss" endings (access, harness) and not
+    // from short words where the stem gets too greedy as a substring.
+    .map((w) => (w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w));
+  return [...new Set(terms)].slice(0, 8);
+}
+
 export async function searchHistory(
   scope: Scope,
   query: string,
   opts: { code?: string | null; category?: string | null; limit?: number } = {}
 ) {
   const limit = Math.min(Math.max(opts.limit ?? 20, 1), 60);
-  const q = query.trim();
-  const terms = (q.toLowerCase().match(/[a-z0-9]{3,}/g) || []).slice(0, 8);
+  const terms = historySearchTerms(query);
 
   const conds = [eq(inspectionItems.companyId, scope.companyId)];
   if (opts.code) conds.push(eq(inspectionItems.inspectionCode, opts.code.toUpperCase()));
@@ -220,23 +272,26 @@ export async function searchHistory(
     .limit(limit);
 }
 
-/** How many times this company has failed each thing on a given inspection
- *  type — the "what we personally keep failing" source for a checklist. */
+/** What this company keeps failing on a given inspection type — the "what we
+ *  personally keep failing" source for a checklist. Same grouping and same
+ *  distinct-inspection counting as topItems, for the same rolling-register
+ *  reason. */
 export async function historyForCode(scope: Scope, code: string, limit = 12): Promise<TopItem[]> {
   const rows = await db
     .select({
-      grp: sql<string>`lower(array_to_string((string_to_array(regexp_replace(${inspectionItems.title}, '[^a-zA-Z0-9 ]', ' ', 'g'), ' '))[1:6], ' '))`,
+      grp: TITLE_GROUP(inspectionItems.title),
       title: sql<string>`min(${inspectionItems.title})`,
       category: sql<string>`min(${inspectionItems.category})`,
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`count(distinct ${inspectionItems.inspectionId})::int`,
+      firstSeen: sql<string | null>`min(${inspectionItems.inspectedOn})`,
       lastSeen: sql<string | null>`max(${inspectionItems.inspectedOn})`,
     })
     .from(inspectionItems)
     .where(and(eq(inspectionItems.companyId, scope.companyId), eq(inspectionItems.inspectionCode, code.toUpperCase())))
     .groupBy(sql`1`)
-    .orderBy(sql`count(*) desc`)
+    .orderBy(sql`count(distinct ${inspectionItems.inspectionId}) desc`)
     .limit(limit);
-  return rows.map((r) => ({ title: r.title, category: r.category as Category, count: r.count, lastSeen: r.lastSeen }));
+  return rows.map((r) => ({ title: r.title, category: r.category as Category, count: r.count, firstSeen: r.firstSeen, lastSeen: r.lastSeen }));
 }
 
 /** Headline numbers for the top of the Insights page.
