@@ -87,7 +87,12 @@ function normaliseOutcome(raw: string | null | undefined): ExtractedInspection["
 /** The council's own summary of what failed. Exact, so we never rely on the
  *  model for the items it already printed as a numbered list. */
 export function parseCouncilFails(text: string): { title: string }[] {
-  const seg = text.match(/Inspection Summary\s+(?:Pass|Fail|Partial Pass|Completed)?\s*Comments\s+([\s\S]*?)(?:INSPECTION HISTORY|Additional Comments|Inspection Outcome|$)/i);
+  // "Page N of M" can land between "Inspection Summary" and the outcome word
+  // when the summary starts a new page — BCO10341827-3_3703781636 really prints
+  // "Inspection Summary Page 4 of 6 Fail Comments". Without allowing it, a
+  // page break silently dropped the entire deterministic fail list for that
+  // report, and nothing downstream could tell.
+  const seg = text.match(/Inspection Summary\s+(?:Page\s+\d+\s+of\s+\d+\s+)?(?:Pass|Fail|Partial Pass|Completed)?\s*Comments\s+([\s\S]*?)(?:INSPECTION HISTORY|Additional Comments|Inspection Outcome|$)/i);
   if (!seg) return [];
   const out: { title: string }[] = [];
   const re = /\d+\.\s*(.+?)\s*\(\s*(Fail|Partial)\s*\)/g;
@@ -196,7 +201,16 @@ FIDELITY: use the report's own words. Never invent a defect, a clause, a figure 
 export function expectedItemCount(text: string): number {
   const open = (text.match(/\bOpen\b/g) || []).length;
   const numbered = new Set(text.match(/#\d+/g) || []).size;
-  return Math.max(open, numbered);
+  // Numbered list lines ("7. Fire doors to install and seal"). Measured across
+  // the whole corpus: council reports carry NO "Open" statuses and NO "#N"
+  // markers, so with only those two signals the guard could not arm on the
+  // single biggest report family — a report read as 1 item from 7 pages of
+  // defects sailed through unchecked. Numbered lines run 8-14 on the council
+  // template and 10-12 on the fire consultant's. The count can overshoot on a
+  // report that numbers its section headings, but the guard only fires when the
+  // model read less than HALF of it, and the cost of a false arm is one retry.
+  const numberedLines = (text.match(/(?:^|\s)\d{1,2}\.\s+[A-Z]/g) || []).length;
+  return Math.max(open, numbered, numberedLines);
 }
 
 /** Cut a very long report down to what the extractor actually needs. Reports

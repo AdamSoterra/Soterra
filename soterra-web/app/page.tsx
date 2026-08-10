@@ -516,6 +516,7 @@ export default function Page() {
   const [setupErr, setSetupErr] = useState<string | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
   const [crewOpen, setCrewOpen] = useState(false);
+  const [crewErr, setCrewErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   // ─── saved conversations (threads) ───
@@ -686,6 +687,29 @@ export default function Page() {
     } catch {
       /* ignore */
     }
+  };
+
+  // ─── crew management (admin only — the server re-checks every call) ───
+  const removeMember = async (m: Member) => {
+    if (!window.confirm(`Remove ${m.name} from ${projName}? They lose access now; everything they've already done keeps their name.`)) return;
+    const res = await apiFetch(`/api/members?userId=${encodeURIComponent(m.userId)}`, { method: "DELETE" });
+    if (res.ok) { setCrewErr(null); await loadMembers(); }
+    else setCrewErr((await res.json().catch(() => null))?.error ?? "Couldn't remove them just now.");
+  };
+  const toggleRole = async (m: Member) => {
+    const role = m.role === "admin" ? "member" : "admin";
+    const res = await apiFetch("/api/members", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: m.userId, role }) });
+    if (res.ok) { setCrewErr(null); await loadMembers(); }
+    else setCrewErr((await res.json().catch(() => null))?.error ?? "Couldn't change that role.");
+  };
+  const rotateCode = async () => {
+    if (!window.confirm("Get a new invite code? The old one stops working immediately — anyone you've already sent it to won't be able to use it.")) return;
+    const res = await apiFetch("/api/members", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "rotate-code" }) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.code) setSiteCode(data.code);
+      setCrewErr(null);
+    } else setCrewErr((await res.json().catch(() => null))?.error ?? "Couldn't change the code just now.");
   };
   const loadPlans = async () => {
     try {
@@ -2123,7 +2147,7 @@ export default function Page() {
                   over the top-left of the assistant screen, which sat on top
                   of the Today card and covered its heading. */}
               <div className="mrow" onClick={() => { setMenuOpen(false); setTab("assistant"); setRailOpen(true); loadThreads(); }}><span className="mi">💬</span> Past chats</div>
-              <div className="mrow" onClick={() => { setCrewOpen(true); setMenuOpen(false); loadMembers(); }}><span className="mi">👥</span> Crew &amp; invite code</div>
+              <div className="mrow" onClick={() => { setCrewOpen(true); setCrewErr(null); setMenuOpen(false); loadMembers(); }}><span className="mi">👥</span> Crew &amp; invite code</div>
               <div className="mrow" onClick={() => { setMenuOpen(false); window.open("/install", "_blank"); }}><span className="mi">📱</span> Put it on a phone</div>
               <div className="mrow sep" onClick={() => clerk.signOut()}><span className="mi">↩️</span> Sign out</div>
             </div>
@@ -2971,6 +2995,9 @@ export default function Page() {
                   {activeCode || "—"}
                 </div>
                 <button className="lg-btn" style={{ height: 48, margin: 0, width: "auto", padding: "0 16px" }} onClick={() => copyCode(activeCode)}>{copied ? "Copied ✓" : "Copy"}</button>
+                {curProject?.role === "admin" && (
+                  <button className="lg-btn" style={{ height: 48, margin: 0, width: "auto", padding: "0 14px" }} title="Get a new code — the old one stops working" onClick={rotateCode}>New code</button>
+                )}
               </div>
               <p className="page-sub" style={{ margin: "10px 0 18px" }}>Share this code — anyone who enters it joins <b>{projName}</b> and sees the shared calendar, tasks and plans. {curProject?.role === "admin" ? "" : "(Only the admin should hand this out.)"}</p>
               <label className="ev-lbl">On this site ({members.length})</label>
@@ -2981,9 +3008,27 @@ export default function Page() {
                     <b style={{ fontSize: 15 }}>{m.name}{m.isMe ? " (you)" : ""}</b>
                     {m.title && <small style={{ color: "var(--slate)" }}>· {m.title}</small>}
                     <small style={{ marginLeft: "auto", color: "var(--slate)" }}>{m.role === "admin" ? "Admin" : "Crew"}</small>
+                    {/* Admin-only crew controls. The server re-checks the role and
+                        refuses to strand the site without an admin, so these can
+                        afford to be plain buttons. Not shown on your own row:
+                        removing yourself or demoting yourself is how a site gets
+                        orphaned in a hurry. */}
+                    {curProject?.role === "admin" && !m.isMe && (
+                      <>
+                        {/* Its own class, not row-x: that one's hover is a
+                            destructive red, which is the wrong colour to show
+                            on "Make admin", and its zeroed padding left an
+                            11px tap target. */}
+                        <button className="crew-role" title={m.role === "admin" ? "Make crew" : "Make admin"} onClick={() => toggleRole(m)}>
+                          {m.role === "admin" ? "Make crew" : "Make admin"}
+                        </button>
+                        <button className="row-x" style={{ opacity: 1 }} title={`Remove ${m.name} from this site`} onClick={() => removeMember(m)}>✕</button>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
+              {crewErr && <div className="ev-err" style={{ marginTop: 10 }}>{crewErr}</div>}
             </div>
           </div>
         </div>
@@ -3333,6 +3378,29 @@ export default function Page() {
                   </div>
                 ))
               )}
+              {/* A badly-read report used to be permanent — the only correction
+                  was re-uploading a file with the same name. Delete + re-upload
+                  is the honest fix, and its items leave the counts with it. */}
+              <div className="form-actions" style={{ marginTop: 14 }}>
+                <button
+                  className="lg-btn"
+                  style={{ height: 44, margin: 0, width: "auto", padding: "0 18px" }}
+                  onClick={async () => {
+                    if (!window.confirm("Delete this report from the history? Its items come out of the counts too. Re-upload the PDF to file it again.")) return;
+                    const res = await apiFetch(`/api/inspections?id=${encodeURIComponent(openInspection.inspection.id)}`, { method: "DELETE" });
+                    if (res.ok) {
+                      setOpenInspection(null);
+                      loadInsights(catFilter);
+                    } else {
+                      // Every other mutation surfaces its failure; a delete that
+                      // silently does nothing reads as a broken button.
+                      window.alert("Couldn't delete that report just now — try again.");
+                    }
+                  }}
+                >
+                  Delete report
+                </button>
+              </div>
             </div>
           </div>
         </div>

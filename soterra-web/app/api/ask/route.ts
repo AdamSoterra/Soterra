@@ -415,6 +415,11 @@ const CALENDAR_TOOL_NAMES = new Set([
   "create_event", "create_task", "find_items", "update_event", "update_task",
   "create_events_bulk", "create_tasks_bulk", "update_events_bulk", "update_tasks_bulk",
   "delete_events_bulk", "delete_tasks_bulk",
+  // The two singular deletes were missed when the calendar was cut, so the
+  // model could still see tools that contradict "Soterra is NOT a calendar".
+  // Harmless in practice (find_items was withheld, so it had no ids to pass),
+  // but a visible contradiction in the tool list it reasons over.
+  "delete_event", "delete_task",
 ]);
 const ACTIVE_TOOLS = TOOLS.filter((t) => !CALENDAR_TOOL_NAMES.has(t.name));
 

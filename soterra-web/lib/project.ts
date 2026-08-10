@@ -49,8 +49,14 @@ export async function listMembers(projectId: string) {
 }
 
 // A short, unambiguous join code: XXXX-XXXX from a no-look-alike alphabet.
+// crypto randomness, not Math.random(): this code is the sole credential the
+// join flow authorises on, and V8's Math.random is predictable from a few
+// observed outputs. The keyspace is fine (31^8); the generator was the gap.
 export function generateCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1
-  const block = () => Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
-  return `${block()}-${block()}`;
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  const ch = (b: number) => alphabet[b % alphabet.length];
+  const s = Array.from(bytes, ch).join("");
+  return `${s.slice(0, 4)}-${s.slice(4)}`;
 }

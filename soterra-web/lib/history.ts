@@ -181,6 +181,23 @@ export async function listInspections(scope: Scope, opts: { projectOnly?: boolea
     .limit(limit);
 }
 
+/** Delete one filed inspection and its items. Company-scoped like every other
+ *  read and write in this file. This existed nowhere for a long time, so a
+ *  badly-read report was permanent short of raw SQL — the only "fix" was
+ *  re-uploading a file with the identical name and hoping the upsert replaced
+ *  it. Items first: inspection_items has no cascade. */
+export async function deleteInspection(scope: Scope, inspectionId: string): Promise<boolean> {
+  const [head] = await db
+    .select({ id: inspections.id })
+    .from(inspections)
+    .where(and(eq(inspections.id, inspectionId), eq(inspections.companyId, scope.companyId)))
+    .limit(1);
+  if (!head) return false;
+  await db.delete(inspectionItems).where(and(eq(inspectionItems.inspectionId, inspectionId), eq(inspectionItems.companyId, scope.companyId)));
+  await db.delete(inspections).where(and(eq(inspections.id, inspectionId), eq(inspections.companyId, scope.companyId)));
+  return true;
+}
+
 /** Every failed item on one inspection. */
 export async function inspectionDetail(scope: Scope, inspectionId: string) {
   const [head] = await db

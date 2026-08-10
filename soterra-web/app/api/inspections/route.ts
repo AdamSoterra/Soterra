@@ -3,7 +3,7 @@ import { get } from "@vercel/blob";
 import { extractText, getDocumentProxy } from "unpdf";
 import { resolveScope } from "@/lib/company";
 import { extractInspection, hasUsableText } from "@/lib/inspectionExtract";
-import { listInspections, saveInspection, inspectionDetail } from "@/lib/history";
+import { deleteInspection, listInspections, saveInspection, inspectionDetail } from "@/lib/history";
 
 // Inspection reports in → this COMPANY's failure history out. Same upload
 // mechanics as the plan indexer (client uploads straight to private Blob, then
@@ -141,4 +141,24 @@ export async function POST(req: Request) {
     underRead: extracted.underRead,
     expectedItems: extracted.expectedItems,
   });
+}
+
+// DELETE /api/inspections?id=<uuid> → remove a filed inspection + its items.
+//
+// A badly-read report used to be permanent: the route had no delete, so the
+// only correction was re-uploading a file with the identical name and relying
+// on the upsert. Company-scoped through resolveScope like everything else, so
+// nobody can delete another builder's history.
+export async function DELETE(req: Request) {
+  const { userId } = await auth();
+  if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
+  const scope = await resolveScope(req, userId);
+  if (!scope) return Response.json({ error: "No site selected" }, { status: 403 });
+
+  const id = new URL(req.url).searchParams.get("id")?.trim();
+  if (!id) return Response.json({ error: "id required" }, { status: 400 });
+
+  const ok = await deleteInspection(scope, id);
+  if (!ok) return Response.json({ error: "Inspection not found" }, { status: 404 });
+  return Response.json({ ok: true });
 }
