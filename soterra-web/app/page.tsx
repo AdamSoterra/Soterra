@@ -412,6 +412,47 @@ export default function Page() {
   // image bigger — no new render, no cost.
   const [zoomImg, setZoomImg] = useState<string | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
+  const zoomScrimRef = useRef<HTMLDivElement>(null);
+  // Mirrors zoomScale for the native wheel handler, which is registered once and
+  // would otherwise close over a stale value.
+  const zoomScaleRef = useRef(1);
+  useEffect(() => { zoomScaleRef.current = zoomScale; }, [zoomScale]);
+
+  // Wheel and trackpad-pinch zoom, anchored on the pointer.
+  //
+  // Registered natively rather than with onWheel because the handler must call
+  // preventDefault to stop the page scrolling underneath, and React attaches
+  // wheel listeners passively. A trackpad pinch arrives as ctrl+wheel; a plain
+  // wheel zooms too, since inspecting the page is the only thing this view is
+  // for. Anchoring means the detail under the cursor stays under the cursor,
+  // which is what makes it feel like a document viewer rather than a slider.
+  useEffect(() => {
+    const el = zoomScrimRef.current;
+    if (!el || !zoomImg) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const prev = zoomScaleRef.current;
+      const next = Math.min(6, Math.max(1, prev * Math.exp(-e.deltaY * 0.0015)));
+      if (Math.abs(next - prev) < 0.001) return;
+      const rect = el.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      // Where the cursor sits in the content, before the scale changes.
+      const cx = el.scrollLeft + px;
+      const cy = el.scrollTop + py;
+      const ratio = next / prev;
+      zoomScaleRef.current = next;
+      setZoomScale(next);
+      // After React has resized the image, put that same point back under the
+      // cursor. rAF because the new layout does not exist until it paints.
+      requestAnimationFrame(() => {
+        el.scrollLeft = cx * ratio - px;
+        el.scrollTop = cy * ratio - py;
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [zoomImg]);
 
   // The manufacturer documents we hold, so a "Source: GIB · …" line resolves to
   // a real card, page image and link even when the model doesn't paste the URL.
@@ -2805,22 +2846,48 @@ export default function Page() {
 
       {/* ─── full-screen, zoomable page image ─── */}
       {zoomImg && (
-        <div className="zoomscrim" onClick={() => { setZoomImg(null); setZoomScale(1); }}>
-          {/* Tap the image to zoom in a step (cycles back to fit after max); when
-              zoomed the scrim scrolls so you can pan around the fine print. */}
+        <div ref={zoomScrimRef} className="zoomscrim" onClick={() => { setZoomImg(null); setZoomScale(1); }}
+          onPointerDown={(e) => {
+            // Drag to pan when zoomed in. Scrollbars alone are painful on a
+            // laptop, and this is the screen where someone reads fine print.
+            if (zoomScale === 1 || e.button !== 0) return;
+            const el = zoomScrimRef.current;
+            if (!el) return;
+            const sx = e.clientX, sy = e.clientY;
+            const l0 = el.scrollLeft, t0 = el.scrollTop;
+            let moved = false;
+            const move = (m: PointerEvent) => {
+              if (Math.abs(m.clientX - sx) + Math.abs(m.clientY - sy) > 3) moved = true;
+              el.scrollLeft = l0 - (m.clientX - sx);
+              el.scrollTop = t0 - (m.clientY - sy);
+            };
+            const up = () => {
+              window.removeEventListener("pointermove", move);
+              window.removeEventListener("pointerup", up);
+              // A drag must not also register as the click that closes or
+              // toggles zoom, so swallow the next click only if we moved.
+              if (moved) window.addEventListener("click", (c) => { c.stopPropagation(); c.preventDefault(); }, { capture: true, once: true });
+            };
+            window.addEventListener("pointermove", move);
+            window.addEventListener("pointerup", up);
+          }}
+        >
+          {/* Scroll or pinch to zoom smoothly; tap steps in and back to fit.
+              When zoomed, drag to pan around the fine print. */}
           <img
             className="zoomimg"
             src={zoomImg}
             alt="Full page"
+            draggable={false}
             style={zoomScale === 1
               ? { maxWidth: "100%", maxHeight: "calc(100vh - 96px)", cursor: "zoom-in" }
-              : { width: `${zoomScale * 100}%`, maxWidth: "none", maxHeight: "none", cursor: "zoom-out" }}
-            onClick={(e) => { e.stopPropagation(); setZoomScale((s) => (s >= 3 ? 1 : s + 1)); }}
+              : { width: `${zoomScale * 100}%`, maxWidth: "none", maxHeight: "none", cursor: "grab" }}
+            onClick={(e) => { e.stopPropagation(); setZoomScale((s) => (s >= 3 ? 1 : s + 0.5)); }}
           />
           <div className="zoomctl" onClick={(e) => e.stopPropagation()}>
-            <button aria-label="Zoom out" onClick={() => setZoomScale((s) => Math.max(1, s - 1))}>−</button>
+            <button aria-label="Zoom out" onClick={() => setZoomScale((s) => Math.max(1, Math.round((s - 0.25) * 100) / 100))}>−</button>
             <span>{Math.round(zoomScale * 100)}%</span>
-            <button aria-label="Zoom in" onClick={() => setZoomScale((s) => Math.min(4, s + 1))}>+</button>
+            <button aria-label="Zoom in" onClick={() => setZoomScale((s) => Math.min(6, Math.round((s + 0.25) * 100) / 100))}>+</button>
           </div>
           <button className="zoomx" onClick={() => { setZoomImg(null); setZoomScale(1); }}>✕</button>
         </div>
