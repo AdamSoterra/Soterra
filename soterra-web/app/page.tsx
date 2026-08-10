@@ -2755,9 +2755,19 @@ export default function Page() {
                       <div className="sh-msg">Loading the {isMfr ? "page" : "sheet"}{isMfr ? ` from ${sheet.mfr}` : ""}…</div>
                     )}
                     {docSrc && docImg === "error" && (
+                      // A Code page we have not rendered yet is an ABSENCE, not
+                      // a failure, and the Code is free to read at the source —
+                      // so don't tell someone something broke when the honest
+                      // thing is "here it is, on MBIE". Every other kind keeps
+                      // the error wording, because there the image should have
+                      // been there.
                       <div className="sh-msg">
-                        Couldn&apos;t load the {isMfr ? "page" : "sheet"} preview.
-                        {isMfr && sheet.url && <><br /><a href={sheet.url} target="_blank" rel="noopener noreferrer">Open the full manual ↗</a></>}
+                        {sheet.kind === "code"
+                          ? "This clause is published free by MBIE."
+                          : `Couldn't load the ${isMfr ? "page" : "sheet"} preview.`}
+                        {isMfr && sheet.url && (
+                          <><br /><a href={sheet.url} target="_blank" rel="noopener noreferrer">{openLabel(sheet.kind)} ↗</a></>
+                        )}
                       </div>
                     )}
                     {!docSrc && (
@@ -2782,7 +2792,7 @@ export default function Page() {
                     <p dangerouslySetInnerHTML={{ __html: sheet.ans }} />
                     {isMfr && sheet.url && (
                       <a className="sh-open" href={sheet.url} target="_blank" rel="noopener noreferrer">
-                        {sheet.kind === "standard" ? "Open the full standard" : sheet.kind === "determination" ? "Open the full determination" : sheet.kind === "code" ? "Open the Code on" : "Open the full manual"}{sheet.kind === "code" ? "" : " on"} {hostOf(sheet.url)} ↗
+                        {openLabel(sheet.kind)}{sheet.kind === "code" ? "" : ` on ${hostOf(sheet.url)}`} ↗
                       </a>
                     )}
                   </div>
@@ -3688,6 +3698,17 @@ function makeCite(sourceLine: string, body: string, mfrDocs?: MfrDoc[]): Cite {
 // on <site>" link in the document viewer.
 function hostOf(u: string): string {
   try { return new URL(u).host.replace(/^www\./, ""); } catch { return "the manufacturer's site"; }
+}
+
+// What the "open the original" link should call the source. Kept in one place
+// because it is needed twice — in the viewer footer and in the canvas when no
+// image loads — and the two had drifted, so a Building Code page was offering
+// to open "the full manual".
+function openLabel(kind: Cite["kind"]): string {
+  return kind === "standard" ? "Open the full standard"
+    : kind === "determination" ? "Open the full determination"
+    : kind === "code" ? "Open it on building.govt.nz"
+    : "Open the full manual";
 }
 
 // One event row — used in the week strip, agenda, and day modal. Bar colour is

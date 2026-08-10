@@ -55,9 +55,35 @@ const docs = await db
   .groupBy(codePages.file, codePages.npages)
   .orderBy(sql`count(*) desc`);
 
+// ⭐ Order matters more than it looks. Rendering biggest-first spent the whole
+// first run on the two Building Code Handbooks (444 pages between them), which
+// are cited far less often than the Acceptable Solutions people actually ask
+// about — so after half an hour the documents in every real question still had
+// no images. These are the ones that answer the common questions; do them
+// first, then everything else by size.
+const PRIORITY = [
+  "c-protection-from-fire-as2-second-edition.pdf",
+  "e3-internal-moisture-as2-1st-edition.pdf",
+  "f2-hazardous-building-materials-1st-edition-amendment3.pdf",
+  "b1-structure-as3-second-edition.pdf",
+  "b2-durability-as1-third-edition.pdf",
+  "e3-internal-moisture-2nd-edition-amendment7.pdf",
+  "g6-airborne-and-impact-sound-1st-edition-amendment-2.pdf",
+  "f4-safety-from-falling-third-edition-unamended.pdf",
+  "e2-external-moisture-as1-fourth-edition.pdf",
+  "b1-structure-1st-edition-amendment-21.pdf",
+  "c-protection-from-fire-vm2-second-edition.pdf",
+  "g12-water-supplies-3rd-edition-amendment-14.pdf",
+];
+const rank = (f: string) => {
+  const i = PRIORITY.indexOf(f);
+  return i === -1 ? PRIORITY.length : i;
+};
+
 const targets = docs
   .filter((d) => (onlyFile ? d.file === onlyFile : d.npages <= maxPages))
-  .filter((d) => fs.existsSync(path.join(PDF_DIR, d.file)));
+  .filter((d) => fs.existsSync(path.join(PDF_DIR, d.file)))
+  .sort((a, b) => rank(a.file) - rank(b.file) || a.npages - b.npages);
 
 const missing = docs.filter((d) => !fs.existsSync(path.join(PDF_DIR, d.file)));
 if (missing.length) {
