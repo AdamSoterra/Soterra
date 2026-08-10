@@ -2145,11 +2145,17 @@ export default function Page() {
                               {m.cites && m.cites.length > 1 && (
                                 <div className="cites-h">{m.cites.length} sources — tap any to open</div>
                               )}
+                              {/* Every citation now opens the viewer. A Code chip
+                                  used to jump straight out to building.govt.nz
+                                  because there was nothing to show; the link out
+                                  now lives inside the sheet instead, so a Code
+                                  page with no stored render still gets you
+                                  there and nothing is lost either way. */}
                               {m.cites?.map((c, k) => (
-                                <div className="cite" key={k} onClick={() => (c.kind === "code" ? c.url && window.open(c.url, "_blank", "noopener") : setSheet(c))}>
+                                <div className="cite" key={k} onClick={() => setSheet(c)}>
                                   <div className="cic">{c.kind === "manufacturer" ? "📕" : c.kind === "determination" ? "⚖️" : c.kind === "standard" ? "📘" : c.kind === "code" ? "📖" : "📐"}</div>
                                   <div className="ct"><b>{c.code}{c.title ? ` · ${c.title}` : ""}</b><small>{c.sub}</small></div>
-                                  <div className="ca">{c.kind === "code" ? "↗" : "›"}</div>
+                                  <div className="ca">›</div>
                                 </div>
                               ))}
                               {m.cards?.map((c, j) =>
@@ -2716,10 +2722,18 @@ export default function Page() {
                       ? sheet.stdSlug && sheet.page
                         ? `/api/standard-page?ref=${encodeURIComponent(sheet.stdSlug)}&p=${sheet.page}`
                         : null
+                      : sheet.kind === "code"
+                        ? // Pre-rendered Code pages. Where a page has no stored
+                          // render this 404s, the image is hidden, and the
+                          // building.govt.nz link below carries the citation —
+                          // which is what a Code chip always used to do.
+                          sheet.doc && sheet.page
+                          ? `/api/code-page?doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}`
+                          : null
                       : projectId && sheet.doc && sheet.page
                         ? `/api/plan-page?project=${encodeURIComponent(projectId)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}`
                         : null;
-              const isMfr = sheet.kind === "manufacturer" || sheet.kind === "determination" || sheet.kind === "standard";
+              const isMfr = sheet.kind === "manufacturer" || sheet.kind === "determination" || sheet.kind === "standard" || sheet.kind === "code";
               return (
                 <>
                   <div className="sh-canvas">
@@ -2761,12 +2775,14 @@ export default function Page() {
                           ? "⚖️ FROM AN MBIE DETERMINATION"
                           : sheet.kind === "standard"
                             ? `📘 FROM ${(sheet.code || "THE NZS STANDARD").toUpperCase()}`
-                            : "📐 ANSWER FROM THIS SHEET"}
+                            : sheet.kind === "code"
+                              ? "📖 FROM THE NZ BUILDING CODE"
+                              : "📐 ANSWER FROM THIS SHEET"}
                     </div>
                     <p dangerouslySetInnerHTML={{ __html: sheet.ans }} />
                     {isMfr && sheet.url && (
                       <a className="sh-open" href={sheet.url} target="_blank" rel="noopener noreferrer">
-                        {sheet.kind === "standard" ? "Open the full standard" : sheet.kind === "determination" ? "Open the full determination" : "Open the full manual"} on {hostOf(sheet.url)} ↗
+                        {sheet.kind === "standard" ? "Open the full standard" : sheet.kind === "determination" ? "Open the full determination" : sheet.kind === "code" ? "Open the Code on" : "Open the full manual"}{sheet.kind === "code" ? "" : " on"} {hostOf(sheet.url)} ↗
                       </a>
                     )}
                   </div>
@@ -3619,14 +3635,34 @@ function makeCite(sourceLine: string, body: string, mfrDocs?: MfrDoc[]): Cite {
   // Verification Method marker every Code doc carries (AS1, VM1, /AS2) — which a
   // plan sheet name never does — and link out to the free Code on building.govt.nz.
   const codeDoc = parts[0] || "";
-  if (/^(?:NZBC\s+)?[A-H]\d{0,2}\b/i.test(codeDoc) && /\b(?:AS|VM)\d\b|\/(?:AS|VM)\d/i.test(codeDoc)) {
+  // A clause document is a clause letter, then WHITESPACE, then a word: "F2
+  // Hazardous Building Materials", "E2 External Moisture AS1". The whitespace is
+  // what separates it from a plan sheet like "A3-00-0090-GENERAL-NOTES" or
+  // "GNL650-CONSTRUCTION-DETAILS", which are hyphenated and must NOT be treated
+  // as Code. The old test demanded an AS/VM marker to make that distinction,
+  // which quietly excluded every clause document that has no Acceptable
+  // Solution in its name — F2, B1, G12, D1 — and sent them to the plans branch
+  // to be labelled "FROM YOUR PLANS". The second test catches the Crown
+  // documents that carry no clause letter at all.
+  const isCodeDoc =
+    /^(?:NZBC\s+)?[A-H]\d{0,2}\s+[A-Za-z]/.test(codeDoc) ||
+    /building code handbook|^building act|^building regulations|acceptable solution|verification method/i.test(codeDoc);
+  if (isCodeDoc) {
+    // Carry the document and page so the viewer can render the real Code page.
+    // Where we have no stored render, /api/code-page 404s and the sheet falls
+    // back to the building.govt.nz link, which is what every Code citation did
+    // before there were any rendered pages at all.
+    const pageSeg = parts.find((p) => /^page\s/i.test(p)) || "";
+    const pageNum = pageSeg.match(/\d+/);
     return {
       code: codeDoc,
       title: "",
       sub: "NZ Building Code",
       ans: fmt(body),
-      hlTag: codeDoc,
+      hlTag: pageSeg || codeDoc,
       kind: "code",
+      doc: codeDoc,
+      page: pageNum ? parseInt(pageNum[0], 10) : undefined,
       url: "https://www.building.govt.nz/building-code-compliance/",
     };
   }

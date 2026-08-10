@@ -183,6 +183,11 @@ export const codePages = pgTable(
     npages: integer("npages").notNull(),
     title: text("title"),
     text: text("text").notNull(),
+    /** Private Blob pathname of a pre-rendered PNG of this page, so a Code
+     *  citation can be opened like a manufacturer or determination one. Null
+     *  means we have no image and the chip links out to building.govt.nz
+     *  instead, which is the behaviour every Code citation had before. */
+    imageUrl: text("image_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   }
 );
