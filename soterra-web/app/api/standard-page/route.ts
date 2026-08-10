@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { get } from "@vercel/blob";
-import { canSeeDemoCorpus } from "@/lib/manufacturerIndex";
+import { canSeeStandardsDemo } from "@/lib/manufacturerIndex";
 import { isStandardDemoPage } from "@/lib/standardDemo";
 
 export const runtime = "nodejs";
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   const { userId } = await auth();
   if (!userId) return new Response("Not signed in", { status: 401 });
   // The gate. Without an allowed account this route reveals nothing.
-  if (!canSeeDemoCorpus(userId)) return new Response("Not found", { status: 404 });
+  if (!canSeeStandardsDemo(userId)) return new Response("Not found", { status: 404 });
 
   const url = new URL(req.url);
   const slug = (url.searchParams.get("ref") || "").toLowerCase();

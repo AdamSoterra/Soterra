@@ -17,7 +17,7 @@ import { codeLabel, getCodeIndex } from "@/lib/codeIndex";
 import { determinationLabel, searchDeterminations } from "@/lib/determinations";
 import { resolveStandard } from "@/lib/standards";
 import { demoPagesFor } from "@/lib/standardDemo";
-import { canSeeDemoCorpus, getManufacturerIndex, manufacturerLabel, visibleTo } from "@/lib/manufacturerIndex";
+import { canSeeStandardsDemo, getManufacturerIndex, manufacturerLabel, visibleTo } from "@/lib/manufacturerIndex";
 import { companyIdForProject, type Scope } from "@/lib/company";
 import { searchHistory } from "@/lib/history";
 import { generateChecklistItems, createChecklist } from "@/lib/checklist";
@@ -697,7 +697,7 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         // pages of that account's own licensed copy so they can see the real
         // table in the UI. Never populated for a customer, and only when the
         // topic matches (a stud question doesn't get the lintel pages).
-        const demo = canSeeDemoCorpus(userId) ? demoPagesFor(std.ref, `${holds} ${section ?? ""} ${name}`) : null;
+        const demo = canSeeStandardsDemo(userId) ? demoPagesFor(std.ref, `${holds} ${section ?? ""} ${name}`) : null;
         return {
           content: JSON.stringify(
             demo?.answer

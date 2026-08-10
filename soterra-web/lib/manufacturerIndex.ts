@@ -69,6 +69,34 @@ export function canSeeDemoCorpus(userId: string | null | undefined): boolean {
   return allow.includes(userId);
 }
 
+/**
+ * Whether this account may see the NZS 3604 sample: the rendered pages of the
+ * founder's own licensed copy, and the hand-transcribed figures that go with
+ * them.
+ *
+ * ⭐ Deliberately a SEPARATE list from DEMO_CORPUS_USERS, even though it started
+ * as the same one. The two grant very different things:
+ *
+ *   DEMO_CORPUS_USERS    → seven manufacturers who have NOT granted permission
+ *                          and who compete with each other.
+ *   STANDARDS_DEMO_USERS → one standard the founder personally holds a licensed
+ *                          copy of, with a licence conversation underway.
+ *
+ * Sharing one variable meant an account that needed the standards sample also
+ * silently unlocked every ungranted manufacturer, which is both the permission
+ * risk this file exists to prevent and a demo that promises a corpus the
+ * customer would not actually get. Falls back to DEMO_CORPUS_USERS so the
+ * founder's existing accounts keep working without being listed twice.
+ */
+export function canSeeStandardsDemo(userId: string | null | undefined): boolean {
+  if (!userId) return false;
+  const allow = (process.env.STANDARDS_DEMO_USERS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return allow.includes(userId) || canSeeDemoCorpus(userId);
+}
+
 /** Drop `demo` pages unless this caller is allowed to see them. */
 export function visibleTo<T extends { licence: string }>(pages: T[], userId: string | null | undefined): T[] {
   if (canSeeDemoCorpus(userId)) return pages;
