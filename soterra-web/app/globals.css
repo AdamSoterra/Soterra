@@ -186,11 +186,19 @@ html,body{overflow-x:hidden}
 .msg.u .bub{background:var(--grad);color:#fff;border-bottom-right-radius:5px;max-width:min(560px,85vw);margin-left:auto;overflow-wrap:anywhere;box-shadow:0 8px 20px rgba(10,141,237,.22)}
 .msg.a .bub{background:#fff;color:var(--ink);border:1px solid var(--line);border-bottom-left-radius:5px;overflow-wrap:anywhere;box-shadow:0 4px 18px rgba(12,42,71,.05)}
 .msg.a .bub b{color:var(--navy)}
-/* Long threads: one wide message (a table, a long unbroken token) must NOT blow
-   out the flex column and shift the whole conversation to the right. Constrain
-   min-width at every flex level, break long words, and let genuinely wide blocks
-   scroll inside their own bubble instead of pushing the page. */
-.asst-inner,.thread,.msg{min-width:0}
+/* Long threads: one wide message (a table, a long unbroken token, a citation
+   card whose filename is set nowrap) must NOT blow out the flex column and shift
+   the whole conversation to the right. The guard has to run the ENTIRE flex
+   chain from the viewport down — .content > .asst-layout > .assistant each need
+   min-width:0 too, not just the inner three. A flex item defaults to
+   min-width:auto (= its min-content), so a single wide descendant forces its
+   ancestor past 100vw; .shell's overflow:hidden then simply CLIPS the right edge,
+   which can't even be scrolled to — the text just runs off screen, unreadable.
+   Measured: one nowrap citation sub-line pushed .assistant to 458px on a 375px
+   phone until .assistant got min-width:0. Stopping this chain short at .asst-inner
+   is why the shift kept coming back whenever a new wide element was added.
+   Then break long words and let genuinely wide blocks scroll inside their bubble. */
+.content,.asst-layout,.assistant,.asst-inner,.thread,.msg{min-width:0}
 .msg .bub{word-break:break-word}
 .msg .bub table,.msg .bub pre{display:block;max-width:100%;overflow-x:auto}
 .msg .bub img{max-width:100%;height:auto}
