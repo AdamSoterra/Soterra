@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soterra - RFIs (mock)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --brand:#0E8FE6;--brand-d:#0A78C8;--navy:#0C2A47;--ink:#0C2A47;--slate:#52698A;--mut:#94A6BE;
+    --bg:#F6FAFF;--line:#E7EFF9;--line2:#EEF4FB;--grad:linear-gradient(135deg,#41C3FF 0%,#0A8DED 100%);
+    --green:#10B981;--amber:#F59E0B;--red:#EF4444;--purple:#8B5CF6;
+    --font:'DM Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);color:var(--ink);background:var(--bg);min-height:100vh}
+  .topnav{height:60px;display:flex;align-items:center;gap:26px;padding:0 24px;background:rgba(255,255,255,.85);border-bottom:1px solid var(--line2);position:sticky;top:0;z-index:30;backdrop-filter:blur(6px)}
+  .brand{font-size:20px;font-weight:700;letter-spacing:-.01em;color:var(--brand)}
+  .tabs{display:flex;gap:4px}
+  .tab{font-size:13.5px;font-weight:500;color:var(--slate);padding:8px 13px;border-radius:10px;cursor:pointer}
+  .tab.on{background:rgba(65,195,255,.14);color:var(--brand-d);font-weight:600}
+  .spacer{flex:1}
+  .chip{font-size:12.5px;font-weight:600;color:var(--navy);background:#fff;border:1px solid var(--line);padding:7px 12px;border-radius:10px;display:flex;align-items:center;gap:7px}
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+
+  .page{max-width:1060px;margin:0 auto;padding:24px 20px 70px}
+  .page-h{display:flex;align-items:center;gap:14px;margin-bottom:4px}
+  .page-h h1{font-size:22px;font-weight:700;letter-spacing:-.01em;color:var(--navy)}
+  .page-h .sub{font-size:13px;color:var(--mut);font-weight:600}
+  .viewswitch{display:flex;gap:6px;margin-left:auto}
+  .vs{font-family:var(--font);font-size:12.5px;font-weight:700;color:var(--slate);background:#fff;border:1.5px solid var(--line);border-radius:9px;padding:7px 13px;cursor:pointer}
+  .vs.on{border-color:var(--brand);color:var(--brand-d);background:rgba(65,195,255,.08)}
+  .newbtn{font-family:var(--font);font-size:13px;font-weight:700;color:#fff;background:var(--grad);border:none;border-radius:10px;padding:9px 16px;cursor:pointer}
+  .newbtn:hover{filter:brightness(1.05)}
+  .drafts{font-size:12px;color:var(--mut);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+  /* summary strip */
+  .strip{display:flex;gap:12px;margin:16px 0 14px}
+  .tile{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 16px;min-width:150px}
+  .tile b{display:block;font-size:22px;font-weight:800;color:var(--navy);line-height:1.1}
+  .tile b.red{color:var(--red)}
+  .tile span{font-size:11.5px;color:var(--slate);font-weight:600}
+  .tile small{display:block;font-size:10.5px;color:var(--mut);margin-top:2px}
+
+  /* filters */
+  .filters{display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap}
+  .f{font-family:var(--font);font-size:12px;font-weight:700;color:var(--slate);background:#fff;border:1.5px solid var(--line);border-radius:20px;padding:6px 13px;cursor:pointer}
+  .f.on{border-color:var(--brand);color:var(--brand-d);background:rgba(65,195,255,.08)}
+
+  /* register table */
+  .reg{background:#fff;border:1px solid var(--line);border-radius:15px;overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  th{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);text-align:left;padding:11px 14px;border-bottom:1px solid var(--line2);background:#FBFDFF}
+  td{font-size:13px;color:var(--navy);padding:12px 14px;border-bottom:1px solid var(--line2);cursor:pointer}
+  tr:last-child td{border-bottom:none}
+  tr.r:hover td{background:#F6FAFF}
+  tr.late td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+  td.num{font-weight:800;white-space:nowrap}
+  td.subj{font-weight:600;max-width:330px}
+  td.days{text-align:right;font-weight:700;color:var(--slate)}
+  td.due{white-space:nowrap;font-weight:600;color:var(--slate)}
+  td.due.red{color:var(--red);font-weight:800}
+  .pill{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:4px 10px;border-radius:20px;white-space:nowrap}
+  .pill.consult{background:rgba(12,42,71,.08);color:var(--navy)}
+  .pill.us{background:rgba(148,166,190,.16);color:var(--slate)}
+  .pill.client{background:rgba(245,158,11,.14);color:#B45309}
+  .pill.none{background:transparent;color:var(--mut)}
+  .pill.open{background:rgba(14,143,230,.1);color:var(--brand-d)}
+  .pill.answered{background:rgba(16,185,129,.13);color:#0E7A55}
+  .pill.closed{background:rgba(148,166,190,.16);color:var(--slate)}
+  .pill.draft{background:rgba(139,92,246,.12);color:#6D28D9}
+
+  /* detail */
+  .det{display:none}
+  .det.on{display:block}
+  .backlink{font-size:12.5px;font-weight:700;color:var(--brand-d);cursor:pointer;margin-bottom:12px;display:inline-block}
+  .dhead{background:#fff;border:1px solid var(--line);border-radius:15px;padding:16px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .dhead .no{font-size:18px;font-weight:800;color:var(--navy)}
+  .dhead .rev{font-size:11px;color:var(--mut);font-weight:700}
+  .dhead .subj{font-size:14.5px;font-weight:600;color:var(--slate);flex:1;min-width:200px}
+  .dhead .meta{font-size:12px;color:var(--mut);font-weight:600;white-space:nowrap}
+  .cols{display:flex;gap:14px;align-items:flex-start}
+  .thread{flex:1.8;min-width:0}
+  .rail{flex:1;min-width:260px}
+
+  .card{background:#fff;border:1px solid var(--line);border-radius:15px;padding:16px 18px;margin-bottom:12px}
+  .card .k{font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);margin-bottom:8px}
+  .qtext{font-size:13.5px;color:#243B53;line-height:1.55}
+  .prop{margin-top:12px;background:#F8FAFC;border:1px solid var(--line2);border-radius:10px;padding:11px 13px;font-size:12.5px;color:#43586E;line-height:1.5}
+  .prop b{display:block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-bottom:4px}
+  .refrow{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+  .rchip{font-size:11.5px;font-weight:700;color:var(--brand-d);background:#EFF7FE;border:1px solid #C9E4FA;border-radius:7px;padding:5px 10px;cursor:pointer}
+  .rchip.code{color:#7C3AED;background:#F6F2FE;border-color:#E2D8FB}
+  .attrow{margin-top:10px;font-size:12px;color:#43586E}
+  .sysline{text-align:center;font-size:11.5px;color:var(--mut);font-weight:600;margin:14px 0;display:flex;align-items:center;gap:10px}
+  .sysline:before,.sysline:after{content:"";flex:1;height:1px;background:var(--line)}
+
+  .ans{border-left:4px solid var(--brand)}
+  .ans .empty{text-align:center;padding:18px 0 8px}
+  .ans .empty p{font-size:13px;color:var(--slate);margin-bottom:12px}
+  .btn{font-family:var(--font);font-size:12.5px;font-weight:700;border-radius:9px;padding:9px 15px;cursor:pointer;border:1.5px solid var(--line);background:#fff;color:var(--navy)}
+  .btn:hover{border-color:rgba(14,143,230,.4)}
+  .btn.pri{background:var(--grad);color:#fff;border:none}
+  .btn.grn{background:var(--green);color:#fff;border:none}
+  .anstext{font-size:13.5px;color:#243B53;line-height:1.55}
+  .ansmeta{font-size:11.5px;color:var(--mut);margin-top:10px;font-weight:600}
+  .lockline{font-size:10.5px;color:var(--mut);margin-top:8px}
+
+  .ciband{display:none;background:rgba(16,185,129,.09);border:1px solid rgba(16,185,129,.3);border-radius:13px;padding:13px 16px;margin-bottom:12px;font-size:13px;color:#0E7A55;font-weight:600;align-items:center;gap:10px}
+  .ciband.on{display:flex}
+  .ciband a{color:#0E7A55;font-weight:800;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+  .composer{display:flex;gap:8px;margin-top:4px}
+  .composer input{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:10px 13px;font-family:var(--font);font-size:13px;outline:none}
+  .composer input:focus{border-color:rgba(14,143,230,.5)}
+
+  .rail .card{padding:14px 16px}
+  .pinprev{border:1px solid var(--line2);border-radius:10px;overflow:hidden;margin-bottom:8px}
+  .pinprev svg{display:block;width:100%;height:auto}
+  .openplan{font-size:12px;font-weight:700;color:var(--brand-d);cursor:pointer}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:5px 0}
+  .kv .k2{color:var(--mut);font-weight:600}
+  .kv .v{color:var(--navy);font-weight:700;text-align:right}
+  .kv .v.warn{color:#B45309}
+  .aud{font-size:11.5px;color:var(--slate);padding:5px 0;border-bottom:1px dashed var(--line2)}
+  .aud:last-child{border-bottom:none}
+  .aud b{color:var(--navy)}
+  .aud small{color:var(--mut);display:block}
+
+  /* analytics */
+  .ana{display:none}
+  .ana.on{display:block}
+  .sc{background:#fff;border:1px solid var(--line);border-radius:15px;overflow:hidden;margin-bottom:14px}
+  .sc h3{font-size:13px;font-weight:800;color:var(--navy);padding:14px 16px 0}
+  .sc .note{font-size:11px;color:var(--mut);padding:2px 16px 10px}
+  .sc table td{cursor:default;font-size:12.5px;padding:10px 12px}
+  .sc td.g{background:rgba(16,185,129,.1);color:#0E7A55;font-weight:800}
+  .sc td.a{background:rgba(245,158,11,.12);color:#B45309;font-weight:800}
+  .sc td.r{background:rgba(239,68,68,.1);color:#B91C1C;font-weight:800}
+  .sc td.cname{font-weight:800;color:var(--navy)}
+  .trend.up{color:var(--red);font-weight:800}
+  .trend.down{color:var(--green);font-weight:800}
+  .bars{padding:8px 16px 16px}
+  .brow{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .brow .bl{width:150px;flex:0 0 150px;font-size:12px;font-weight:700;color:var(--navy);text-align:right}
+  .btrack{flex:1;height:22px;background:#F1F5FA;border-radius:6px;position:relative}
+  .bfill{height:100%;border-radius:6px;background:var(--brand);opacity:.85}
+  .bfill.over{background:var(--red)}
+  .bval{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:800;color:var(--navy)}
+  .slaline{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--navy);opacity:.55}
+  .slalab{font-size:10.5px;color:var(--mut);padding:0 16px 12px;text-align:right}
+  .split{display:flex;height:26px;border-radius:8px;overflow:hidden;margin:10px 16px 6px}
+  .seg{display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800;color:#fff}
+  .legend{display:flex;gap:14px;padding:4px 16px 14px;flex-wrap:wrap}
+  .lg{font-size:11px;color:var(--slate);font-weight:600;display:flex;align-items:center;gap:5px}
+  .lg i{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .eotbar{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:15px;padding:15px 18px}
+  .eotbar .t{flex:1}
+  .eotbar .t b{display:block;font-size:14px;color:var(--navy)}
+  .eotbar .t small{font-size:12px;color:var(--slate);line-height:1.45}
+  .guard{font-size:11px;color:var(--mut);margin-top:10px;line-height:1.5}
+
+  /* new-RFI modal */
+  .scrim{position:fixed;inset:0;background:rgba(12,42,71,.42);backdrop-filter:blur(2px);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:24px;overflow:auto}
+  .scrim.on{display:flex}
+  .modal{width:100%;max-width:600px;background:#fff;border-radius:18px;box-shadow:0 30px 80px rgba(12,42,71,.3);overflow:hidden;margin:auto}
+  .m-top{padding:16px 20px;border-bottom:1px solid var(--line2);display:flex;align-items:center;justify-content:space-between}
+  .m-top b{font-size:15px;color:var(--navy)}
+  .m-x{border:none;background:var(--bg);width:30px;height:30px;border-radius:9px;cursor:pointer;color:var(--slate);font-size:15px}
+  .m-body{padding:16px 20px 20px}
+  .aiband{background:rgba(14,143,230,.07);border:1px solid rgba(14,143,230,.22);border-radius:11px;padding:10px 13px;font-size:12px;color:var(--brand-d);font-weight:600;margin-bottom:14px}
+  .fld{margin-bottom:12px}
+  .fld label{display:block;font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-bottom:5px}
+  .fld input,.fld select,.fld textarea{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font-family:var(--font);font-size:13px;color:var(--navy);background:#fff;outline:none}
+  .fld input:focus,.fld select:focus,.fld textarea:focus{border-color:rgba(14,143,230,.5)}
+  .fld textarea{resize:none;line-height:1.45}
+  .frow{display:flex;gap:10px}
+  .frow .fld{flex:1}
+  .m-act{display:flex;gap:10px;margin-top:8px}
+  .m-act .btn{padding:11px 16px}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--navy);color:#fff;font-size:13px;font-weight:600;padding:12px 18px;border-radius:12px;box-shadow:0 16px 40px rgba(12,42,71,.35);opacity:0;transition:all .25s;z-index:60}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  @media(max-width:820px){ .cols{flex-direction:column} .rail{min-width:0;width:100%} .strip{flex-wrap:wrap} }
+</style>
+</head>
+<body>
+  <div class="topnav">
+    <div class="brand">Soterra</div>
+    <div class="tabs">
+      <div class="tab">💬 Assistant</div>
+      <div class="tab">☰ Inspections</div>
+      <div class="tab">▤ Plans</div>
+      <div class="tab">↑ Upload</div>
+      <div class="tab on">✉ RFIs</div>
+      <div class="tab">▥ Insights</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="chip"><span class="dot"></span> Kauri Tower</div>
+  </div>
+
+  <div class="page">
+    <div class="page-h">
+      <h1>RFIs</h1>
+      <span class="sub" id="regsub">Kauri Tower · request register</span>
+      <div class="viewswitch">
+        <button class="vs on" id="vsReg" onclick="showView('reg')">Register</button>
+        <button class="vs" id="vsAna" onclick="showView('ana')">Analytics</button>
+      </div>
+      <span class="drafts" onclick="toast('2 drafts saved, not yet sent (no number burned until Send)')">drafts (2)</span>
+      <button class="newbtn" onclick="openNew()">＋ New RFI</button>
+    </div>
+
+    <!-- ═══════════ REGISTER ═══════════ -->
+    <div id="viewReg">
+      <div class="strip">
+        <div class="tile"><b>18</b><span>open</span><small>14 with consultants</small></div>
+        <div class="tile"><b class="red">11.4 wd</b><span>avg response</span><small>vs 7 wd allowed</small></div>
+        <div class="tile"><b class="red">5</b><span>overdue</span><small>past required-by, still open</small></div>
+        <div class="tile"><b>2</b><span>critical path</span><small>flagged for EOT</small></div>
+      </div>
+
+      <div class="filters">
+        <button class="f on" onclick="fToggle(this)">All</button>
+        <button class="f" onclick="fToggle(this)">My court</button>
+        <button class="f" onclick="fToggle(this)">Overdue</button>
+        <button class="f" onclick="toast('Filter: by discipline')">By discipline ▾</button>
+        <button class="f" onclick="toast('Filter: by consultant')">By consultant ▾</button>
+        <button class="f" onclick="toast('Filter: status')">Status ▾</button>
+      </div>
+
+      <div class="reg">
+        <table>
+          <thead><tr><th>RFI #</th><th>Subject</th><th>Ball in court</th><th>Status</th><th>Due</th><th style="text-align:right">Days open</th></tr></thead>
+          <tbody>
+            <tr class="r" onclick="toast('Opens RFI-018 the same way as RFI-014 below')"><td class="num">RFI-018</td><td class="subj">Balcony threshold waterproofing detail conflict</td><td><span class="pill consult">Studio Pacific</span></td><td><span class="pill open">Open</span></td><td class="due">26 Aug</td><td class="days">2</td></tr>
+            <tr class="r" onclick="toast('Opens RFI-017')"><td class="num">RFI-017</td><td class="subj">Sprinkler head clearance to Fyreline bulkhead, L2 lobby</td><td><span class="pill consult">Beca Fire</span></td><td><span class="pill open">Open</span></td><td class="due">25 Aug</td><td class="days">3</td></tr>
+            <tr class="r" onclick="toast('Opens RFI-016')"><td class="num">RFI-016</td><td class="subj">Precast panel connection at grid F2</td><td><span class="pill us">Us · to close</span></td><td><span class="pill answered">Answered</span></td><td class="due">-</td><td class="days">5</td></tr>
+            <tr class="r" onclick="showView('det')"><td class="num">RFI-014</td><td class="subj">Lintel fixing at grid C3, Level 1</td><td><span class="pill consult">Holmes Structural</span></td><td><span class="pill open">Open</span></td><td class="due">22 Aug</td><td class="days">6</td></tr>
+            <tr class="r late" onclick="toast('Opens RFI-013 (overdue)')"><td class="num">RFI-013</td><td class="subj">Riser duct fire collar spec, basement</td><td><span class="pill consult">Beca Fire</span></td><td><span class="pill open">Open</span></td><td class="due red">8 Aug · 3 wd late</td><td class="days">12</td></tr>
+            <tr class="r late" onclick="toast('Opens RFI-011 (overdue, critical path)')"><td class="num">RFI-011</td><td class="subj">Kitchen extract duct route clash with beam, L1</td><td><span class="pill consult">eCubed</span></td><td><span class="pill open">Open</span></td><td class="due red">5 Aug · 6 wd late</td><td class="days">15</td></tr>
+            <tr class="r late" onclick="toast('Opens RFI-009 (overdue, critical path)')"><td class="num">RFI-009</td><td class="subj">Window head flashing at unitised facade</td><td><span class="pill consult">Studio Pacific</span></td><td><span class="pill open">Open</span></td><td class="due red">30 Jul · 9 wd late</td><td class="days">19</td></tr>
+            <tr class="r" onclick="toast('Opens RFI-006 (closed, locked)')"><td class="num">RFI-006</td><td class="subj">Foundation edge beam depth vs services trench</td><td><span class="pill none">-</span></td><td><span class="pill closed">Closed</span></td><td class="due">-</td><td class="days">21</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══════════ DETAIL / THREAD ═══════════ -->
+    <div class="det" id="viewDet">
+      <span class="backlink" onclick="showView('reg')">‹ Back to the register</span>
+      <div class="dhead">
+        <span class="no">RFI-014</span><span class="rev">Rev 0</span>
+        <span class="subj">Lintel fixing at grid C3, Level 1</span>
+        <span class="pill open" id="dStatus">Open</span>
+        <span class="pill consult" id="dBall">Holmes Structural</span>
+        <span class="pill us">Structural</span>
+        <span class="meta">Due 22 Aug · 6 days open</span>
+      </div>
+
+      <div class="cols">
+        <div class="thread">
+          <div class="card">
+            <div class="k">Question · raised by Adam Domok, Kauri Construction · 12 Aug</div>
+            <div class="qtext">S3.01 Rev C calls for M12 bolts at 600 crs fixing the L1 lintel at grid C3, but the specified 190 series block wall shows as a 140 wall on A-201 Rev C at the same line. The M12 at 600 fixing does not appear achievable in a 140 wall. Please confirm the wall thickness at grid C3 and the required lintel fixing.</div>
+            <div class="prop"><b>Our proposed solution</b>Proceed with the 190 wall as per S3.01 and fix the lintel M12 at 600 crs as drawn. A-201 to be updated to match.</div>
+            <div class="refrow">
+              <span class="rchip" onclick="toast('Jumps to the pin on S3.01 in the plan viewer')">📌 S3.01 Rev C · pin at grid C3</span>
+              <span class="rchip" onclick="toast('Opens A-201 Rev C')">📌 A-201 Rev C</span>
+              <span class="rchip code" onclick="toast('Opens the citation viewer at NZS 3604 cl 8.6')">NZS 3604 cl 8.6</span>
+            </div>
+            <div class="attrow">📎 RFI-014-S3.01-pin.png · RFI-014-site-photo.jpg</div>
+          </div>
+
+          <div class="sysline">✉ Sent to Jane Smith, Holmes Structural · 12 Aug, 09:14 · cc Studio Pacific</div>
+
+          <div class="card ans" id="ansCard">
+            <div class="k">Official response</div>
+            <div class="empty" id="ansEmpty">
+              <p>Awaiting Holmes Structural. Their emailed reply gets logged here - one official answer, locked once accepted.</p>
+              <button class="btn pri" onclick="logAnswer()">Log the answer</button>
+            </div>
+            <div id="ansFull" style="display:none">
+              <div class="anstext">Confirmed: wall at grid C3 is 190 series as per S3.01. Lintel fixing M12 at 600 crs stands. A-201 will be revised to 190 at next issue.</div>
+              <div class="ansmeta">Jane Smith, Holmes Structural · logged by Adam Domok · today</div>
+              <div class="lockline">🔒 Locked as the official answer. Follow-ups go below; reopening bounces the ball back.</div>
+              <div style="display:flex;gap:8px;margin-top:12px">
+                <button class="btn grn" onclick="createCI()">This changes the works - create CI</button>
+                <button class="btn" onclick="toast('RFI-014 closed. Register + scorecard update; audit records who and when.')">Accept + close</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ciband" id="ciBand">✅ Answer spawned <a onclick="toast('Opens CI-014: linked to this RFI, amends A-201 Rev C to D')">CI-014</a> - revises A-201 Rev C → D. The assistant now treats the CI as governing over A-201.</div>
+
+          <div class="card">
+            <div class="k">Follow-up</div>
+            <div class="composer">
+              <input placeholder="Ask a follow-up or add context - it lands on the thread and can bounce the ball back" onkeydown="if(event.key==='Enter'){toast('Follow-up added to the thread; ball back to Holmes Structural, clock running again');this.value=''}">
+              <button class="btn" onclick="toast('Follow-up added; ball bounces back to the consultant')">Send</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rail">
+          <div class="card">
+            <div class="k">Pinned on the drawing</div>
+            <div class="pinprev">
+              <svg viewBox="0 0 300 150" xmlns="http://www.w3.org/2000/svg">
+                <rect width="300" height="150" fill="#fff"/>
+                <rect x="8" y="8" width="284" height="134" fill="none" stroke="#C9D3DD"/>
+                <g stroke="#3A4656" stroke-width="1.6" fill="none"><rect x="40" y="28" width="220" height="98"/><line x1="130" y1="28" x2="130" y2="126"/><line x1="40" y1="80" x2="260" y2="80"/></g>
+                <g stroke="#E3E9F0" stroke-width="1" stroke-dasharray="3 4"><line x1="90" y1="14" x2="90" y2="140"/><line x1="190" y1="14" x2="190" y2="140"/></g>
+                <g font-family="Arial" font-size="7.5" fill="#8090A2" font-weight="bold"><text x="86" y="24">C</text><text x="186" y="24">D</text></g>
+                <path d="M186 62 L191 71 L196 62 Z" fill="#0E8FE6" stroke="#fff"/>
+                <circle cx="191" cy="56" r="8" fill="#0E8FE6" stroke="#fff" stroke-width="1.5"/>
+                <text x="191" y="59" font-family="Arial" font-size="8" font-weight="bold" fill="#fff" text-anchor="middle">14</text>
+              </svg>
+            </div>
+            <span class="openplan" onclick="toast('Opens S3.01 in the plan viewer, centred on the pin')">Open on the plan ›</span>
+          </div>
+          <div class="card">
+            <div class="k">Details</div>
+            <div class="kv"><span class="k2">Assigned to</span><span class="v">Jane Smith · Holmes</span></div>
+            <div class="kv"><span class="k2">Raised by</span><span class="v">Adam Domok</span></div>
+            <div class="kv"><span class="k2">Priority</span><span class="v">Normal</span></div>
+            <div class="kv"><span class="k2">Location</span><span class="v">Level 1 · grid C3</span></div>
+            <div class="kv"><span class="k2">Cost impact</span><span class="v warn">Unknown</span></div>
+            <div class="kv"><span class="k2">Programme impact</span><span class="v warn">Yes · est 3 days</span></div>
+            <div class="kv"><span class="k2">Critical path</span><span class="v warn">Flagged</span></div>
+            <div class="kv"><span class="k2">Required by</span><span class="v">22 Aug (7 wd)</span></div>
+          </div>
+          <div class="card">
+            <div class="k">Activity (the audit trail)</div>
+            <div class="aud"><b>Draft → Open</b> · sent to Holmes<small>Adam Domok · 12 Aug 09:14</small></div>
+            <div class="aud"><b>Ball: us → Holmes Structural</b><small>automatic on send</small></div>
+            <div class="aud" id="audMore" style="display:none"><b>Open → Answered</b> · ball back to us<small>logged by Adam Domok · today</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ ANALYTICS ═══════════ -->
+    <div class="ana" id="viewAna">
+      <div class="strip">
+        <div class="tile"><b>14 / 4</b><span>ball in court</span><small>design team / us</small></div>
+        <div class="tile"><b class="red">11.4 wd</b><span>avg consultant response</span><small>vs 7 wd allowed</small></div>
+        <div class="tile"><b class="red">5</b><span>overdue</span><small>past required-by</small></div>
+        <div class="tile"><b>18</b><span>open RFIs</span><small>of 34 raised</small></div>
+      </div>
+
+      <div class="sc">
+        <h3>Consultant scorecard</h3>
+        <div class="note">Worst offender first · RAG against the 7 working-day allowance · this table goes in the monthly minutes</div>
+        <table>
+          <thead><tr><th>Consultant</th><th>Open</th><th>Avg (wd)</th><th>Median</th><th>% in SLA</th><th>Overdue</th><th>Avg late</th><th>Longest</th><th>Reopen %</th><th>Trend</th></tr></thead>
+          <tbody>
+            <tr><td class="cname">eCubed (Mechanical)</td><td>3</td><td class="r">16.8</td><td class="r">15</td><td class="r">38%</td><td class="r">2</td><td class="r">6.2 wd</td><td>19 wd</td><td class="a">22%</td><td class="trend up">▲ worsening</td></tr>
+            <tr><td class="cname">Studio Pacific (Arch)</td><td>5</td><td class="r">13.4</td><td class="a">12</td><td class="r">45%</td><td class="a">2</td><td class="a">4.1 wd</td><td>19 wd</td><td class="a">18%</td><td class="trend up">▲ worsening</td></tr>
+            <tr><td class="cname">Beca (Fire)</td><td>4</td><td class="a">10.9</td><td class="a">9</td><td class="a">58%</td><td class="a">1</td><td class="g">2.3 wd</td><td>12 wd</td><td class="g">9%</td><td class="trend down">▼ improving</td></tr>
+            <tr><td class="cname">Holmes (Structural)</td><td>2</td><td class="g">6.1</td><td class="g">5</td><td class="g">92%</td><td class="g">0</td><td class="g">0.4 wd</td><td>8 wd</td><td class="g">4%</td><td class="trend down">▼ improving</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sc">
+        <h3>Average turnaround by consultant</h3>
+        <div class="bars">
+          <div class="brow"><span class="bl">eCubed</span><div class="btrack"><div class="bfill over" style="width:84%"></div><div class="slaline" style="left:35%"></div><span class="bval">16.8 wd</span></div></div>
+          <div class="brow"><span class="bl">Studio Pacific</span><div class="btrack"><div class="bfill over" style="width:67%"></div><div class="slaline" style="left:35%"></div><span class="bval">13.4 wd</span></div></div>
+          <div class="brow"><span class="bl">Beca Fire</span><div class="btrack"><div class="bfill over" style="width:54%"></div><div class="slaline" style="left:35%"></div><span class="bval">10.9 wd</span></div></div>
+          <div class="brow"><span class="bl">Holmes Structural</span><div class="btrack"><div class="bfill" style="width:30%"></div><div class="slaline" style="left:35%"></div><span class="bval">6.1 wd</span></div></div>
+        </div>
+        <div class="slalab">│ = the 7 working-day allowance</div>
+      </div>
+
+      <div class="sc">
+        <h3>Who holds the ball right now (18 open)</h3>
+        <div class="split">
+          <div class="seg" style="flex:5;background:#0C2A47">Studio Pacific · 5</div>
+          <div class="seg" style="flex:4;background:#28527A">Beca · 4</div>
+          <div class="seg" style="flex:3;background:#3E76A8">eCubed · 3</div>
+          <div class="seg" style="flex:2;background:#6FA5CF">Holmes · 2</div>
+          <div class="seg" style="flex:4;background:#94A6BE">Us · 4</div>
+        </div>
+        <div class="legend">
+          <span class="lg"><i style="background:#0C2A47"></i>consultants hold 14</span>
+          <span class="lg"><i style="background:#94A6BE"></i>we hold 4</span>
+        </div>
+      </div>
+
+      <div class="eotbar">
+        <div class="t">
+          <b>EOT evidence pack</b>
+          <small>Every late, critical-path RFI as a cause-and-effect table: issued → required-by → answered → net consultant days late → schedule impact. The document you hand over when the client blames you for the delay.</small>
+        </div>
+        <button class="btn pri" onclick="toast('Generates the pack from RFI-011 + RFI-009: 2 critical-path RFIs, 15 net consultant working days late')">Generate pack</button>
+      </div>
+      <div class="guard">Shown with the register's assumed allowance (7 working days). Turnaround is net of clarification bounce-backs (the clock pauses while the ball is back with us). Our own late-raised RFIs stay in the log - an honest register is what makes the pack defensible.</div>
+    </div>
+  </div>
+
+  <!-- ═══════════ NEW RFI ═══════════ -->
+  <div class="scrim" id="newScrim">
+    <div class="modal">
+      <div class="m-top"><b>New RFI</b><button class="m-x" onclick="closeNew()">✕</button></div>
+      <div class="m-body">
+        <div class="aiband">✨ Pre-filled from your assistant answer - Soterra drafted the question, pinned S3.01 and cited NZS 3604 cl 8.6 for you. Edit anything.</div>
+        <div class="fld"><label>Subject</label><input value="Lintel fixing at grid C3, Level 1"></div>
+        <div class="frow">
+          <div class="fld"><label>Discipline</label><select><option selected>Structural</option><option>Architectural</option><option>Civil</option><option>Fire</option><option>Mechanical</option><option>Electrical</option><option>Hydraulic</option><option>Geotech</option><option>Facade</option></select></div>
+          <div class="fld"><label>Priority</label><select><option selected>Normal</option><option>High</option><option>Critical</option></select></div>
+          <div class="fld"><label>Location</label><input value="Level 1 · grid C3"></div>
+        </div>
+        <div class="fld"><label>Question</label><textarea rows="3">S3.01 Rev C calls for M12 bolts at 600 crs fixing the L1 lintel at grid C3, but the wall shows as 140 on A-201 Rev C. Please confirm wall thickness and required fixing.</textarea></div>
+        <div class="fld"><label>Our proposed solution (expected on NZ jobs)</label><textarea rows="2">Proceed with the 190 wall as per S3.01, lintel M12 at 600 crs as drawn; A-201 to be updated.</textarea></div>
+        <div class="fld"><label>References</label>
+          <div class="refrow" style="margin-top:2px">
+            <span class="rchip">📌 S3.01 Rev C · pin at grid C3</span>
+            <span class="rchip code">NZS 3604 cl 8.6</span>
+            <span class="rchip" onclick="toast('Opens the plan viewer in pin mode to add another drawing reference')">＋ pin a drawing</span>
+          </div>
+        </div>
+        <div class="frow">
+          <div class="fld"><label>To (the accountability key)</label><input value="Jane Smith · Holmes Structural"></div>
+          <div class="fld"><label>Cc</label><input value="architect@studiopacific.co.nz"></div>
+        </div>
+        <div class="frow">
+          <div class="fld"><label>Response required by</label><input value="Fri 22 Aug (auto: today + 7 wd)"></div>
+          <div class="fld"><label>Impacts</label><input value="Cost: unknown · Programme: est 3 days"></div>
+        </div>
+        <div class="m-act">
+          <button class="btn" onclick="closeNew();toast('Saved as a draft - no number burned until Send')">Save draft</button>
+          <button class="btn pri" onclick="closeNew();toast('RFI-019 assigned + emailed to Holmes Structural; ball with them, clock running, audit written')">Send RFI</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),3200); }
+  function showView(v){
+    $('viewReg').style.display = v==='reg' ? 'block' : 'none';
+    $('viewDet').classList.toggle('on', v==='det');
+    $('viewAna').classList.toggle('on', v==='ana');
+    $('vsReg').classList.toggle('on', v!=='ana');
+    $('vsAna').classList.toggle('on', v==='ana');
+    $('regsub').textContent = v==='ana' ? 'Kauri Tower · consultant accountability' : 'Kauri Tower · request register';
+    window.scrollTo({top:0});
+  }
+  function fToggle(el){ document.querySelectorAll('.filters .f').forEach(f=>f.classList.remove('on')); el.classList.add('on'); toast('Filter applied: '+el.textContent.trim()); }
+  function logAnswer(){
+    $('ansEmpty').style.display='none';
+    $('ansFull').style.display='block';
+    $('dStatus').textContent='Answered'; $('dStatus').className='pill answered';
+    $('dBall').textContent='Us · to close'; $('dBall').className='pill us';
+    $('audMore').style.display='block';
+    toast('Answer logged: status Answered, ball back to us, date stamped for the scorecard');
+  }
+  function createCI(){ $('ciBand').classList.add('on'); toast('CI-014 created, linked to RFI-014 and to A-201'); }
+  function openNew(){ $('newScrim').classList.add('on'); }
+  function closeNew(){ $('newScrim').classList.remove('on'); }
+</script>
+</body>
+</html>
