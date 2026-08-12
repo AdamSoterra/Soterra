@@ -88,6 +88,8 @@ type ChecklistItem = {
 };
 // A subcontractor contact (Feature 4): company-scoped, trade = a category.
 type Sub = { id: string; name: string; email: string; trade: string | null };
+// A QA flag (Feature 7): a pinned mistake on a drawing.
+type FlagRow = { id: string; n: number; doc: string; page: number; title: string; trade: string | null; note: string | null; status: string; subName: string | null; sentAt: string | null; sentStatus: string | null; fixedAt: string | null };
 // ─── RFI types (Feature 5) ───
 type RfiRow = {
   id: string; number: number | null; label: string; subject: string; discipline: string | null;
@@ -686,6 +688,18 @@ export default function Page() {
   const [sendBusy, setSendBusy] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
   const [sendNotice, setSendNotice] = useState<string | null>(null); // post-send truth banner
+  // Feature 7: QA flags — pin a mistake on a drawing, send it, record it.
+  const [flagAt, setFlagAt] = useState<{ x: number; y: number; page: number } | null>(null); // pending drop
+  const [flTitle, setFlTitle] = useState("");
+  const [flTrade, setFlTrade] = useState("");
+  const [flSub, setFlSub] = useState("");
+  const [flNote, setFlNote] = useState("");
+  const [flagView, setFlagView] = useState<FlagRow | null>(null); // open flag card
+  const [flagSendSub, setFlagSendSub] = useState("");
+  const [flagBusy, setFlagBusy] = useState(false);
+  const [flagErr, setFlagErr] = useState<string | null>(null);
+  const [flagNotice, setFlagNotice] = useState<string | null>(null);
+  const [pinRefresh, setPinRefresh] = useState(0);
   // Feature 6: inspection-item worklist send (same rails, its own modal).
   const [insSendOpen, setInsSendOpen] = useState(false);
   const [insAssign, setInsAssign] = useState<Record<string, string>>({});
@@ -1976,6 +1990,71 @@ export default function Page() {
       setSendBusy(false);
     }
   };
+  // ─── QA flag actions (Feature 7) ───
+  const loadSubsIfNeeded = async () => {
+    if (subsList.length) return subsList;
+    try {
+      const r = await apiFetch("/api/subs");
+      const d = await r.json();
+      if (Array.isArray(d?.subs)) { setSubsList(d.subs); return d.subs as Sub[]; }
+    } catch { /* the modal offers + New sub */ }
+    return subsList;
+  };
+  const dropFlag = async (at: { x: number; y: number; page: number }) => {
+    await loadSubsIfNeeded();
+    setFlTitle(""); setFlTrade(""); setFlSub(""); setFlNote(""); setFlagErr(null); setAsOpen(false);
+    setFlagAt(at);
+  };
+  const saveFlag = async () => {
+    if (!flagAt || !pinStage) return;
+    setFlagBusy(true); setFlagErr(null);
+    try {
+      const r = await apiFetch("/api/flags", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doc: pinStage.doc, page: flagAt.page, x: flagAt.x, y: flagAt.y, title: flTitle, trade: flTrade || undefined, note: flNote || undefined, subId: flSub || undefined }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.flag) throw new Error(d.error || "Couldn't save the flag.");
+      setFlagAt(null);
+      setPinRefresh((n) => n + 1);
+      setFlagView(d.flag); // open the card so Send is one tap away
+      setFlagSendSub(flSub);
+    } catch (e) {
+      setFlagErr(e instanceof Error ? e.message : "Couldn't save the flag.");
+    } finally { setFlagBusy(false); }
+  };
+  const openFlagById = async (id: string) => {
+    setFlagErr(null); setFlagNotice(null);
+    await loadSubsIfNeeded();
+    try {
+      const r = await apiFetch(`/api/flags?id=${encodeURIComponent(id)}`);
+      const d = await r.json();
+      if (r.ok && d.flag) { setFlagView(d.flag); setFlagSendSub(""); }
+    } catch { /* stays closed */ }
+  };
+  const flagAction = async (id: string, action: string, extra: Record<string, unknown> = {}) => {
+    setFlagBusy(true); setFlagErr(null);
+    try {
+      const r = await apiFetch("/api/flags", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action, ...extra }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "That didn't work just now.");
+      if (d.flag) setFlagView(d.flag);
+      if (action === "send") {
+        setFlagNotice(d.transmitting === false
+          ? "Recorded on the project log. Email delivery isn't switched on yet - it goes out the moment sending is live."
+          : `Emailed ${d.flag?.subName ?? "the sub"} - recorded.`);
+      }
+      setPinRefresh((n) => n + 1);
+      return true;
+    } catch (e) {
+      setFlagErr(e instanceof Error ? e.message : "That didn't work just now.");
+      return false;
+    } finally { setFlagBusy(false); }
+  };
+
   // ─── RFI loaders + actions ───
   const loadRfis = async () => {
     try {
@@ -3631,7 +3710,9 @@ export default function Page() {
       )}
 
       {/* ─── full-screen, zoomable page image ─── */}
-      {/* ─── pin stage: full-screen sheet browser with pins (Foundation 2) ─── */}
+      {/* ─── pin stage: full-screen sheet browser (Foundation 2). From Plans it
+           is also the QA-flag surface (Feature 7): tap to pin a mistake, tap a
+           flag pin to open its card. ─── */}
       {pinStage && projectId && (
         <PinStage
           key={pinStage.doc}
@@ -3641,7 +3722,104 @@ export default function Page() {
           npages={pinStage.npages}
           onClose={() => setPinStage(null)}
           fetchApi={apiFetch}
+          refresh={pinRefresh}
+          onDrop={(at) => void dropFlag(at)}
+          onPinClick={(pin) => { if (pin.recordType === "qa_flag") void openFlagById(pin.recordId); }}
         />
+      )}
+
+      {/* ─── new QA flag (Feature 7): dropped a pin, describe the issue ─── */}
+      {flagAt && pinStage && (
+        <div className="scrim" style={{ zIndex: 130 }} onClick={() => { if (!flagBusy) setFlagAt(null); }}>
+          <div className="sheet" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti"><b>New flag</b><small>{pinStage.doc} · p{flagAt.page}</small></div>
+              {!flagBusy && <button className="sh-x" onClick={() => setFlagAt(null)}>✕</button>}
+            </div>
+            <div className="form-body">
+              <label className="ev-lbl">What&apos;s the issue</label>
+              <input className="ev-in" autoFocus value={flTitle} placeholder="e.g. Fire collar not installed properly" onChange={(e) => setFlTitle(e.target.value)} />
+              <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <label className="ev-lbl">Trade</label>
+                  <select className="ev-in" value={flTrade} onChange={(e) => setFlTrade(e.target.value)}>
+                    <option value="">Pick one…</option>
+                    {TRADES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="ev-lbl">Assign to sub</label>
+                  <select className="ev-in" value={flSub} onChange={(e) => setFlSub(e.target.value)}>
+                    <option value="">Decide later</option>
+                    {subsList.map((s) => <option key={s.id} value={s.id}>{s.name}{s.trade ? ` (${s.trade})` : ""}</option>)}
+                  </select>
+                </div>
+              </div>
+              <label className="ev-lbl" style={{ marginTop: 12 }}>Note</label>
+              <textarea className="ev-in" rows={2} value={flNote} placeholder="What needs doing, and where." onChange={(e) => setFlNote(e.target.value)} />
+              {flagErr && <div className="ev-err">{flagErr}</div>}
+              <div className="form-actions">
+                <button className="lg-btn primary" style={{ height: 46, margin: 0, flex: 1 }} disabled={flagBusy || !flTitle.trim()} onClick={() => void saveFlag()}>
+                  {flagBusy ? "Saving…" : "Save flag"}
+                </button>
+                <button className="lg-btn" style={{ height: 46, margin: 0, width: "auto", padding: "0 20px" }} disabled={flagBusy} onClick={() => setFlagAt(null)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── flag card (Feature 7): the pinned issue + its actions ─── */}
+      {flagView && (
+        <div className="scrim" style={{ zIndex: 130 }} onClick={() => { if (!flagBusy) setFlagView(null); }}>
+          <div className="sheet" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti">
+                <b>Flag {flagView.n} · {flagView.title}</b>
+                <small>{[flagView.trade, `${flagView.doc} · p${flagView.page}`].filter(Boolean).join(" · ")}</small>
+              </div>
+              {!flagBusy && <button className="sh-x" onClick={() => setFlagView(null)}>✕</button>}
+            </div>
+            <div className="form-body">
+              {flagNotice && <div className="ck-notice" onClick={() => setFlagNotice(null)}>{flagNotice}</div>}
+              {flagView.note && <p className="page-sub" style={{ margin: "0 0 12px" }}>{flagView.note}</p>}
+              <div className="rf-kv"><span className="k2">Status</span><span className="v">{flagView.status === "done" ? `Fixed${flagView.fixedAt ? ` · ${new Date(flagView.fixedAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : ""}` : flagView.status === "sent" ? "Sent · awaiting fix" : "Not sent"}</span></div>
+              {flagView.subName && (
+                <div className="rf-kv"><span className="k2">{flagView.sentAt ? (flagView.sentStatus === "sent" ? "Emailed to" : "Recorded for") : "Assigned to"}</span><span className="v">{flagView.subName}{flagView.sentAt ? ` · ${new Date(flagView.sentAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : ""}</span></div>
+              )}
+              {!flagView.subName && flagView.status !== "done" && (
+                <div style={{ marginTop: 10 }}>
+                  <label className="ev-lbl">Send to</label>
+                  <select className="ev-in" value={flagSendSub} onChange={(e) => setFlagSendSub(e.target.value)}>
+                    <option value="">Pick the sub…</option>
+                    {subsList.map((s) => <option key={s.id} value={s.id}>{s.name}{s.trade ? ` (${s.trade})` : ""}</option>)}
+                  </select>
+                </div>
+              )}
+              {flagErr && <div className="ev-err">{flagErr}</div>}
+              <div className="form-actions" style={{ flexWrap: "wrap" }}>
+                {flagView.status !== "done" && (
+                  <button className="lg-btn primary" style={{ height: 44, margin: 0, flex: 1, minWidth: 150 }} disabled={flagBusy || (!flagView.subName && !flagSendSub)}
+                    onClick={() => void flagAction(flagView.id, "send", flagSendSub ? { subId: flagSendSub } : {})}>
+                    {flagBusy ? "Sending…" : flagView.sentAt ? "Resend / remind" : "Send to sub + record"}
+                  </button>
+                )}
+                {flagView.status !== "done" ? (
+                  <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 16px" }} disabled={flagBusy} onClick={() => void flagAction(flagView.id, "done")}>Mark fixed</button>
+                ) : (
+                  <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 16px" }} disabled={flagBusy} onClick={() => void flagAction(flagView.id, "reopen")}>Reopen</button>
+                )}
+                <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 14px", color: "var(--red)" }} disabled={flagBusy}
+                  onClick={async () => {
+                    if (!window.confirm("Delete this flag and its pin?")) return;
+                    const r = await apiFetch(`/api/flags?id=${encodeURIComponent(flagView.id)}`, { method: "DELETE" });
+                    if (r.ok) { setFlagView(null); setPinRefresh((n) => n + 1); }
+                    else setFlagErr("Couldn't delete it just now.");
+                  }}>Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ─── send failed inspection items to subs (Feature 6) ─── */}
@@ -5027,6 +5205,8 @@ function PinStage(p: {
   fetchApi: (path: string, init?: RequestInit) => Promise<Response>;
   onDrop?: (at: { x: number; y: number; page: number }) => void;
   onPinClick?: (pin: PinRow) => void;
+  /** Bump to refetch the pins (e.g. after a flag was created or deleted). */
+  refresh?: number;
 }) {
   const [page, setPage] = useState(p.page);
   const [pins, setPins] = useState<PinRow[]>([]);
@@ -5048,7 +5228,7 @@ function PinStage(p: {
       .catch(() => { if (live) setPins([]); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [p.doc, page]);
+  }, [p.doc, page, p.refresh]);
 
   // Wheel / trackpad-pinch zoom anchored on the pointer — same approach as the
   // full-screen citation zoom (native listener; React's onWheel is passive).

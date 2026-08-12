@@ -523,6 +523,38 @@ export const planPins = pgTable(
   })
 );
 
+// ─── QA flags — Feature 7 (the light sibling of an RFI). Pin a mistake on a
+//     drawing, note it, email the sub, record it. n is the flag's number ON
+//     ITS SHEET (what the pin displays); the pin itself lives on plan_pins
+//     with recordType "qa_flag". ───
+export const qaFlags = pgTable(
+  "qa_flags",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    doc: text("doc").notNull(),
+    page: integer("page").notNull(),
+    n: integer("n").notNull(), // display number on this sheet
+    title: text("title").notNull(),
+    trade: text("trade"), // CATEGORIES vocabulary
+    note: text("note"),
+    status: text("status").default("open").notNull(), // open | sent | done
+    subName: text("sub_name"), // who it's assigned/sent to
+    subEmail: text("sub_email"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    sentStatus: text("sent_status"), // sent | recorded
+    fixedAt: timestamp("fixed_at", { withTimezone: true }),
+    createdBy: text("created_by"),
+    createdByName: text("created_by_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    bySheet: index("qa_flags_sheet_idx").on(t.projectId, t.doc, t.page),
+    byCompany: index("qa_flags_company_idx").on(t.companyId),
+  })
+);
+
 // ─── RFIs — Feature 5 (design: RFI-BUILD-SPEC.md + rfi-mock.html). The whole
 //     conversation lives here; Soterra sends the email; the analytics read
 //     ONLY these tables (never the provider). Project-scoped like everything
@@ -653,6 +685,7 @@ export type CodePage = typeof codePages.$inferSelect;
 export type EmailLog = typeof emailLog.$inferSelect;
 export type PlanPin = typeof planPins.$inferSelect;
 export type Rfi = typeof rfis.$inferSelect;
+export type QaFlag = typeof qaFlags.$inferSelect;
 export type RfiMessage = typeof rfiMessages.$inferSelect;
 export type RfiTransition = typeof rfiTransitions.$inferSelect;
 export type ContractInstruction = typeof contractInstructions.$inferSelect;
