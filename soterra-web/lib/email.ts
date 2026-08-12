@@ -23,7 +23,11 @@ const SEND_DOMAIN = process.env.EMAIL_SEND_DOMAIN || "send.soterra.co.nz";
 const RESEND_URL = "https://api.resend.com/emails";
 
 export function emailEnabled(): boolean {
-  return !!process.env.RESEND_API_KEY;
+  // Two-part switch: the key must exist AND transmission must be explicitly
+  // turned on. EMAIL_TRANSMIT stays unset until send.soterra.co.nz verifies —
+  // otherwise every send would reach Resend just to be rejected ("domain not
+  // verified") and the log would fill with failures that aren't ours.
+  return !!process.env.RESEND_API_KEY && process.env.EMAIL_TRANSMIT === "1";
 }
 
 /** "Kauri Tower" + its project id → kauri-tower-7b6663@send.soterra.co.nz.
@@ -61,7 +65,7 @@ export type EmailAttachment = {
 export type SendEmailInput = {
   scope: Scope;
   kind: "qa_flags" | "rfi" | "inspection_items" | "test";
-  recordType?: "qa_flag" | "rfi" | "inspection_item" | null;
+  recordType?: "qa_flag" | "rfi" | "inspection_item" | "checklist_item" | null;
   recordIds?: string[];
   to: { name?: string | null; email: string };
   cc?: string[];

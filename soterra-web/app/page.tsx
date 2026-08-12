@@ -84,7 +84,16 @@ type ChecklistItem = {
   id: string; ord: number; category: string | null; title: string; detail: string | null;
   source: string; sourceRef: string | null; status: "pending" | "ok" | "issue" | "na";
   note: string | null; checkedByName: string | null; photos: ChecklistPhoto[]; pins?: ItemPin[];
+  sentTo?: string | null; sentAt?: string | null;
 };
+// A subcontractor contact (Feature 4): company-scoped, trade = a category.
+type Sub = { id: string; name: string; email: string; trade: string | null };
+// Mirror of lib/categories CATEGORIES — the trade options for a sub.
+const TRADES = [
+  "Structural", "Weathertightness / Cladding", "Fire", "Electrical", "Plumbing & Drainage",
+  "Mechanical", "Interior / Linings", "Access & Barriers", "Site / External", "Acoustic",
+  "Seismic", "Architect", "Other",
+];
 type ChecklistHead = {
   id: string; eventId: string | null; kind: string; title: string; inspectionCode: string | null;
   location?: string | null;
@@ -632,6 +641,17 @@ export default function Page() {
   const [newClLocCustom, setNewClLocCustom] = useState("");
   // Pinning an item on a drawing: which item, and which sheet to open.
   const [pinFor, setPinFor] = useState<{ itemId: string; label: string; doc: string; page: number; npages: number } | null>(null);
+  // Send-fixes-to-subs modal (Feature 4 finish move).
+  const [sendOpen, setSendOpen] = useState(false);
+  const [subsList, setSubsList] = useState<Sub[]>([]);
+  const [assign, setAssign] = useState<Record<string, string>>({}); // itemId → subId ("" = don't send)
+  const [sendMsg, setSendMsg] = useState("");
+  const [sendBusy, setSendBusy] = useState(false);
+  const [sendErr, setSendErr] = useState<string | null>(null);
+  const [asOpen, setAsOpen] = useState(false); // inline new-sub form
+  const [asName, setAsName] = useState("");
+  const [asEmail, setAsEmail] = useState("");
+  const [asTrade, setAsTrade] = useState("");
   const [noteFor, setNoteFor] = useState<string | null>(null); // item id whose note box is open
   const [noteText, setNoteText] = useState("");
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -1738,6 +1758,74 @@ export default function Page() {
       setClErr(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setClBusy(false);
+    }
+  };
+  // Open the send-fixes modal: load the company's subs and pre-assign each
+  // Needs-fixing item to the sub whose trade matches its category.
+  const openSendFixes = async () => {
+    if (!openChecklist) return;
+    setSendErr(null); setSendMsg(""); setAsOpen(false);
+    let list: Sub[] = [];
+    try {
+      const r = await apiFetch("/api/subs");
+      const d = await r.json();
+      if (Array.isArray(d?.subs)) list = d.subs;
+    } catch { /* empty list is fine — the modal offers + New sub */ }
+    setSubsList(list);
+    const next: Record<string, string> = {};
+    for (const it of openChecklist.items.filter((i) => i.status === "issue")) {
+      next[it.id] = list.find((s) => s.trade && s.trade === it.category)?.id ?? "";
+    }
+    setAssign(next);
+    setSendOpen(true);
+  };
+  const addSub = async () => {
+    setSendErr(null);
+    try {
+      const r = await apiFetch("/api/subs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: asName, email: asEmail, trade: asTrade || undefined }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.sub) throw new Error(d.error || "Couldn't add that sub.");
+      const sub: Sub = d.sub;
+      setSubsList((s) => [...s, sub].sort((a, b) => a.name.localeCompare(b.name)));
+      // Fill the gaps the new sub plausibly covers: unassigned items of their
+      // trade (or any unassigned item when the sub has no trade set).
+      setAssign((a) => {
+        const n = { ...a };
+        for (const [itemId, v] of Object.entries(n)) {
+          if (v) continue;
+          const it = openChecklist?.items.find((i) => i.id === itemId);
+          if (!sub.trade || it?.category === sub.trade) n[itemId] = sub.id;
+        }
+        return n;
+      });
+      setAsOpen(false); setAsName(""); setAsEmail(""); setAsTrade("");
+    } catch (e) {
+      setSendErr(e instanceof Error ? e.message : "Couldn't add that sub.");
+    }
+  };
+  const sendFixes = async () => {
+    if (!openChecklist) return;
+    const assignments = Object.entries(assign)
+      .filter(([, subId]) => subId)
+      .map(([itemId, subId]) => ({ itemId, subId }));
+    if (!assignments.length) { setSendErr("Pick a sub for at least one item."); return; }
+    setSendBusy(true); setSendErr(null);
+    try {
+      const r = await apiFetch("/api/checklists/send-fixes", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checklistId: openChecklist.checklist.id, assignments, message: sendMsg.trim() || undefined }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Couldn't send just now.");
+      setSendOpen(false);
+      openChecklistById(openChecklist.checklist.id); // pick up the sent stamps
+    } catch (e) {
+      setSendErr(e instanceof Error ? e.message : "Couldn't send just now.");
+    } finally {
+      setSendBusy(false);
     }
   };
   // Open the pin stage for a checklist item. An already-pinned item opens on
@@ -3014,6 +3102,68 @@ export default function Page() {
         />
       )}
 
+      {/* ─── send the Needs-fixing items to subs (Feature 4 finish) ─── */}
+      {sendOpen && openChecklist && (
+        <div className="scrim" onClick={() => { if (!sendBusy) setSendOpen(false); }}>
+          <div className="sheet" style={{ maxWidth: 530, maxHeight: "88vh" }} onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti"><b>Send fixes to subs</b><small>{openChecklist.checklist.title}</small></div>
+              {!sendBusy && <button className="sh-x" onClick={() => setSendOpen(false)}>✕</button>}
+            </div>
+            <div className="form-body">
+              {openChecklist.items.map((it, i) => it.status === "issue" ? (
+                <div key={it.id} className="sf-row">
+                  <div className="sf-txt">
+                    <b>{i + 1}. {it.title}</b>
+                    <small>{[it.category, it.pins?.length ? "📍 pinned" : null, it.photos.length ? `${it.photos.length} photo${it.photos.length === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ") || "no extras"}</small>
+                  </div>
+                  <select className="ev-in sf-sel" value={assign[it.id] ?? ""} onChange={(e) => setAssign((a) => ({ ...a, [it.id]: e.target.value }))}>
+                    <option value="">Don&apos;t send</option>
+                    {subsList.map((s) => <option key={s.id} value={s.id}>{s.name}{s.trade ? ` (${s.trade})` : ""}</option>)}
+                  </select>
+                </div>
+              ) : null)}
+
+              {asOpen ? (
+                <div className="sf-add">
+                  <input className="ev-in" placeholder="Sub's company name" value={asName} onChange={(e) => setAsName(e.target.value)} />
+                  <input className="ev-in" type="email" placeholder="their email" value={asEmail} onChange={(e) => setAsEmail(e.target.value)} />
+                  <select className="ev-in" value={asTrade} onChange={(e) => setAsTrade(e.target.value)}>
+                    <option value="">Trade (optional)</option>
+                    {TRADES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="lg-btn primary" style={{ height: 38, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} onClick={() => void addSub()}>Add sub</button>
+                    <button className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => setAsOpen(false)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="lg-btn" style={{ height: 38, margin: "4px 0 0", width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => setAsOpen(true)}>＋ New sub</button>
+              )}
+
+              <label className="ev-lbl" style={{ marginTop: 14 }}>Message (top of the email)</label>
+              <textarea
+                className="ev-in" rows={2} value={sendMsg}
+                placeholder={`Hi team, these came up on today's ${openChecklist.checklist.title}. Please put them right and reply with a photo when done.`}
+                onChange={(e) => setSendMsg(e.target.value)}
+              />
+              <p className="page-sub" style={{ margin: "10px 0 0" }}>
+                One email per sub, from {projName ? `your ${projName}` : "this site's"} Soterra address, replies land in your own inbox. Every send is recorded on the item and the project log.
+              </p>
+
+              {sendErr && <div className="ev-err">{sendErr}</div>}
+
+              <div className="form-actions">
+                <button className="lg-btn primary" style={{ height: 46, margin: 0, flex: 1 }} disabled={sendBusy} onClick={() => void sendFixes()}>
+                  {sendBusy ? "Sending…" : "Send + record"}
+                </button>
+                <button className="lg-btn" style={{ height: 46, margin: 0, width: "auto", padding: "0 20px" }} disabled={sendBusy} onClick={() => setSendOpen(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── pinning a checklist item on its drawing (Feature 4) ─── */}
       {pinFor && projectId && (
         <PinStage
@@ -3456,9 +3606,21 @@ export default function Page() {
                     )}
                     {it.checkedByName && <span className="ck-by">{it.checkedByName}</span>}
                   </div>
+                  {it.sentTo && (
+                    <div className="ck-sent">✉ Sent to {it.sentTo}{it.sentAt ? ` · ${new Date(it.sentAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : ""} · recorded</div>
+                  )}
                 </div>
               ))}
               {openChecklist.items.length === 0 && <div className="page-sub" style={{ marginBottom: 0 }}>This check has no items.</div>}
+              {openChecklist.checklist.kind !== "swms" && openChecklist.items.some((i) => i.status === "issue") && (
+                <div className="ck-sendbar">
+                  <div className="cs-txt">
+                    <b>{openChecklist.items.filter((i) => i.status === "issue").length} need{openChecklist.items.filter((i) => i.status === "issue").length === 1 ? "s" : ""} fixing</b>
+                    <small>Email each one to the sub responsible. Pins, photos and notes ride along, and it&apos;s recorded on the item.</small>
+                  </div>
+                  <button className="lg-btn primary" style={{ height: 40, margin: 0, width: "auto", padding: "0 16px", fontSize: 13.5, flexShrink: 0 }} onClick={() => void openSendFixes()}>Send to subs</button>
+                </div>
+              )}
             </div>
             <div className="dm-foot">
               {openChecklist.checklist.status === "done" ? (

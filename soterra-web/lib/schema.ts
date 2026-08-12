@@ -368,6 +368,10 @@ export const checklistItems = pgTable(
     sourceRef: text("source_ref"), // the exact page label / determination / count
     status: text("status").default("pending").notNull(), // pending | ok | issue | na
     note: text("note"),
+    // Feature 4: set when this item's fix was emailed to a sub — the "sent and
+    // recorded" state the checklist shows. Cleared never; resend updates it.
+    sentTo: text("sent_to"), // the sub's name at send time
+    sentAt: timestamp("sent_at", { withTimezone: true }),
     checkedBy: text("checked_by"),
     checkedByName: text("checked_by_name"),
     checkedAt: timestamp("checked_at", { withTimezone: true }),
@@ -442,6 +446,25 @@ export const emailLog = pgTable(
     byProject: index("email_log_project_idx").on(t.projectId),
     byCompany: index("email_log_company_idx").on(t.companyId),
   })
+);
+
+// ─── Subcontractor contacts (Feature 4+): who a flag / failed item gets
+//     emailed to. COMPANY-scoped, not project-scoped — a builder's supply
+//     chain follows them from site to site. trade uses the same CATEGORIES
+//     vocabulary as checklist/inspection items, so the right sub is
+//     auto-suggested for an item by its category. ───
+export const subs = pgTable(
+  "subs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    name: text("name").notNull(), // "Fire Protection Ltd"
+    email: text("email").notNull(),
+    trade: text("trade"), // one of CATEGORIES (nullable = general)
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({ byCompany: index("subs_company_idx").on(t.companyId) })
 );
 
 // ─── Location cache — Foundation 3. One row per project: the QA-scope
