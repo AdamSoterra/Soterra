@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soterra - Outbound email design (mock)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --brand:#0E8FE6;--brand-d:#0A78C8;--navy:#0C2A47;--ink:#0C2A47;--slate:#52698A;--mut:#94A6BE;
+    --bg:#F6FAFF;--line:#E7EFF9;--line2:#EEF4FB;--grad:linear-gradient(135deg,#41C3FF 0%,#0A8DED 100%);
+    --green:#10B981;--amber:#F59E0B;--red:#EF4444;--purple:#8B5CF6;
+    --font:'DM Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --email-font:Arial,Helvetica,sans-serif; /* what Gmail/Outlook actually render */
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);color:var(--ink);background:var(--bg);min-height:100vh}
+  .topnav{height:60px;display:flex;align-items:center;gap:16px;padding:0 24px;background:rgba(255,255,255,.85);border-bottom:1px solid var(--line2);position:sticky;top:0;z-index:20;backdrop-filter:blur(6px)}
+  .brand{font-size:20px;font-weight:700;letter-spacing:-.01em;color:var(--brand)}
+  .topnav .t{font-size:13.5px;font-weight:600;color:var(--slate)}
+  .spacer{flex:1}
+  .chip{font-size:12.5px;font-weight:600;color:var(--navy);background:#fff;border:1px solid var(--line);padding:7px 12px;border-radius:10px;display:flex;align-items:center;gap:7px}
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+
+  .page{max-width:860px;margin:0 auto;padding:28px 20px 60px}
+  .lead{text-align:center;margin-bottom:22px}
+  .lead .k{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--brand-d);margin-bottom:8px}
+  .lead h1{font-size:25px;font-weight:700;letter-spacing:-.02em;color:var(--navy);margin-bottom:8px}
+  .lead p{font-size:13.5px;color:var(--slate);max-width:560px;margin:0 auto;line-height:1.55}
+
+  .vtabs{display:flex;gap:8px;justify-content:center;margin-bottom:24px;flex-wrap:wrap}
+  .vtab{font-family:var(--font);font-size:13px;font-weight:700;color:var(--slate);background:#fff;border:1.5px solid var(--line);border-radius:11px;padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:8px}
+  .vtab:hover{border-color:rgba(14,143,230,.4)}
+  .vtab.on{border-color:var(--brand);color:var(--brand-d);background:rgba(65,195,255,.08)}
+  .vtab .n{width:20px;height:20px;border-radius:50%;background:var(--grad);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .vtab.on .n{background:var(--grad)}
+
+  /* email client frame */
+  .client{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 18px 44px rgba(12,42,71,.08);overflow:hidden;display:none}
+  .client.on{display:block}
+  .env{padding:16px 22px;border-bottom:1px solid var(--line2);background:#FBFDFF}
+  .env .row{display:flex;gap:10px;font-size:12.5px;padding:3px 0;align-items:baseline}
+  .env .lab{width:64px;flex:0 0 64px;font-weight:800;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+  .env .val{color:var(--navy);font-weight:600}
+  .env .val .via{color:var(--mut);font-weight:500}
+  .env .subj{font-weight:700}
+  .env .pillrow{display:flex;gap:6px;margin-top:8px}
+  .apill{font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:20px;background:rgba(14,143,230,.1);color:var(--brand-d)}
+
+  /* the email body itself — honest email-safe styling */
+  .mailbg{background:#EEF2F7;padding:26px 14px}
+  .mail{max-width:600px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #E2E8F0;font-family:var(--email-font)}
+  .m-grad{height:5px;background:linear-gradient(90deg,#41C3FF 0%,#0A8DED 100%)}
+  .m-head{padding:22px 28px 16px;border-bottom:1px solid #EDF2F7}
+  .m-co{font-size:17px;font-weight:bold;color:#0C2A47}
+  .m-proj{font-size:12.5px;color:#52698A;margin-top:3px}
+  .m-body{padding:20px 28px 8px;color:#243B53;font-size:14px;line-height:1.55}
+  .m-body p{margin:0 0 14px}
+  .m-intro{background:#F6FAFF;border-left:3px solid #0E8FE6;padding:12px 14px;border-radius:0 8px 8px 0;margin-bottom:18px;font-size:13.5px;color:#33475C}
+  .m-item{border:1px solid #E2E8F0;border-radius:10px;padding:14px 16px;margin-bottom:12px}
+  .m-item-top{display:flex;align-items:flex-start;gap:10px}
+  .m-num{width:22px;height:22px;flex:0 0 22px;border-radius:50%;background:#F59E0B;color:#fff;font-size:11.5px;font-weight:bold;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .m-num.red{background:#EF4444}
+  .m-it{font-size:14px;font-weight:bold;color:#0C2A47;line-height:1.3}
+  .m-imeta{font-size:11.5px;color:#7A8CA3;margin-top:3px}
+  .m-imeta b{color:#52698A}
+  .m-inote{font-size:13px;color:#43586E;margin-top:8px;line-height:1.5}
+  .m-photo{display:flex;gap:8px;margin-top:10px}
+  .m-photo .ph{width:86px;height:62px;border-radius:7px;background:#EDF2F7;border:1px solid #E2E8F0;display:flex;align-items:center;justify-content:center;font-size:18px}
+  .m-photo .cap{font-size:10.5px;color:#94A6BE;align-self:flex-end;padding-bottom:2px}
+  .m-snap{margin:16px 0 4px}
+  .m-snap .cap{font-size:11px;color:#7A8CA3;margin-top:6px;text-align:center}
+  .m-snapimg{border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;position:relative}
+  .m-snapimg svg{display:block;width:100%;height:auto}
+  .m-reply{font-size:13px;color:#43586E;background:#F8FAFC;border:1px dashed #D6DEE8;border-radius:8px;padding:11px 14px;margin:16px 0}
+  .m-foot{padding:14px 28px 20px;border-top:1px solid #EDF2F7;display:flex;align-items:center;gap:8px}
+  .m-foot .s-logo{font-size:13px;font-weight:bold;color:#0E8FE6}
+  .m-foot .s-t{font-size:11px;color:#94A6BE}
+  .m-foot .ref{margin-left:auto;font-size:10.5px;color:#B6C2D2}
+
+  /* RFI-specific */
+  .rfi-band{background:#0C2A47;color:#fff;padding:14px 28px;display:flex;align-items:baseline;gap:12px}
+  .rfi-band .no{font-size:16px;font-weight:bold;letter-spacing:.02em}
+  .rfi-band .sub{font-size:13px;color:#B8CCE0;flex:1}
+  .rfi-due{background:#FFF7ED;border:1px solid #FDBA74;color:#B45309;font-size:12.5px;font-weight:bold;border-radius:8px;padding:9px 13px;margin:0 0 16px;display:inline-block}
+  .rfi-meta{display:flex;flex-wrap:wrap;gap:0;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;margin-bottom:16px}
+  .rfi-meta .cell{flex:1 1 33%;padding:9px 13px;border-right:1px solid #EDF2F7;border-bottom:1px solid #EDF2F7}
+  .rfi-meta .cell .k{font-size:9.5px;font-weight:bold;letter-spacing:.06em;text-transform:uppercase;color:#94A6BE}
+  .rfi-meta .cell .v{font-size:12.5px;font-weight:bold;color:#0C2A47;margin-top:2px}
+  .m-sec{font-size:10.5px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;color:#7A8CA3;margin:16px 0 7px}
+  .m-q{font-size:14px;color:#243B53;line-height:1.55}
+  .m-prop{background:#F8FAFC;border:1px solid #E2E8F0;border-radius:9px;padding:12px 14px;font-size:13px;color:#43586E;line-height:1.5}
+  .refchips{display:flex;flex-wrap:wrap;gap:7px}
+  .refchip{font-size:11.5px;font-weight:bold;color:#0A78C8;background:#EFF7FE;border:1px solid #C9E4FA;border-radius:7px;padding:5px 10px}
+  .refchip.code{color:#7C3AED;background:#F6F2FE;border-color:#E2D8FB}
+  .attach{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#43586E;padding:6px 0}
+
+  /* status pills for worklist variant */
+  .wpill{font-size:9.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 8px;border-radius:20px;white-space:nowrap;background:rgba(239,68,68,.1);color:#B91C1C}
+
+  /* notes card under the mock */
+  .notes{margin-top:26px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 22px}
+  .notes h3{font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--brand-d);margin-bottom:10px}
+  .notes ul{list-style:none}
+  .notes li{font-size:13px;color:var(--slate);line-height:1.55;padding:4px 0 4px 22px;position:relative}
+  .notes li:before{content:"·";position:absolute;left:6px;color:var(--brand);font-weight:800}
+  .notes b{color:var(--navy)}
+</style>
+</head>
+<body>
+  <div class="topnav">
+    <div class="brand">Soterra</div>
+    <div class="t">Outbound email design · what the recipient sees</div>
+    <div class="spacer"></div>
+    <div class="chip"><span class="dot"></span> Kauri Tower</div>
+  </div>
+
+  <div class="page">
+    <div class="lead">
+      <div class="k">Foundation 1 · Email sending</div>
+      <h1>The three emails Soterra sends</h1>
+      <p>One shared shell (your company leads, Soterra signs the footer), three bodies. Replies go straight to the person who sent it, so the sub just hits Reply like any normal email. Every send is recorded on the project.</p>
+    </div>
+
+    <div class="vtabs">
+      <button class="vtab on" onclick="show(0)"><span class="n">1</span> QA flags to a sub</button>
+      <button class="vtab" onclick="show(1)"><span class="n">2</span> RFI to a consultant</button>
+      <button class="vtab" onclick="show(2)"><span class="n">3</span> Inspection items to a sub</button>
+    </div>
+
+    <!-- ══════════ VARIANT 1: QA FLAGS TO A SUB ══════════ -->
+    <div class="client on" id="v0">
+      <div class="env">
+        <div class="row"><div class="lab">From</div><div class="val">Kauri Construction <span class="via">(via Soterra) &lt;kauri-tower@send.soterra.co.nz&gt;</span></div></div>
+        <div class="row"><div class="lab">Reply to</div><div class="val">Adam Domok <span class="via">&lt;adam@kauriconstruction.co.nz&gt;</span></div></div>
+        <div class="row"><div class="lab">To</div><div class="val">Fire Protection Ltd <span class="via">&lt;service@fireprotectionltd.co.nz&gt;</span></div></div>
+        <div class="row"><div class="lab">Subject</div><div class="val subj">Kauri Tower · 2 items to put right · Fire · Unit 1 fire check</div></div>
+        <div class="pillrow"><span class="apill">Recorded as FLG-0141, FLG-0142</span></div>
+      </div>
+      <div class="mailbg">
+        <div class="mail">
+          <div class="m-grad"></div>
+          <div class="m-head">
+            <div class="m-co">Kauri Construction</div>
+            <div class="m-proj">Kauri Tower &nbsp;·&nbsp; Unit 1 fire check &nbsp;·&nbsp; 12 Aug 2026</div>
+          </div>
+          <div class="m-body">
+            <div class="m-intro">Hi team, these two came up on today's pre-inspection check in Unit 1. Both are pinned on the drawing below. Please put them right and reply with a photo when done.</div>
+
+            <div class="m-item">
+              <div class="m-item-top">
+                <div class="m-num">1</div>
+                <div>
+                  <div class="m-it">Fire collar not installed properly</div>
+                  <div class="m-imeta"><b>Fire</b> · A3-00-7400 Rev.2 · Basement, high level</div>
+                  <div class="m-inote">Collar to the 100mm uPVC penetration is proud of the slab and not fixed on one side. Refit hard to the soffit per the Ryanfire detail.</div>
+                  <div class="m-photo"><div class="ph">📷</div><div class="cap">site photo attached</div></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="m-item">
+              <div class="m-item-top">
+                <div class="m-num">2</div>
+                <div>
+                  <div class="m-it">Intumescent sealant missing at pipe penetration</div>
+                  <div class="m-imeta"><b>Fire</b> · A3-00-7400 Rev.2 · Grid C2, riser wall</div>
+                  <div class="m-inote">Annular gap at the 65mm penetration has no sealant. Seal both sides and label the penetration.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="m-snap">
+              <div class="m-snapimg">
+                <svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+                  <rect width="600" height="300" fill="#fff"/>
+                  <rect x="10" y="10" width="580" height="280" fill="none" stroke="#C9D3DD" stroke-width="1.2"/>
+                  <g fill="none" stroke="#3A4656" stroke-width="2.2">
+                    <rect x="60" y="45" width="480" height="215"/>
+                    <line x1="235" y1="45" x2="235" y2="260"/>
+                    <line x1="380" y1="45" x2="380" y2="160"/>
+                    <line x1="235" y1="160" x2="540" y2="160"/>
+                  </g>
+                  <g stroke="#E3E9F0" stroke-width="1" stroke-dasharray="3 5">
+                    <line x1="160" y1="20" x2="160" y2="280"/><line x1="300" y1="20" x2="300" y2="280"/><line x1="450" y1="20" x2="450" y2="280"/>
+                  </g>
+                  <g stroke="#2E86C8" stroke-width="2" fill="none">
+                    <path d="M85 70 L85 240 L490 240 L490 175"/>
+                    <path d="M85 135 L220 135"/>
+                  </g>
+                  <g font-family="Arial" font-size="9" fill="#7C8C9E" font-weight="bold">
+                    <text x="140" y="110">PLANT ROOM</text>
+                    <text x="280" y="110">BASEMENT · HIGH LEVEL</text>
+                    <text x="280" y="215">BASEMENT</text>
+                    <text x="440" y="110">RISER</text>
+                  </g>
+                  <!-- pins (map-pin: tail triangle + numbered head) -->
+                  <g>
+                    <path d="M173 107 L180 121 L187 107 Z" fill="#F59E0B" stroke="#fff" stroke-width="1"/>
+                    <circle cx="180" cy="103" r="8" fill="#F59E0B" stroke="#fff" stroke-width="1.5"/>
+                    <text x="180" y="106.5" font-family="Arial" font-size="9" font-weight="bold" fill="#fff" text-anchor="middle">1</text>
+                    <path d="M459 124 L466 138 L473 124 Z" fill="#F59E0B" stroke="#fff" stroke-width="1"/>
+                    <circle cx="466" cy="120" r="8" fill="#F59E0B" stroke="#fff" stroke-width="1.5"/>
+                    <text x="466" y="123.5" font-family="Arial" font-size="9" font-weight="bold" fill="#fff" text-anchor="middle">2</text>
+                  </g>
+                </svg>
+              </div>
+              <div class="cap">A3-00-7400 · Plumbing &amp; Drainage · Basement · Rev.2 (snapshot with your pins, attached full-size)</div>
+            </div>
+
+            <div class="m-reply">↩ Just hit <b>Reply</b>: your response goes straight to Adam Domok at Kauri Construction.</div>
+          </div>
+          <div class="m-foot">
+            <div class="s-logo">Soterra</div>
+            <div class="s-t">Sent with Soterra · recorded on the project QA log</div>
+            <div class="ref">FLG-0141 · FLG-0142</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ VARIANT 2: RFI TO A CONSULTANT ══════════ -->
+    <div class="client" id="v1">
+      <div class="env">
+        <div class="row"><div class="lab">From</div><div class="val">Kauri Construction <span class="via">(via Soterra) &lt;kauri-tower@send.soterra.co.nz&gt;</span></div></div>
+        <div class="row"><div class="lab">Reply to</div><div class="val">Adam Domok <span class="via">&lt;adam@kauriconstruction.co.nz&gt;</span></div></div>
+        <div class="row"><div class="lab">To</div><div class="val">Jane Smith <span class="via">&lt;jane.smith@holmesstructural.co.nz&gt;</span></div></div>
+        <div class="row"><div class="lab">Cc</div><div class="val"><span class="via">architect@studiopacific.co.nz</span></div></div>
+        <div class="row"><div class="lab">Subject</div><div class="val subj">RFI-014 · Kauri Tower · Lintel fixing at grid C3 · response needed by Fri 22 Aug</div></div>
+        <div class="pillrow"><span class="apill">Thread + status live in Soterra</span></div>
+      </div>
+      <div class="mailbg">
+        <div class="mail">
+          <div class="m-grad"></div>
+          <div class="rfi-band">
+            <div class="no">RFI-014</div>
+            <div class="sub">Lintel fixing at grid C3, Level 1</div>
+          </div>
+          <div class="m-head">
+            <div class="m-co">Kauri Construction</div>
+            <div class="m-proj">Kauri Tower &nbsp;·&nbsp; Raised by Adam Domok &nbsp;·&nbsp; 12 Aug 2026</div>
+          </div>
+          <div class="m-body">
+            <div class="rfi-due">⏱ Response required by Friday 22 Aug 2026 (7 working days)</div>
+            <div class="rfi-meta">
+              <div class="cell"><div class="k">Discipline</div><div class="v">Structural</div></div>
+              <div class="cell"><div class="k">Priority</div><div class="v">Normal</div></div>
+              <div class="cell"><div class="k">Location</div><div class="v">Level 1 · grid C3</div></div>
+              <div class="cell"><div class="k">Cost impact</div><div class="v">Unknown</div></div>
+              <div class="cell"><div class="k">Programme impact</div><div class="v">Yes · est 3 days</div></div>
+              <div class="cell"><div class="k">Drawing</div><div class="v">S3.01 Rev C 📌</div></div>
+            </div>
+
+            <div class="m-sec">Question</div>
+            <div class="m-q">S3.01 Rev C calls for M12 bolts at 600 crs fixing the L1 lintel at grid C3, but the specified 190 series block wall shows a 140 wall on A-201 Rev C at the same line. The M12 at 600 fixing does not appear achievable in a 140 wall. Please confirm the wall thickness at grid C3 and the required lintel fixing.</div>
+
+            <div class="m-sec">Our proposed solution</div>
+            <div class="m-prop">Proceed with the 190 wall as per S3.01 and fix the lintel M12 at 600 crs as drawn. A-201 to be updated to match.</div>
+
+            <div class="m-sec">References (pre-cited by Soterra)</div>
+            <div class="refchips">
+              <span class="refchip">📌 S3.01 Rev C · pin at grid C3</span>
+              <span class="refchip">📌 A-201 Rev C</span>
+              <span class="refchip code">NZS 3604 cl 8.6</span>
+            </div>
+
+            <div class="m-sec">Attachments</div>
+            <div class="attach">📎 RFI-014-S3.01-pin.png · 📎 RFI-014-site-photo.jpg</div>
+
+            <div class="m-reply">↩ <b>Reply to this email with your response.</b> Kauri Construction logs it against RFI-014; the register, thread and response times are tracked in Soterra.</div>
+          </div>
+          <div class="m-foot">
+            <div class="s-logo">Soterra</div>
+            <div class="s-t">Sent with Soterra · soterra.co.nz</div>
+            <div class="ref">RFI-014 · Rev 0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ VARIANT 3: INSPECTION ITEMS TO A SUB ══════════ -->
+    <div class="client" id="v2">
+      <div class="env">
+        <div class="row"><div class="lab">From</div><div class="val">Kauri Construction <span class="via">(via Soterra) &lt;kauri-tower@send.soterra.co.nz&gt;</span></div></div>
+        <div class="row"><div class="lab">Reply to</div><div class="val">Adam Domok <span class="via">&lt;adam@kauriconstruction.co.nz&gt;</span></div></div>
+        <div class="row"><div class="lab">To</div><div class="val">Hydraulic Services Co <span class="via">&lt;jobs@hydraulicservices.co.nz&gt;</span></div></div>
+        <div class="row"><div class="lab">Subject</div><div class="val subj">Kauri Tower · 3 failed inspection items for you · Council services inspection 10 Aug</div></div>
+        <div class="pillrow"><span class="apill">From the filed inspection report</span></div>
+      </div>
+      <div class="mailbg">
+        <div class="mail">
+          <div class="m-grad"></div>
+          <div class="m-head">
+            <div class="m-co">Kauri Construction</div>
+            <div class="m-proj">Kauri Tower &nbsp;·&nbsp; Council services progress inspection &nbsp;·&nbsp; failed 10 Aug 2026</div>
+          </div>
+          <div class="m-body">
+            <div class="m-intro">The council's services inspection on 10 Aug failed 3 items that sit with you. They are listed below exactly as the inspector wrote them. Please work through the list and reply when each is done; we re-book the inspection once all three are closed.</div>
+
+            <div class="m-item">
+              <div class="m-item-top">
+                <div class="m-num red">1</div>
+                <div style="flex:1">
+                  <div class="m-it">Ø100mm tundish missing <span class="wpill">not done</span></div>
+                  <div class="m-imeta"><b>Plumbing &amp; Drainage</b> · Basement, plant room</div>
+                  <div class="m-inote">Inspector: "Ø100mm tundish missing. Please confirm if installed. Not updated, please rectify."</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="m-item">
+              <div class="m-item-top">
+                <div class="m-num red">2</div>
+                <div style="flex:1">
+                  <div class="m-it">Drainage penetrations too small or wrongly located <span class="wpill">not done</span></div>
+                  <div class="m-imeta"><b>Plumbing &amp; Drainage</b> · Basement, high level</div>
+                  <div class="m-inote">Inspector: "Many penetrations too small, wrong location or sleeves not installed. May hinder drainage to Mesh design."</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="m-item">
+              <div class="m-item-top">
+                <div class="m-num red">3</div>
+                <div style="flex:1">
+                  <div class="m-it">Stormwater connection not installed straight <span class="wpill">not done</span></div>
+                  <div class="m-imeta"><b>Plumbing &amp; Drainage</b> · Basement, grid A1</div>
+                  <div class="m-inote">Inspector: "Sprinkler test drain stormwater connection not parallel to wall. Rectify and coordinate with FP contractor."</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="m-reply">↩ Just hit <b>Reply</b>: your response goes straight to Adam Domok at Kauri Construction. Each item is tracked on the project until it is closed.</div>
+          </div>
+          <div class="m-foot">
+            <div class="s-logo">Soterra</div>
+            <div class="s-t">Sent with Soterra · from the filed inspection report</div>
+            <div class="ref">INS-2026-081 · items 4, 7, 9</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h3>How it works behind the scenes</h3>
+      <ul>
+        <li><b>Sender:</b> each project gets its own address on <b>send.soterra.co.nz</b> (e.g. kauri-tower@send.soterra.co.nz). Using a subdomain means your Microsoft 365 mail is completely untouched.</li>
+        <li><b>Replies:</b> Reply-To is the person who pressed Send, so answers land in their normal inbox. No new inbox to check. (Auto-capturing replies into the thread is the fast-follow.)</li>
+        <li><b>Recorded:</b> every send stores recipient, cc, subject, body, attachments and the outbound message id, linked to the flag / RFI / inspection item it belongs to. That record is what the analytics and the EOT pack read.</li>
+        <li><b>Fonts:</b> emails render in Arial on purpose. Gmail and Outlook strip web fonts, so the design is built to look right without DM Sans rather than degrade.</li>
+        <li><b>Provider:</b> Resend (transactional email service). You create the account, I wire everything: 3 DNS records on send.soterra.co.nz, verified, then every send goes through it.</li>
+      </ul>
+    </div>
+  </div>
+
+<script>
+  function show(i){
+    document.querySelectorAll('.client').forEach((c,j)=>c.classList.toggle('on', i===j));
+    document.querySelectorAll('.vtab').forEach((t,j)=>t.classList.toggle('on', i===j));
+  }
+</script>
+</body>
+</html>

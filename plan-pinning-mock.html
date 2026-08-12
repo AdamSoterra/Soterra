@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soterra — Plan pinning + flag to subs (mock)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --brand:#0E8FE6;--brand-d:#0A78C8;--navy:#0C2A47;--ink:#0C2A47;--slate:#52698A;--mut:#94A6BE;
+    --bg:#F6FAFF;--line:#E7EFF9;--line2:#EEF4FB;--grad:linear-gradient(135deg,#41C3FF 0%,#0A8DED 100%);
+    --green:#10B981;--amber:#F59E0B;--red:#EF4444;--purple:#8B5CF6;
+    --font:'DM Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);color:var(--ink);background:var(--bg);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  /* top nav */
+  .topnav{height:60px;flex:0 0 60px;display:flex;align-items:center;gap:26px;padding:0 24px;background:rgba(255,255,255,.85);border-bottom:1px solid var(--line2)}
+  .brand{font-size:20px;font-weight:700;letter-spacing:-.01em;color:var(--brand)}
+  .tabs{display:flex;gap:4px}
+  .tab{font-size:13.5px;font-weight:500;color:var(--slate);padding:8px 13px;border-radius:10px;display:flex;align-items:center;gap:7px;cursor:pointer}
+  .tab.on{background:rgba(65,195,255,.14);color:var(--brand-d);font-weight:600}
+  .spacer{flex:1}
+  .chip{font-size:12.5px;font-weight:600;color:var(--navy);background:#fff;border:1px solid var(--line);padding:7px 12px;border-radius:10px;display:flex;align-items:center;gap:7px}
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  /* body split */
+  .wrap{flex:1;display:flex;min-height:0}
+  .stage{flex:1;display:flex;flex-direction:column;min-width:0;background:#EEF3FA}
+  .stage-top{height:52px;flex:0 0 52px;display:flex;align-items:center;gap:12px;padding:0 18px;background:#fff;border-bottom:1px solid var(--line2)}
+  .stage-top .st-t{font-size:13.5px;font-weight:700;color:var(--navy)}
+  .stage-top .st-s{font-size:12px;color:var(--mut)}
+  .stage-top .st-mode{margin-left:auto;font-size:12px;font-weight:600;color:var(--brand-d);background:rgba(14,143,230,.08);border:1px solid rgba(14,143,230,.18);border-radius:8px;padding:6px 11px;display:flex;align-items:center;gap:6px}
+  /* drawing canvas */
+  .canvas{flex:1;position:relative;overflow:hidden;background:#5A6B80;display:flex;align-items:center;justify-content:center}
+  .sheet-wrap{transform-origin:center center;transition:transform .18s ease}
+  .sheet{position:relative;width:760px;background:#fff;box-shadow:0 18px 50px rgba(0,0,0,.45);cursor:crosshair}
+  .sheet svg{display:block;width:100%;height:auto}
+  /* pins */
+  .pin{position:absolute;transform:translate(-50%,-100%);cursor:pointer;z-index:5}
+  .pin .head{width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 10px rgba(0,0,0,.35);border:2px solid #fff}
+  .pin .head b{transform:rotate(45deg);color:#fff;font-size:12px;font-weight:800}
+  .pin.open .head{background:var(--amber)} .pin.sent .head{background:var(--brand)} .pin.done .head{background:var(--green)}
+  .pin.sel .head{outline:3px solid rgba(255,255,255,.7);outline-offset:1px}
+  .pin:hover{z-index:6}
+  .zoomctl{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:2px;background:rgba(12,20,30,.66);border-radius:12px;padding:4px 6px;z-index:10}
+  .zoomctl button{width:40px;height:34px;font-size:20px;line-height:1;background:none;border:none;color:#fff;cursor:pointer;border-radius:8px}
+  .zoomctl button:hover{background:rgba(255,255,255,.16)}
+  .zoomctl span{color:#fff;font-size:12px;font-weight:600;min-width:46px;text-align:center}
+  .hint{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(12,42,71,.82);color:#fff;font-size:12px;font-weight:600;padding:7px 14px;border-radius:20px;z-index:10;display:flex;align-items:center;gap:7px}
+  /* right panel */
+  .panel{width:390px;flex:0 0 390px;background:#fff;border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .panel-h{padding:16px 18px 12px;border-bottom:1px solid var(--line2)}
+  .panel-h .ph-t{font-size:15px;font-weight:700;color:var(--navy)}
+  .panel-h .ph-s{font-size:12.5px;color:var(--slate);margin-top:2px}
+  .summ{display:flex;gap:8px;margin-top:12px}
+  .summ .s{flex:1;border:1px solid var(--line);border-radius:11px;padding:8px 10px;text-align:center}
+  .summ .s b{display:block;font-size:19px;font-weight:800;color:var(--navy);line-height:1}
+  .summ .s span{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mut)}
+  .summ .s.open b{color:var(--amber)} .summ .s.sent b{color:var(--brand)} .summ .s.done b{color:var(--green)}
+  .flags{flex:1;overflow-y:auto;padding:12px}
+  .flag{border:1px solid var(--line);border-radius:13px;padding:12px 13px;margin-bottom:10px;cursor:pointer;transition:border-color .15s,box-shadow .15s;background:#fff}
+  .flag:hover{border-color:rgba(14,143,230,.4)}
+  .flag.sel{border-color:var(--brand);box-shadow:0 0 0 3px rgba(14,143,230,.12)}
+  .flag-top{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+  .fnum{width:22px;height:22px;border-radius:50%;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .fnum.open{background:var(--amber)} .fnum.sent{background:var(--brand)} .fnum.done{background:var(--green)}
+  .flag-top .ft{flex:1;font-size:13.5px;font-weight:700;color:var(--navy);line-height:1.25}
+  .fpill{font-size:9.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 8px;border-radius:20px;white-space:nowrap}
+  .fpill.open{background:rgba(245,158,11,.14);color:#B45309} .fpill.sent{background:rgba(14,143,230,.12);color:var(--brand-d)} .fpill.done{background:rgba(16,185,129,.14);color:#0E7A55}
+  .fmeta{font-size:11.5px;color:var(--mut);font-weight:600;margin-bottom:6px}
+  .fmeta b{color:var(--slate)}
+  .fnote{font-size:12.5px;color:var(--slate);line-height:1.45}
+  .fsent{margin-top:9px;padding-top:9px;border-top:1px dashed var(--line);font-size:11.5px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:6px}
+  .fact{display:flex;gap:8px;margin-top:11px}
+  .btn{flex:1;font-family:var(--font);font-size:12px;font-weight:700;border-radius:9px;padding:8px 10px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--navy)}
+  .btn:hover{border-color:rgba(14,143,230,.4)}
+  .btn.pri{background:var(--grad);color:#fff;border:none}
+  .btn.pri:hover{filter:brightness(1.05)}
+  .btn.ghost{color:var(--purple);border-color:rgba(139,92,246,.3)}
+  /* modal */
+  .scrim{position:fixed;inset:0;background:rgba(12,42,71,.42);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .scrim.on{display:flex}
+  .modal{width:100%;max-width:440px;background:#fff;border-radius:18px;box-shadow:0 30px 80px rgba(12,42,71,.3);overflow:hidden}
+  .m-top{padding:16px 20px;border-bottom:1px solid var(--line2);display:flex;align-items:center;justify-content:space-between}
+  .m-top b{font-size:15px;color:var(--navy)}
+  .m-x{border:none;background:var(--bg);width:30px;height:30px;border-radius:9px;cursor:pointer;color:var(--slate);font-size:15px}
+  .m-body{padding:18px 20px 20px}
+  .fld{margin-bottom:13px}
+  .fld label{display:block;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin-bottom:6px}
+  .fld input,.fld select,.fld textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:var(--font);font-size:13.5px;color:var(--navy);background:#fff;outline:none}
+  .fld input:focus,.fld select:focus,.fld textarea:focus{border-color:rgba(14,143,230,.5)}
+  .fld textarea{resize:none;height:64px;line-height:1.4}
+  .m-act{display:flex;gap:10px;margin-top:6px}
+  .m-act .btn{padding:11px}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--navy);color:#fff;font-size:13px;font-weight:600;padding:12px 18px;border-radius:12px;box-shadow:0 16px 40px rgba(12,42,71,.35);opacity:0;transition:all .25s;z-index:60;display:flex;align-items:center;gap:9px}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* location picker */
+  .picker{position:fixed;inset:0;background:rgba(240,244,250,.97);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);z-index:80;display:none;align-items:center;justify-content:center;padding:24px}
+  .picker.on{display:flex}
+  .pk-box{width:100%;max-width:740px}
+  .pk-h{text-align:center;margin-bottom:24px}
+  .pk-k{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--brand-d);margin-bottom:10px}
+  .pk-h h2{font-size:26px;font-weight:700;letter-spacing:-.02em;color:var(--navy);margin-bottom:9px}
+  .pk-h p{font-size:14px;color:var(--slate);line-height:1.5;max-width:500px;margin:0 auto}
+  .pk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px}
+  .loc-card{background:#fff;border:1.5px solid var(--line);border-radius:15px;padding:13px;cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s;text-align:left}
+  .loc-card:hover{border-color:var(--brand);transform:translateY(-2px);box-shadow:0 14px 30px rgba(12,42,71,.1)}
+  .loc-thumb{height:94px;border-radius:10px;background:#EEF3FA;border:1px solid var(--line2);margin-bottom:11px;overflow:hidden}
+  .loc-thumb svg{width:100%;height:100%;display:block}
+  .loc-nm{font-size:15px;font-weight:800;color:var(--navy)}
+  .loc-sub{font-size:12px;color:var(--slate);margin-top:2px;font-weight:600}
+  .loc-src{font-size:10.5px;color:var(--mut);margin-top:7px;display:flex;align-items:center;gap:5px}
+  .loc-src span{color:var(--brand);font-weight:800}
+  .pk-add{display:block;width:100%;max-width:340px;margin:0 auto;background:#fff;border:1.5px dashed var(--line);border-radius:12px;padding:12px;font-family:var(--font);font-size:13px;font-weight:700;color:var(--slate);cursor:pointer}
+  .pk-add:hover{border-color:var(--brand);color:var(--brand-d)}
+</style>
+</head>
+<body>
+  <div class="topnav">
+    <div class="brand">Soterra</div>
+    <div class="tabs">
+      <div class="tab">💬 Assistant</div>
+      <div class="tab">☰ Inspections</div>
+      <div class="tab on">▤ Plans</div>
+      <div class="tab">↑ Upload</div>
+      <div class="tab">▥ Insights</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="chip"><span class="dot"></span> Kauri Tower</div>
+  </div>
+
+  <!-- LOCATION PICKER (shown first, on New check) -->
+  <div class="picker on" id="picker">
+    <div class="pk-box">
+      <div class="pk-h">
+        <div class="pk-k">New Fire check</div>
+        <h2>Where are you checking?</h2>
+        <p>Soterra pulled these from the names of your uploaded drawings. Pick one and the checklist + the sheet you pin on both scope to it. (Another company's plans would list their own — this reads whatever they upload.)</p>
+      </div>
+      <div class="pk-grid" id="pkGrid"></div>
+      <button class="pk-add" onclick="pickLoc('custom')">+ Add your own zone (e.g. east corridor)</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- drawing stage -->
+    <div class="stage">
+      <div class="stage-top">
+        <div>
+          <div class="st-t">A3-00-7400 · Plumbing &amp; Drainage · Basement</div>
+          <div class="st-s">Rev.2 · uploaded 12 Aug</div>
+        </div>
+        <div class="st-mode">📌 Pin mode — click the drawing to drop a flag</div>
+      </div>
+      <div class="canvas" id="canvas">
+        <div class="sheet-wrap" id="sheetWrap">
+          <div class="sheet" id="sheet">
+            <svg viewBox="0 0 760 540" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <rect x="0" y="0" width="760" height="540" fill="#fff"/>
+              <!-- border + title block -->
+              <rect x="14" y="14" width="732" height="512" fill="none" stroke="#C9D3DD" stroke-width="1.5"/>
+              <!-- grid bubbles -->
+              <g font-family="var(--font)" font-size="11" fill="#8090A2" font-weight="700">
+                <circle cx="120" cy="40" r="12" fill="none" stroke="#B9C4D2"/><text x="120" y="44" text-anchor="middle">1</text>
+                <circle cx="300" cy="40" r="12" fill="none" stroke="#B9C4D2"/><text x="300" y="44" text-anchor="middle">2</text>
+                <circle cx="480" cy="40" r="12" fill="none" stroke="#B9C4D2"/><text x="480" y="44" text-anchor="middle">3</text>
+                <circle cx="640" cy="40" r="12" fill="none" stroke="#B9C4D2"/><text x="640" y="44" text-anchor="middle">4</text>
+                <circle cx="46" cy="130" r="12" fill="none" stroke="#B9C4D2"/><text x="46" y="134" text-anchor="middle">A</text>
+                <circle cx="46" cy="300" r="12" fill="none" stroke="#B9C4D2"/><text x="46" y="304" text-anchor="middle">B</text>
+                <circle cx="46" cy="450" r="12" fill="none" stroke="#B9C4D2"/><text x="46" y="454" text-anchor="middle">C</text>
+              </g>
+              <!-- gridlines -->
+              <g stroke="#E3E9F0" stroke-width="1" stroke-dasharray="3 5">
+                <line x1="120" y1="52" x2="120" y2="500"/><line x1="300" y1="52" x2="300" y2="500"/>
+                <line x1="480" y1="52" x2="480" y2="500"/><line x1="640" y1="52" x2="640" y2="500"/>
+                <line x1="80" y1="130" x2="712" y2="130"/><line x1="80" y1="300" x2="712" y2="300"/><line x1="80" y1="450" x2="712" y2="450"/>
+              </g>
+              <!-- building outline / rooms -->
+              <g fill="none" stroke="#3A4656" stroke-width="3">
+                <rect x="80" y="80" width="600" height="410"/>
+                <line x1="300" y1="80" x2="300" y2="490"/>
+                <line x1="480" y1="80" x2="480" y2="300"/>
+                <line x1="300" y1="300" x2="680" y2="300"/>
+              </g>
+              <!-- room labels -->
+              <g font-family="var(--font)" font-size="12" fill="#7C8C9E" font-weight="600">
+                <text x="190" y="200">PLANT ROOM</text>
+                <text x="360" y="200">BASEMENT — HIGH LEVEL</text>
+                <text x="360" y="400">BASEMENT</text>
+                <text x="560" y="200">RISER</text>
+              </g>
+              <!-- services runs (drainage) -->
+              <g stroke="#2E86C8" stroke-width="2.5" fill="none" stroke-dasharray="1 0">
+                <path d="M110 120 L110 460 L620 460 L620 320"/>
+                <path d="M110 250 L280 250"/>
+                <path d="M360 320 L360 460"/>
+                <circle cx="110" cy="120" r="5" fill="#2E86C8"/>
+                <circle cx="620" cy="320" r="5" fill="#2E86C8"/>
+              </g>
+              <!-- title block -->
+              <g>
+                <rect x="520" y="430" width="160" height="60" fill="#F7F9FC" stroke="#C9D3DD"/>
+                <text x="528" y="450" font-family="var(--font)" font-size="10" fill="#5A6B7D" font-weight="700">MESH · Plumbing &amp; Drainage</text>
+                <text x="528" y="466" font-family="var(--font)" font-size="9" fill="#9AA7B4">A3-00-7400  ·  Basement</text>
+                <text x="528" y="480" font-family="var(--font)" font-size="9" fill="#9AA7B4">Scale 1:100  ·  Rev.2</text>
+              </g>
+            </svg>
+            <div id="pinLayer"></div>
+          </div>
+        </div>
+        <div class="hint">📌 Click anywhere on the drawing to drop a flag</div>
+        <div class="zoomctl">
+          <button onclick="zoom(-1)">−</button>
+          <span id="zlabel">100%</span>
+          <button onclick="zoom(1)">+</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- flags panel -->
+    <div class="panel">
+      <div class="panel-h">
+        <div class="ph-t">Flags on this sheet</div>
+        <div class="ph-s">Pinned from the Services progress inspection · 2022-09-07</div>
+        <div class="summ">
+          <div class="s open"><b id="cOpen">0</b><span>Not sent</span></div>
+          <div class="s sent"><b id="cSent">0</b><span>Sent to sub</span></div>
+          <div class="s done"><b id="cDone">0</b><span>Fixed</span></div>
+        </div>
+      </div>
+      <div class="flags" id="flags"></div>
+    </div>
+  </div>
+
+  <!-- new / edit flag modal -->
+  <div class="scrim" id="scrim">
+    <div class="modal">
+      <div class="m-top"><b id="mTitle">New flag</b><button class="m-x" onclick="closeModal()">✕</button></div>
+      <div class="m-body">
+        <div class="fld"><label>What's the issue</label><input id="fTitle" placeholder="e.g. Fire collar not installed properly"></div>
+        <div class="fld"><label>Trade</label>
+          <select id="fTrade">
+            <option>Fire</option><option>Plumbing &amp; Drainage</option><option>Electrical</option>
+            <option>Mechanical / HVAC</option><option>Structural</option><option>Ceilings / Linings</option>
+          </select>
+        </div>
+        <div class="fld"><label>Assign to subcontractor</label>
+          <select id="fSub">
+            <option>Fire Protection Ltd</option><option>Hydraulic Services Co</option><option>Metro Electrical</option>
+            <option>AirFlow Mechanical</option><option>Ceiling Fixing Ltd</option>
+          </select>
+        </div>
+        <div class="fld"><label>Note</label><textarea id="fNote" placeholder="What needs doing, and where."></textarea></div>
+        <div class="m-act">
+          <button class="btn" onclick="closeModal()">Cancel</button>
+          <button class="btn pri" onclick="saveFlag()">Save flag</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  // ---- seed data: the inspection's failed items, pinned on the drawing ----
+  let flags = [
+    {n:1, x:23, y:38, title:"Fire collar not installed properly", trade:"Fire", sub:"Fire Protection Ltd", note:"Fire collar not installed properly, please rectify. (High level of basement)", status:"open"},
+    {n:2, x:48, y:60, title:"Ø100mm tundish missing", trade:"Plumbing & Drainage", sub:"Hydraulic Services Co", note:"Ø100mm tundish missing. Please confirm if installed. Not updated, please rectify.", status:"open"},
+    {n:3, x:70, y:44, title:"Drainage penetrations too small / wrong location", trade:"Plumbing & Drainage", sub:"Hydraulic Services Co", note:"Many penetrations too small, wrong location or sleeves not installed — may hinder drainage to Mesh design.", status:"sent", sentAt:"12 Aug, 09:14"},
+    {n:4, x:34, y:82, title:"Stormwater connection not installed straight", trade:"Fire", sub:"Fire Protection Ltd", note:"Sprinkler test drain stormwater connection not parallel to wall. Rectify; coordinate TD with FP contractor.", status:"done", sentAt:"3 Aug", fixedAt:"9 Aug"},
+  ];
+  let seq = flags.length, selected = null, scale = 1, pending = null;
+
+  const $ = id => document.getElementById(id);
+  const stColors = {open:'open', sent:'sent', done:'done'};
+  const stLabel = {open:'Not sent', sent:'Sent · awaiting', done:'Fixed'};
+
+  function renderPins(){
+    const layer = $('pinLayer'); layer.innerHTML='';
+    flags.forEach(f=>{
+      const el = document.createElement('div');
+      el.className = 'pin '+f.status+(selected===f.n?' sel':'');
+      el.style.left = f.x+'%'; el.style.top = f.y+'%';
+      el.innerHTML = '<div class="head"><b>'+f.n+'</b></div>';
+      el.onclick = e=>{ e.stopPropagation(); select(f.n); };
+      layer.appendChild(el);
+    });
+  }
+  function renderList(){
+    const wrap = $('flags'); wrap.innerHTML='';
+    flags.forEach(f=>{
+      const d = document.createElement('div');
+      d.className = 'flag'+(selected===f.n?' sel':''); d.id='flag'+f.n;
+      let sent = '';
+      if(f.status==='sent') sent = '<div class="fsent">✓ Sent to '+f.sub+' · '+f.sentAt+' — awaiting fix</div>';
+      if(f.status==='done') sent = '<div class="fsent">✓ Sent '+f.sentAt+' · marked fixed '+f.fixedAt+'</div>';
+      let act = '';
+      if(f.status==='open') act = '<div class="fact"><button class="btn ghost" onclick="raiseRFI(event,'+f.n+')">Raise as RFI</button><button class="btn pri" onclick="sendSub(event,'+f.n+')">Send to sub</button></div>';
+      else if(f.status==='sent') act = '<div class="fact"><button class="btn" onclick="resend(event,'+f.n+')">Resend / remind</button><button class="btn pri" onclick="markDone(event,'+f.n+')">Mark fixed</button></div>';
+      d.innerHTML =
+        '<div class="flag-top"><div class="fnum '+f.status+'">'+f.n+'</div><div class="ft">'+f.title+'</div>'+
+        '<div class="fpill '+f.status+'">'+stLabel[f.status]+'</div></div>'+
+        '<div class="fmeta"><b>'+f.trade+'</b> · to '+f.sub+'</div>'+
+        '<div class="fnote">'+f.note+'</div>'+sent+act;
+      d.onclick = ()=>select(f.n);
+      wrap.appendChild(d);
+    });
+    $('cOpen').textContent = flags.filter(f=>f.status==='open').length;
+    $('cSent').textContent = flags.filter(f=>f.status==='sent').length;
+    $('cDone').textContent = flags.filter(f=>f.status==='done').length;
+  }
+  function render(){ renderPins(); renderList(); }
+  function select(n){ selected=n; render(); const c=$('flag'+n); if(c) c.scrollIntoView({block:'nearest',behavior:'smooth'}); }
+
+  function toast(msg){ const t=$('toast'); t.textContent='✓ '+msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),2600); }
+
+  function sendSub(e,n){ e.stopPropagation(); const f=flags.find(x=>x.n===n); f.status='sent'; f.sentAt='today, now'; render(); toast('Flag '+n+' emailed to '+f.sub+' — recorded on the sheet'); }
+  function resend(e,n){ e.stopPropagation(); const f=flags.find(x=>x.n===n); toast('Reminder re-sent to '+f.sub); }
+  function markDone(e,n){ e.stopPropagation(); const f=flags.find(x=>x.n===n); f.status='done'; f.fixedAt='today'; render(); toast('Flag '+n+' marked fixed'); }
+  function raiseRFI(e,n){ e.stopPropagation(); toast('Flag '+n+' opened as an RFI (same pin, same drawing)'); }
+
+  // click drawing to drop a pin
+  $('sheet').addEventListener('click', ev=>{
+    const r = $('sheet').getBoundingClientRect();
+    const x = ((ev.clientX - r.left)/r.width)*100;
+    const y = ((ev.clientY - r.top)/r.height)*100;
+    pending = {x:Math.max(2,Math.min(98,x)), y:Math.max(3,Math.min(98,y))};
+    $('mTitle').textContent='New flag at pin '+(seq+1);
+    $('fTitle').value=''; $('fNote').value=''; $('fTrade').selectedIndex=0; $('fSub').selectedIndex=0;
+    $('scrim').classList.add('on'); setTimeout(()=>$('fTitle').focus(),50);
+  });
+  function closeModal(){ $('scrim').classList.remove('on'); pending=null; }
+  function saveFlag(){
+    if(!pending) return;
+    const title = $('fTitle').value.trim() || 'Untitled flag';
+    seq++;
+    flags.push({n:seq, x:pending.x, y:pending.y, title, trade:$('fTrade').value, sub:$('fSub').value, note:$('fNote').value.trim()||'—', status:'open'});
+    closeModal(); select(seq); toast('Flag '+seq+' pinned on the drawing');
+  }
+
+  // zoom (pins are % positioned so they scale with the sheet)
+  function zoom(dir){ scale = Math.max(0.6, Math.min(2.4, +(scale + dir*0.2).toFixed(2))); $('sheetWrap').style.transform='scale('+scale+')'; $('zlabel').textContent=Math.round(scale*100)+'%'; }
+
+  // ---- location picker: locations DERIVED from the drawing names ----
+  const THUMB = '<svg viewBox="0 0 160 94" preserveAspectRatio="xMidYMid slice"><rect width="160" height="94" fill="#fff"/><g stroke="#B9C4D2" fill="none" stroke-width="1.4"><rect x="16" y="12" width="128" height="70"/><line x1="80" y1="12" x2="80" y2="82"/><line x1="16" y1="47" x2="144" y2="47"/></g><g stroke="#2E86C8" stroke-width="1.6" fill="none"><path d="M34 26 L34 68 L120 68"/></g><g font-family="var(--font)" font-size="8" fill="#9AA7B4"><text x="40" y="42">RM</text><text x="98" y="42">RM</text></g></svg>';
+  const locations = [
+    {id:'u1', name:'Unit 1', sub:'Level 1 · 5 drawings', src:'S3.01, S4.01, S2.01…'},
+    {id:'u2', name:'Unit 2', sub:'Level 1 · 5 drawings', src:'S3.02, S4.02, S2.02…'},
+    {id:'site', name:'Site-wide', sub:'Roading · Landscape · 8 dwgs', src:'AR109209, 44000…'},
+  ];
+  function renderPicker(){
+    const g = $('pkGrid'); g.innerHTML='';
+    locations.forEach(l=>{
+      const c = document.createElement('div'); c.className='loc-card'; c.onclick=()=>pickLoc(l.id);
+      c.innerHTML = '<div class="loc-thumb">'+THUMB+'</div><div class="loc-nm">'+l.name+'</div><div class="loc-sub">'+l.sub+'</div><div class="loc-src"><span>▤</span> from '+l.src+'</div>';
+      g.appendChild(c);
+    });
+  }
+  function pickLoc(id){
+    const l = locations.find(x=>x.id===id);
+    const nm = l ? l.name : 'East corridor';
+    $('picker').classList.remove('on');
+    document.querySelector('.st-t').textContent = nm + ' · Fire check · Basement';
+    toast('Fire check scoped to ' + nm + ' — pinning on its drawing');
+  }
+  renderPicker();
+
+  render();
+</script>
+</body>
+</html>
