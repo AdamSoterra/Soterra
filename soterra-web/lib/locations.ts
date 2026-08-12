@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
-import { planPages } from "./schema";
+import { planPages, projectLocations } from "./schema";
 
 // Derive the physical LOCATIONS a QA check can be scoped to (Unit 1, Level 12,
 // Tower A, Basement Car Park, Site-wide…) from a project's own drawing titles.
@@ -12,11 +12,13 @@ import { planPages } from "./schema";
 // tower, commercial towers+podium, school blocks, and a deliberately unnamed set)
 // — every rule here is a failure that test surfaced.
 //
-// Design note (from the spec): the RIGHT home for this call is plan-ingest, with
-// the result cached per project keyed on a title fingerprint, so the picker at
-// check-creation is a cache read, never a model round-trip. For now this module
-// computes on demand with an in-memory fingerprint cache; the persistent
-// ingest-time cache + user-edit merge is the next hardening step.
+// Cache design (Foundation 3): extraction persists per project on
+// project_locations, keyed on a fingerprint of the sorted titles. The picker
+// (GET /api/locations) is a table read; the model runs only when the plan set
+// actually changed — triggered at the end of an upload/delete batch via
+// POST /api/locations {action:"refresh"}, and self-healing on any stale GET.
+// User-typed zones live beside the extracted set and survive re-extraction;
+// on a label clash the user's zone wins.
 
 const MODEL = "claude-opus-4-8";
 
@@ -104,7 +106,16 @@ function normaliseTitles(raw: string[]): string[] {
   return [...new Set(raw.flatMap((t) => t.split(/[\n,]+/)).map((s) => s.trim()).filter(Boolean))];
 }
 
-/** Derive locations from a raw list of drawing titles. Returns [] when nothing names a place. */
+/** Stable fingerprint of a title set — the cache key. */
+export function titleFingerprint(rawTitles: string[]): string {
+  const titles = normaliseTitles(rawTitles);
+  return createHash("sha1").update(titles.slice().sort().join("|")).digest("hex");
+}
+
+/** Derive locations from a raw list of drawing titles. Returns [] when nothing
+ *  names a place; THROWS when the model call fails — an empty answer and a
+ *  failed call must never look the same, or a transient outage would persist
+ *  an empty cache as fresh. */
 export async function deriveLocations(rawTitles: string[]): Promise<QaLocation[]> {
   const titles = normaliseTitles(rawTitles);
   if (titles.length === 0) return [];
@@ -113,48 +124,122 @@ export async function deriveLocations(rawTitles: string[]): Promise<QaLocation[]
   if (hit) return hit;
 
   const anthropic = new Anthropic({ maxRetries: 2 });
-  let out: QaLocation[] = [];
-  try {
-    const resp = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 8000,
-      thinking: { type: "adaptive" },
-      output_config: { effort: "high", format: { type: "json_schema", schema: SCHEMA as unknown as Record<string, unknown> } },
-      system: SYSTEM,
-      messages: [{ role: "user", content: "DRAWING TITLES (one per line):\n" + titles.map((t) => "- " + t).join("\n") }],
-    } as Parameters<typeof anthropic.messages.create>[0]);
-    const text = (resp as Anthropic.Message).content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-    const parsed = JSON.parse(text) as { locations?: Array<Record<string, unknown>> };
-    const titleSet = new Set(titles);
-    const seen = new Set<string>();
-    for (const l of Array.isArray(parsed.locations) ? parsed.locations : []) {
-      const label = String(l.label ?? "").trim();
-      const kind = (KINDS as string[]).includes(String(l.kind)) ? (l.kind as LocationKind) : "zone";
-      // verbatim-membership: the model may not cite a title we didn't send
-      const drawings = (Array.isArray(l.drawings) ? l.drawings : []).map(String).filter((d) => titleSet.has(d));
-      const key = label.toLowerCase();
-      if (!label || drawings.length === 0 || seen.has(key)) continue; // drop untrustworthy items
-      seen.add(key);
-      out.push({ label, kind, drawings, source: "extracted" });
-    }
-  } catch (e) {
-    console.error("deriveLocations failed:", e);
-    return [];
+  const out: QaLocation[] = [];
+  const resp = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 8000,
+    thinking: { type: "adaptive" },
+    output_config: { effort: "high", format: { type: "json_schema", schema: SCHEMA as unknown as Record<string, unknown> } },
+    system: SYSTEM,
+    messages: [{ role: "user", content: "DRAWING TITLES (one per line):\n" + titles.map((t) => "- " + t).join("\n") }],
+  } as Parameters<typeof anthropic.messages.create>[0]);
+  const text = (resp as Anthropic.Message).content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+  const parsed = JSON.parse(text) as { locations?: Array<Record<string, unknown>> };
+  const titleSet = new Set(titles);
+  const seen = new Set<string>();
+  for (const l of Array.isArray(parsed.locations) ? parsed.locations : []) {
+    const label = String(l.label ?? "").trim();
+    const kind = (KINDS as string[]).includes(String(l.kind)) ? (l.kind as LocationKind) : "zone";
+    // verbatim-membership: the model may not cite a title we didn't send
+    const drawings = (Array.isArray(l.drawings) ? l.drawings : []).map(String).filter((d) => titleSet.has(d));
+    const key = label.toLowerCase();
+    if (!label || drawings.length === 0 || seen.has(key)) continue; // drop untrustworthy items
+    seen.add(key);
+    out.push({ label, kind, drawings, source: "extracted" });
   }
   CACHE.set(fp, out);
   return out;
 }
 
-/** Locations for a project, derived from its uploaded plan drawing titles. */
-export async function getProjectLocations(projectId: string): Promise<QaLocation[]> {
-  const rows = await db.select({ doc: planPages.doc }).from(planPages).where(eq(planPages.projectId, projectId));
-  return deriveLocations([...new Set(rows.map((r) => r.doc))]);
+function parseZones(json: string | null | undefined): QaLocation[] {
+  if (!json) return [];
+  try {
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? (arr as QaLocation[]) : [];
+  } catch {
+    return [];
+  }
 }
 
-/** Clear the in-memory cache (e.g. after a new plan upload for a project). */
+/** Extracted + user zones, user wins on a label clash. User zones slot in
+ *  ahead of any trailing "Site-wide" entry so the picker's ordering holds. */
+export function mergeZones(extracted: QaLocation[], userZones: QaLocation[]): QaLocation[] {
+  if (!userZones.length) return extracted;
+  const userLc = new Set(userZones.map((z) => z.label.toLowerCase()));
+  const kept = extracted.filter((e) => !userLc.has(e.label.toLowerCase()));
+  const siteIdx = kept.findIndex((k) => k.kind === "site");
+  return siteIdx === -1
+    ? [...kept, ...userZones]
+    : [...kept.slice(0, siteIdx), ...userZones, ...kept.slice(siteIdx)];
+}
+
+/** Locations for a project — a cache read when the plan set hasn't changed.
+ *  refresh:true forces re-extraction (the ingest-time warm). On a model
+ *  failure this serves the last good extraction rather than nothing. */
+export async function getProjectLocations(projectId: string, opts?: { refresh?: boolean }): Promise<QaLocation[]> {
+  const rows = await db.select({ doc: planPages.doc }).from(planPages).where(eq(planPages.projectId, projectId));
+  const titles = [...new Set(rows.map((r) => r.doc))];
+  const fp = titleFingerprint(titles);
+
+  const [cached] = await db.select().from(projectLocations).where(eq(projectLocations.projectId, projectId)).limit(1);
+  const userZones = parseZones(cached?.userZones);
+
+  if (cached && cached.fingerprint === fp && !opts?.refresh) {
+    return mergeZones(parseZones(cached.locations), userZones);
+  }
+
+  let extracted: QaLocation[];
+  try {
+    extracted = await deriveLocations(titles);
+  } catch (e) {
+    console.error("deriveLocations failed:", e);
+    // Serve the stale extraction (still real locations) rather than nothing;
+    // the fingerprint stays stale so the next call retries.
+    return mergeZones(parseZones(cached?.locations), userZones);
+  }
+
+  await db
+    .insert(projectLocations)
+    .values({ projectId, fingerprint: fp, locations: JSON.stringify(extracted), userZones: cached?.userZones ?? null, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: projectLocations.projectId,
+      set: { fingerprint: fp, locations: JSON.stringify(extracted), updatedAt: new Date() },
+    });
+  return mergeZones(extracted, userZones);
+}
+
+/** Add (or replace, by label) a user-typed zone. Returns the merged list. */
+export async function addUserZone(projectId: string, label: string, kind: LocationKind = "zone"): Promise<QaLocation[]> {
+  const clean = label.trim().slice(0, 60);
+  if (!clean) return getProjectLocations(projectId);
+  const [cached] = await db.select().from(projectLocations).where(eq(projectLocations.projectId, projectId)).limit(1);
+  const zones = parseZones(cached?.userZones).filter((z) => z.label.toLowerCase() !== clean.toLowerCase());
+  zones.push({ label: clean, kind: KINDS.includes(kind) ? kind : "zone", drawings: [], source: "user" });
+  await db
+    .insert(projectLocations)
+    .values({ projectId, fingerprint: cached?.fingerprint ?? "", locations: cached?.locations ?? "[]", userZones: JSON.stringify(zones), updatedAt: new Date() })
+    .onConflictDoUpdate({ target: projectLocations.projectId, set: { userZones: JSON.stringify(zones), updatedAt: new Date() } });
+  return getProjectLocations(projectId);
+}
+
+/** Remove a user-typed zone by label (extracted zones are not removable). */
+export async function removeUserZone(projectId: string, label: string): Promise<QaLocation[]> {
+  const [cached] = await db.select().from(projectLocations).where(eq(projectLocations.projectId, projectId)).limit(1);
+  if (cached) {
+    const zones = parseZones(cached.userZones).filter((z) => z.label.toLowerCase() !== label.trim().toLowerCase());
+    await db
+      .update(projectLocations)
+      .set({ userZones: zones.length ? JSON.stringify(zones) : null, updatedAt: new Date() })
+      .where(eq(projectLocations.projectId, projectId));
+  }
+  return getProjectLocations(projectId);
+}
+
+/** Clear the in-memory model-response cache (tests only; the persistent cache
+ *  on project_locations is the real one). */
 export function resetLocationCache(): void {
   CACHE.clear();
 }

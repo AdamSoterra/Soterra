@@ -441,6 +441,20 @@ export const emailLog = pgTable(
   })
 );
 
+// ─── Location cache — Foundation 3. One row per project: the QA-scope
+//     locations extracted from its drawing titles, keyed on a fingerprint of
+//     those titles so the picker is a table read, never a model round-trip.
+//     userZones holds zones people typed in themselves; on a label clash the
+//     user's zone wins over the extracted one. Extraction re-runs only when
+//     the fingerprint stops matching (plans added/removed). ───
+export const projectLocations = pgTable("project_locations", {
+  projectId: text("project_id").primaryKey(),
+  fingerprint: text("fingerprint").notNull(), // sha1 of the sorted titles extraction ran on
+  locations: text("locations").notNull(), // JSON QaLocation[] — the extracted set
+  userZones: text("user_zones"), // JSON QaLocation[] — user-added, survives re-extraction
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ─── Plan pins — Foundation 2. An x,y marker on one page of one uploaded
 //     drawing, tied to the record it annotates (a QA flag, an RFI, or a
 //     checklist item). x/y are % of the sheet (0-100), so they hold at any

@@ -1588,6 +1588,9 @@ export default function Page() {
     }
     setUpCurrent(null);
     loadPlans();
+    // Warm the QA-location cache now the plan set changed (one model call per
+    // batch, so the check-creation picker opens instantly). Fire-and-forget.
+    apiFetch("/api/locations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "refresh" }) }).catch(() => {});
   };
   // ─── inspection reports → this company's failure history ───
   const onReportFiles = async (fileList: FileList | File[]) => {
@@ -1856,6 +1859,8 @@ export default function Page() {
     setDocs((ds) => ds.filter((d) => d.doc !== doc)); // optimistic
     try {
       await apiFetch("/api/plans", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ doc }) });
+      // The plan set changed → re-warm the QA-location cache. Fire-and-forget.
+      apiFetch("/api/locations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "refresh" }) }).catch(() => {});
     } catch {
       loadPlans(); // resync on failure
     }
