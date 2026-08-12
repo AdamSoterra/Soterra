@@ -4,7 +4,7 @@ import { useUser, useClerk } from "@clerk/nextjs";
 import { upload } from "@vercel/blob/client";
 import Landing from "./landing";
 
-type Tab = "assistant" | "calendar" | "tasks" | "inspections" | "plans" | "upload" | "insights";
+type Tab = "assistant" | "calendar" | "tasks" | "inspections" | "plans" | "upload" | "rfis" | "insights";
 type Cite = {
   code: string; title: string; sub: string; ans: string; hlTag: string;
   // Set when the answer came from a manufacturer's manual (e.g. GIB) rather than
@@ -84,10 +84,45 @@ type ChecklistItem = {
   id: string; ord: number; category: string | null; title: string; detail: string | null;
   source: string; sourceRef: string | null; status: "pending" | "ok" | "issue" | "na";
   note: string | null; checkedByName: string | null; photos: ChecklistPhoto[]; pins?: ItemPin[];
-  sentTo?: string | null; sentAt?: string | null;
+  sentTo?: string | null; sentAt?: string | null; sentStatus?: string | null;
 };
 // A subcontractor contact (Feature 4): company-scoped, trade = a category.
 type Sub = { id: string; name: string; email: string; trade: string | null };
+// ─── RFI types (Feature 5) ───
+type RfiRow = {
+  id: string; number: number | null; label: string; subject: string; discipline: string | null;
+  status: string; ballParty: string; priority: string; criticalPath: boolean;
+  consultantCompany: string | null; consultantName: string | null;
+  dateRequiredBy: string | null; daysOpen: number; overdue: boolean; lateWd: number;
+};
+type RfiMsg = { id: string; type: string; authorSide: string; authorName: string | null; body: string; createdAt: string };
+type RfiFull = {
+  rfi: RfiRow & {
+    question: string; proposedSolution: string | null; codeRefs: string | null; location: string | null;
+    costImpact: string; costEstimate: string | null; programmeImpact: string; programmeDays: number | null;
+    raisedByName: string | null; consultantEmail: string | null; dateRaised: string | null; dateAnswered: string | null; revision: number;
+  };
+  messages: RfiMsg[];
+  transitions: { id: string; fromStatus: string | null; toStatus: string; ballTo: string | null; byName: string | null; comment: string | null; at: string }[];
+  pins: { id: string; doc: string; page: number; x: number; y: number }[];
+  ci: { id: string; number: number; title: string } | null;
+};
+type RfiAna = {
+  slaWd: number;
+  tiles: { openTotal: number; ballConsultants: number; ballUs: number; avgResponseWd: number; overdue: number; criticalPath: number; raisedTotal: number };
+  scorecard: { consultant: string; open: number; avgWd: number; medianWd: number; pctInSla: number | null; overdue: number; avgLateWd: number; longestOpenWd: number; reopenPct: number; answered: number }[];
+  ballSplit: { consultant: string; count: number }[];
+  eot: { label: string; subject: string; consultant: string; requiredBy: string | null; answered: string | null; netLateWd: number; programmeDays: number | null; costImpact: string; status: string }[];
+};
+const RFI_BALL_PILL = (r: { ballParty: string; consultantCompany: string | null; status: string }) =>
+  r.status === "closed" || r.status === "void"
+    ? { cls: "none", label: "-" }
+    : r.ballParty === "consultant"
+      ? { cls: "consult", label: r.consultantCompany || "Consultant" }
+      : r.ballParty === "us"
+        ? { cls: "us", label: r.status === "answered" ? "Us · to close" : "Us" }
+        : { cls: "none", label: "-" };
+
 // Mirror of lib/categories CATEGORIES — the trade options for a sub.
 const TRADES = [
   "Structural", "Weathertightness / Cladding", "Fire", "Electrical", "Plumbing & Drainage",
@@ -319,12 +354,14 @@ const I = {
   up: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 20h16" /></svg>),
   tasks: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 6h12M9 12h12M9 18h12" /><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" /></svg>),
   insights: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>),
+  rfi: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m3 7 9 6 9-6" /></svg>),
 };
 const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "assistant", label: "Assistant", icon: I.chat },
   { id: "inspections", label: "Inspections", icon: I.tasks },
   { id: "plans", label: "Plans", icon: I.plans },
   { id: "upload", label: "Upload", icon: I.up },
+  { id: "rfis", label: "RFIs", icon: I.rfi },
   { id: "insights", label: "Insights", icon: I.insights },
 ];
 
@@ -648,10 +685,27 @@ export default function Page() {
   const [sendMsg, setSendMsg] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
+  const [sendNotice, setSendNotice] = useState<string | null>(null); // post-send truth banner
   const [asOpen, setAsOpen] = useState(false); // inline new-sub form
   const [asName, setAsName] = useState("");
   const [asEmail, setAsEmail] = useState("");
   const [asTrade, setAsTrade] = useState("");
+  // ─── RFIs (Feature 5) ───
+  const [rfiList, setRfiList] = useState<RfiRow[]>([]);
+  const [rfiLoaded, setRfiLoaded] = useState(false);
+  const [rfiView, setRfiView] = useState<"reg" | "ana">("reg");
+  const [rfiFilter, setRfiFilter] = useState<"all" | "open" | "overdue" | "answered" | "closed">("all");
+  const [rfiOpen, setRfiOpen] = useState<RfiFull | null>(null);
+  const [rfiAna, setRfiAna] = useState<RfiAna | null>(null);
+  const [rfiErr, setRfiErr] = useState<string | null>(null);
+  const [rfiBusy, setRfiBusy] = useState(false);
+  const [ansOpen, setAnsOpen] = useState(false);
+  const [ansText, setAnsText] = useState("");
+  const [fuText, setFuText] = useState("");
+  const [ciOpen, setCiOpen] = useState(false);
+  const [ciTitle, setCiTitle] = useState("");
+  const [newRfiOpen, setNewRfiOpen] = useState(false);
+  const [nr, setNr] = useState({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "" });
   const [noteFor, setNoteFor] = useState<string | null>(null); // item id whose note box is open
   const [noteText, setNoteText] = useState("");
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -1760,6 +1814,8 @@ export default function Page() {
       setClBusy(false);
     }
   };
+  // The post-send truth banner lives with the open checklist.
+  useEffect(() => { if (!openChecklist) setSendNotice(null); }, [openChecklist]);
   // Open the send-fixes modal: load the company's subs and pre-assign each
   // Needs-fixing item to the sub whose trade matches its category.
   const openSendFixes = async () => {
@@ -1820,14 +1876,99 @@ export default function Page() {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Couldn't send just now.");
+      // The route reports per-sub outcomes — read them, don't assume success.
+      const sent: { sub: string; items: number; status: string }[] = Array.isArray(d?.sent) ? d.sent : [];
+      const failed = sent.filter((s) => s.status === "failed");
+      openChecklistById(openChecklist.checklist.id); // pick up whatever stamped
+      if (failed.length) {
+        // Keep the modal open and say exactly who did NOT get their email.
+        setSendErr(`Couldn't email ${failed.map((f) => f.sub).join(", ")} - their item${failed.reduce((n, f) => n + f.items, 0) === 1 ? " is" : "s are"} NOT sent. Check the address and try again.`);
+        return;
+      }
       setSendOpen(false);
-      openChecklistById(openChecklist.checklist.id); // pick up the sent stamps
+      setSendNotice(
+        d.transmitting === false
+          ? "Recorded on the project log. Email delivery isn't switched on yet, so nothing was emailed - these go out the moment sending is live."
+          : `Emailed ${sent.length} sub${sent.length === 1 ? "" : "s"} - recorded on each item.`
+      );
     } catch (e) {
       setSendErr(e instanceof Error ? e.message : "Couldn't send just now.");
     } finally {
       setSendBusy(false);
     }
   };
+  // ─── RFI loaders + actions ───
+  const loadRfis = async () => {
+    try {
+      const r = await apiFetch("/api/rfis");
+      const d = await r.json();
+      if (Array.isArray(d?.rfis)) setRfiList(d.rfis);
+    } catch { /* keep whatever we have */ } finally { setRfiLoaded(true); }
+  };
+  const loadRfiAna = async () => {
+    try {
+      const r = await apiFetch("/api/rfis?analytics=1");
+      const d = await r.json();
+      if (d?.tiles) setRfiAna(d);
+    } catch { /* rail shows nothing */ }
+  };
+  const openRfiById = async (id: string) => {
+    setRfiErr(null); setAnsOpen(false); setAnsText(""); setFuText(""); setCiOpen(false); setCiTitle("");
+    try {
+      const r = await apiFetch(`/api/rfis?id=${encodeURIComponent(id)}`);
+      const d = await r.json();
+      if (r.ok && d.rfi) setRfiOpen(d);
+      else setRfiErr(d.error || "Couldn't open that RFI.");
+    } catch { setRfiErr("Couldn't open that RFI."); }
+  };
+  useEffect(() => {
+    if (tab === "rfis" && !rfiLoaded) { loadRfis(); loadRfiAna(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+  const rfiAction = async (id: string, action: string, extra: Record<string, unknown> = {}) => {
+    setRfiBusy(true); setRfiErr(null);
+    try {
+      const r = await apiFetch("/api/rfis", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action, ...extra }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "That didn't work just now.");
+      await openRfiById(id);
+      loadRfis(); loadRfiAna();
+      return true;
+    } catch (e) {
+      setRfiErr(e instanceof Error ? e.message : "That didn't work just now.");
+      return false;
+    } finally { setRfiBusy(false); }
+  };
+  const createRfi = async (sendNow: boolean) => {
+    setRfiBusy(true); setRfiErr(null);
+    try {
+      const res = await apiFetch("/api/rfis", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...nr,
+          cc: nr.cc.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean),
+          codeRefs: nr.codeRefs.split(/[,;]+/).map((s) => s.trim()).filter(Boolean),
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.rfi) throw new Error(d.error || "Couldn't save the RFI.");
+      if (sendNow) {
+        const ok = await rfiAction(d.rfi.id, "send");
+        if (!ok) { await openRfiById(d.rfi.id); } // saved as draft; error already shown
+      } else {
+        await openRfiById(d.rfi.id);
+        loadRfis();
+      }
+      setNewRfiOpen(false);
+      setNr({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "" });
+    } catch (e) {
+      setRfiErr(e instanceof Error ? e.message : "Couldn't save the RFI.");
+    } finally { setRfiBusy(false); }
+  };
+
   // Open the pin stage for a checklist item. An already-pinned item opens on
   // its pin's sheet; a fresh one opens on the check's location drawing, else
   // the first doc on the site.
@@ -2782,6 +2923,328 @@ export default function Page() {
           </div></div>
         )}
 
+        {/* ─── RFIs (Feature 5, per the approved rfi-mock.html) ─── */}
+        {tab === "rfis" && (
+          <div className="page"><div className="page-inner" style={{ maxWidth: 1060 }}>
+            {!rfiOpen && (
+              <>
+                <div className="rf-head">
+                  <div className="page-h" style={{ margin: 0 }}>RFIs</div>
+                  <div className="rf-vs">
+                    <button className={"rf-vsb" + (rfiView === "reg" ? " act" : "")} onClick={() => setRfiView("reg")}>Register</button>
+                    <button className={"rf-vsb" + (rfiView === "ana" ? " act" : "")} onClick={() => { setRfiView("ana"); loadRfiAna(); }}>Analytics</button>
+                  </div>
+                  <button className="rf-new" onClick={() => { setRfiErr(null); setNewRfiOpen(true); }}>＋ New RFI</button>
+                </div>
+                {rfiErr && <div className="ev-err" style={{ marginBottom: 12 }}>{rfiErr}</div>}
+              </>
+            )}
+
+            {!rfiOpen && rfiView === "reg" && (
+              <>
+                <div className="rf-strip">
+                  <div className="rf-tile"><b>{rfiAna?.tiles.openTotal ?? rfiList.filter((r) => r.status === "open" || r.status === "answered").length}</b><span>open</span><small>{rfiAna ? `${rfiAna.tiles.ballConsultants} with consultants` : ""}</small></div>
+                  <div className="rf-tile"><b className={rfiAna && rfiAna.tiles.avgResponseWd > rfiAna.slaWd ? "red" : ""}>{rfiAna?.tiles.avgResponseWd || 0} wd</b><span>avg response</span><small>vs {rfiAna?.slaWd ?? 7} wd allowed</small></div>
+                  <div className="rf-tile"><b className={rfiAna && rfiAna.tiles.overdue > 0 ? "red" : ""}>{rfiAna?.tiles.overdue ?? rfiList.filter((r) => r.overdue).length}</b><span>overdue</span><small>past required-by</small></div>
+                  <div className="rf-tile"><b>{rfiAna?.tiles.criticalPath ?? 0}</b><span>critical path</span><small>flagged for EOT</small></div>
+                </div>
+                <div className="rf-filters">
+                  {(["all", "open", "overdue", "answered", "closed"] as const).map((f) => (
+                    <button key={f} className={"rf-f" + (rfiFilter === f ? " act" : "")} onClick={() => setRfiFilter(f)}>
+                      {f === "all" ? "All" : f[0].toUpperCase() + f.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <div className="rf-reg">
+                  {!rfiLoaded ? (
+                    <div className="page-sub" style={{ padding: 16 }}>Loading…</div>
+                  ) : rfiList.length === 0 ? (
+                    <div style={{ padding: "26px 20px", textAlign: "center" }}>
+                      <b style={{ fontSize: 15, color: "var(--navy)" }}>No RFIs yet on {projName}</b>
+                      <p className="page-sub" style={{ margin: "8px auto 14px", maxWidth: 460 }}>
+                        Raise one and Soterra sends it, tracks who holds the ball, and builds the consultant scorecard from day one. Ask the assistant about a detail first and it pre-fills the RFI with the citation.
+                      </p>
+                      <button className="rf-new" style={{ margin: 0 }} onClick={() => setNewRfiOpen(true)}>＋ Raise the first RFI</button>
+                    </div>
+                  ) : (
+                    <table>
+                      <thead><tr><th>RFI #</th><th>Subject</th><th>Ball in court</th><th>Status</th><th>Due</th><th style={{ textAlign: "right" }}>Days open</th></tr></thead>
+                      <tbody>
+                        {rfiList
+                          .filter((r) => rfiFilter === "all" ? true : rfiFilter === "overdue" ? r.overdue : r.status === rfiFilter)
+                          .map((r) => {
+                            const ball = RFI_BALL_PILL(r);
+                            return (
+                              <tr key={r.id} className={r.overdue ? "late" : ""} onClick={() => void openRfiById(r.id)}>
+                                <td className="num">{r.label}</td>
+                                <td className="subj">{r.subject}</td>
+                                <td><span className={"rf-pill " + ball.cls}>{ball.label}</span></td>
+                                <td><span className={"rf-pill " + r.status}>{r.status}</span></td>
+                                <td className={"due" + (r.overdue ? " red" : "")}>
+                                  {r.dateRequiredBy && (r.status === "open" || r.status === "draft")
+                                    ? new Date(r.dateRequiredBy).toLocaleDateString("en-NZ", { day: "numeric", month: "short" }) + (r.overdue ? ` · ${r.lateWd} wd late` : "")
+                                    : "-"}
+                                </td>
+                                <td className="days">{r.number == null ? "-" : r.daysOpen}</td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </>
+            )}
+
+            {!rfiOpen && rfiView === "ana" && (
+              <>
+                <div className="rf-strip">
+                  <div className="rf-tile"><b>{rfiAna ? `${rfiAna.tiles.ballConsultants} / ${rfiAna.tiles.ballUs}` : "-"}</b><span>ball in court</span><small>design team / us</small></div>
+                  <div className="rf-tile"><b className={rfiAna && rfiAna.tiles.avgResponseWd > rfiAna.slaWd ? "red" : ""}>{rfiAna?.tiles.avgResponseWd || 0} wd</b><span>avg consultant response</span><small>vs {rfiAna?.slaWd ?? 7} wd allowed</small></div>
+                  <div className="rf-tile"><b className={rfiAna && rfiAna.tiles.overdue > 0 ? "red" : ""}>{rfiAna?.tiles.overdue ?? 0}</b><span>overdue</span><small>past required-by</small></div>
+                  <div className="rf-tile"><b>{rfiAna?.tiles.openTotal ?? 0}</b><span>open RFIs</span><small>of {rfiAna?.tiles.raisedTotal ?? 0} raised</small></div>
+                </div>
+
+                <div className="rf-sc">
+                  <h3>Consultant scorecard</h3>
+                  <div className="note">Worst offender first · RAG against the {rfiAna?.slaWd ?? 7} working-day allowance · this table goes in the monthly minutes</div>
+                  {rfiAna && rfiAna.scorecard.length > 0 ? (
+                    <table>
+                      <thead><tr><th>Consultant</th><th>Open</th><th>Avg (wd)</th><th>Median</th><th>% in SLA</th><th>Overdue</th><th>Avg late</th><th>Longest</th><th>Reopen %</th></tr></thead>
+                      <tbody>
+                        {rfiAna.scorecard.map((s) => {
+                          const rag = (v: number, warn: number, bad: number) => (v >= bad ? "r" : v >= warn ? "a" : "g");
+                          const ragPct = (v: number | null) => (v == null ? "" : v < 50 ? "r" : v < 75 ? "a" : "g");
+                          return (
+                            <tr key={s.consultant}>
+                              <td className="cname">{s.consultant}</td>
+                              <td>{s.open}</td>
+                              <td className={s.answered ? rag(s.avgWd, rfiAna.slaWd, rfiAna.slaWd * 1.6) : ""}>{s.answered ? s.avgWd : "-"}</td>
+                              <td className={s.answered ? rag(s.medianWd, rfiAna.slaWd, rfiAna.slaWd * 1.6) : ""}>{s.answered ? s.medianWd : "-"}</td>
+                              <td className={ragPct(s.pctInSla)}>{s.pctInSla == null ? "-" : `${s.pctInSla}%`}</td>
+                              <td className={s.overdue ? "r" : "g"}>{s.overdue}</td>
+                              <td className={s.avgLateWd ? rag(s.avgLateWd, 2, 5) : "g"}>{s.avgLateWd ? `${s.avgLateWd} wd` : "-"}</td>
+                              <td>{s.longestOpenWd ? `${s.longestOpenWd} wd` : "-"}</td>
+                              <td className={s.reopenPct >= 15 ? "a" : "g"}>{s.reopenPct}%</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="page-sub" style={{ padding: "4px 15px 14px" }}>Numbers appear as RFIs are sent and answered.</div>
+                  )}
+                </div>
+
+                {rfiAna && rfiAna.scorecard.some((s) => s.answered > 0) && (
+                  <div className="rf-sc">
+                    <h3>Average turnaround by consultant</h3>
+                    <div className="rf-bars">
+                      {rfiAna.scorecard.filter((s) => s.answered > 0).map((s) => {
+                        const max = Math.max(...rfiAna.scorecard.map((x) => x.avgWd), rfiAna.slaWd * 2);
+                        return (
+                          <div className="rf-brow" key={s.consultant}>
+                            <span className="bl">{s.consultant}</span>
+                            <div className="rf-btrack">
+                              <div className={"rf-bfill" + (s.avgWd > rfiAna.slaWd ? " over" : "")} style={{ width: `${Math.min(96, (s.avgWd / max) * 100)}%` }} />
+                              <div className="rf-slaline" style={{ left: `${(rfiAna.slaWd / max) * 100}%` }} />
+                              <span className="rf-bval">{s.avgWd} wd</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="rf-guard" style={{ textAlign: "right" }}>│ = the {rfiAna.slaWd} working-day allowance</div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="rf-eot">
+                  <div className="t">
+                    <b>EOT evidence pack</b>
+                    <small>Every late, critical-path RFI as cause and effect: issued → required-by → answered → net consultant days late → schedule impact. {rfiAna?.eot.length ? `${rfiAna.eot.length} RFI${rfiAna.eot.length === 1 ? "" : "s"} qualify right now.` : "None qualify right now - that's a good thing."}</small>
+                  </div>
+                </div>
+                {rfiAna && rfiAna.eot.length > 0 && (
+                  <div className="rf-sc">
+                    <table>
+                      <thead><tr><th>RFI</th><th>Subject</th><th>Consultant</th><th>Required by</th><th>Answered</th><th>Net late</th><th>Schedule impact</th><th>Status</th></tr></thead>
+                      <tbody>
+                        {rfiAna.eot.map((e) => (
+                          <tr key={e.label}>
+                            <td className="cname">{e.label}</td>
+                            <td>{e.subject}</td>
+                            <td>{e.consultant}</td>
+                            <td>{e.requiredBy ? new Date(e.requiredBy).toLocaleDateString("en-NZ", { day: "numeric", month: "short" }) : "-"}</td>
+                            <td>{e.answered ? new Date(e.answered).toLocaleDateString("en-NZ", { day: "numeric", month: "short" }) : "still open"}</td>
+                            <td className="r">{e.netLateWd} wd</td>
+                            <td>{e.programmeDays ? `${e.programmeDays} days` : "-"}</td>
+                            <td><span className={"rf-pill " + e.status}>{e.status}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div className="rf-guard">Shown against the register&apos;s assumed allowance ({rfiAna?.slaWd ?? 7} working days). Turnaround is net of clarification bounce-backs (the clock pauses while the ball is back with us). Our own late-raised RFIs stay in the log - an honest register is what makes the pack defensible.</div>
+              </>
+            )}
+
+            {rfiOpen && (
+              <>
+                <button className="rf-back" onClick={() => { setRfiOpen(null); loadRfis(); }}>‹ Back to the register</button>
+                <div className="rf-dhead">
+                  <span className="no">{rfiOpen.rfi.label}</span>
+                  <span className="rev">Rev {rfiOpen.rfi.revision}</span>
+                  <span className="subj">{rfiOpen.rfi.subject}</span>
+                  <span className={"rf-pill " + rfiOpen.rfi.status}>{rfiOpen.rfi.status}</span>
+                  {(() => { const b = RFI_BALL_PILL(rfiOpen.rfi); return <span className={"rf-pill " + b.cls}>{b.label}</span>; })()}
+                  {rfiOpen.rfi.discipline && <span className="rf-pill us">{rfiOpen.rfi.discipline}</span>}
+                  <span className="meta">
+                    {rfiOpen.rfi.dateRequiredBy && rfiOpen.rfi.status === "open" ? `Due ${new Date(rfiOpen.rfi.dateRequiredBy).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })} · ` : ""}
+                    {rfiOpen.rfi.number != null ? `${rfiOpen.rfi.daysOpen} days open` : "draft"}
+                  </span>
+                </div>
+                {rfiErr && <div className="ev-err" style={{ marginBottom: 12 }}>{rfiErr}</div>}
+
+                <div className="rf-cols">
+                  <div className="rf-thread">
+                    <div className="rf-card">
+                      <div className="k">Question · {rfiOpen.rfi.raisedByName ?? "us"}{rfiOpen.rfi.dateRaised ? ` · ${new Date(rfiOpen.rfi.dateRaised).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : " · draft"}</div>
+                      <div className="rf-q">{rfiOpen.rfi.question}</div>
+                      {rfiOpen.rfi.proposedSolution && <div className="rf-prop"><b>Our proposed solution</b>{rfiOpen.rfi.proposedSolution}</div>}
+                      {(rfiOpen.pins.length > 0 || rfiOpen.rfi.codeRefs) && (
+                        <div className="rf-refs">
+                          {rfiOpen.pins.map((p) => (
+                            <span key={p.id} className="rf-rchip" onClick={() => {
+                              const nd = docs.find((d) => d.doc === p.doc);
+                              setPinStage({ doc: p.doc, page: p.page, npages: Math.max(nd?.indexed ?? 0, p.page) });
+                            }}>📌 {p.doc} · p{p.page}</span>
+                          ))}
+                          {(rfiOpen.rfi.codeRefs ? (JSON.parse(rfiOpen.rfi.codeRefs) as string[]) : []).map((c) => (
+                            <span key={c} className="rf-rchip code">{c}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {rfiOpen.rfi.status === "draft" && (
+                      <div className="rf-card" style={{ borderColor: "rgba(139,92,246,.4)" }}>
+                        <div className="k">Draft - not sent, no number burned</div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button className="lg-btn primary" style={{ height: 40, margin: 0, width: "auto", padding: "0 18px", fontSize: 13 }} disabled={rfiBusy} onClick={() => void rfiAction(rfiOpen.rfi.id, "send")}>
+                            {rfiBusy ? "Sending…" : `Send to ${rfiOpen.rfi.consultantCompany || "the consultant"}`}
+                          </button>
+                          <button className="lg-btn" style={{ height: 40, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} disabled={rfiBusy} onClick={() => void rfiAction(rfiOpen.rfi.id, "void")}>Void draft</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {rfiOpen.messages.filter((m) => m.type === "system").map((m) => (
+                      <div className="rf-sys" key={m.id}>{m.body} · {new Date(m.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</div>
+                    ))}
+
+                    {rfiOpen.rfi.status !== "draft" && (
+                      <div className="rf-card rf-ans">
+                        <div className="k">Official response</div>
+                        {rfiOpen.messages.filter((m) => m.type === "official_answer").length === 0 ? (
+                          ansOpen ? (
+                            <div>
+                              <textarea className="ev-in" rows={4} autoFocus value={ansText} placeholder="Paste the consultant's emailed answer here - it becomes the locked official response" onChange={(e) => setAnsText(e.target.value)} />
+                              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                                <button className="lg-btn primary" style={{ height: 38, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} disabled={rfiBusy || !ansText.trim()} onClick={async () => { if (await rfiAction(rfiOpen.rfi.id, "log_answer", { body: ansText })) { setAnsOpen(false); setAnsText(""); } }}>Log it</button>
+                                <button className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => setAnsOpen(false)}>Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ textAlign: "center", padding: "10px 0 4px" }}>
+                              <p className="page-sub" style={{ margin: "0 0 10px" }}>Awaiting {rfiOpen.rfi.consultantCompany || "the consultant"}. Their emailed reply gets logged here.</p>
+                              {rfiOpen.rfi.status === "open" && <button className="lg-btn primary" style={{ height: 38, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} onClick={() => setAnsOpen(true)}>Log the answer</button>}
+                            </div>
+                          )
+                        ) : (
+                          <>
+                            {rfiOpen.messages.filter((m) => m.type === "official_answer").map((m, i, arr) => (
+                              <div key={m.id} style={{ marginBottom: i < arr.length - 1 ? 12 : 0 }}>
+                                <div className="rf-anstext">{m.body}</div>
+                                <div className="rf-ansmeta">{m.authorName ?? "Consultant"} · {new Date(m.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</div>
+                              </div>
+                            ))}
+                            {rfiOpen.rfi.status === "answered" && (
+                              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                                {!rfiOpen.ci && (ciOpen ? (
+                                  <div style={{ width: "100%" }}>
+                                    <input className="ev-in" value={ciTitle} placeholder="CI title, e.g. Revise A-201 wall thickness to 190" onChange={(e) => setCiTitle(e.target.value)} />
+                                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                                      <button className="lg-btn primary" style={{ height: 38, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} disabled={rfiBusy || !ciTitle.trim()} onClick={async () => { if (await rfiAction(rfiOpen.rfi.id, "create_ci", { title: ciTitle })) { setCiOpen(false); setCiTitle(""); } }}>Create the CI</button>
+                                      <button className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => setCiOpen(false)}>Cancel</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13, color: "#0E7A55", borderColor: "rgba(16,185,129,.4)" }} onClick={() => setCiOpen(true)}>This changes the works - create CI</button>
+                                ))}
+                                <button className="lg-btn primary" style={{ height: 38, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} disabled={rfiBusy} onClick={() => void rfiAction(rfiOpen.rfi.id, "close")}>Accept + close</button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {rfiOpen.ci && (
+                      <div className="rf-ciband">✅ Answer spawned CI-{String(rfiOpen.ci.number).padStart(3, "0")} · {rfiOpen.ci.title}. The assistant treats the CI as governing the drawing it amends.</div>
+                    )}
+
+                    {rfiOpen.messages.filter((m) => m.type === "followup").map((m) => (
+                      <div className="rf-fu" key={m.id}>
+                        <div className="who">{m.authorName ?? (m.authorSide === "consultant" ? "Consultant" : "Us")} · {new Date(m.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</div>
+                        <div className="body">{m.body}</div>
+                      </div>
+                    ))}
+
+                    {rfiOpen.rfi.status !== "draft" && rfiOpen.rfi.status !== "void" && (
+                      <div className="rf-card">
+                        <div className="k">Follow-up</div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input className="ev-in" style={{ flex: 1 }} value={fuText} placeholder={rfiOpen.rfi.status === "answered" ? "Ask a follow-up - it reopens the RFI and the consultant clock" : "Add context to the thread"} onChange={(e) => setFuText(e.target.value)} />
+                          <button className="lg-btn" style={{ height: 42, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} disabled={rfiBusy || !fuText.trim()} onClick={async () => { if (await rfiAction(rfiOpen.rfi.id, "followup", { body: fuText, bounce: rfiOpen.rfi.status === "answered" })) setFuText(""); }}>Send</button>
+                        </div>
+                        {rfiOpen.rfi.status === "closed" && (
+                          <button className="lg-btn" style={{ height: 36, margin: "10px 0 0", width: "auto", padding: "0 14px", fontSize: 12.5 }} disabled={rfiBusy} onClick={() => void rfiAction(rfiOpen.rfi.id, "reopen")}>Reopen this RFI</button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rf-rail">
+                    <div className="rf-card">
+                      <div className="k">Details</div>
+                      <div className="rf-kv"><span className="k2">Assigned to</span><span className="v">{[rfiOpen.rfi.consultantName, rfiOpen.rfi.consultantCompany].filter(Boolean).join(" · ") || "-"}</span></div>
+                      <div className="rf-kv"><span className="k2">Raised by</span><span className="v">{rfiOpen.rfi.raisedByName ?? "-"}</span></div>
+                      <div className="rf-kv"><span className="k2">Priority</span><span className="v">{rfiOpen.rfi.priority}</span></div>
+                      <div className="rf-kv"><span className="k2">Location</span><span className="v">{rfiOpen.rfi.location ?? "-"}</span></div>
+                      <div className="rf-kv"><span className="k2">Cost impact</span><span className={"v" + (rfiOpen.rfi.costImpact !== "none" ? " warn" : "")}>{rfiOpen.rfi.costImpact}{rfiOpen.rfi.costEstimate ? ` · ${rfiOpen.rfi.costEstimate}` : ""}</span></div>
+                      <div className="rf-kv"><span className="k2">Programme</span><span className={"v" + (rfiOpen.rfi.programmeImpact !== "none" ? " warn" : "")}>{rfiOpen.rfi.programmeImpact}{rfiOpen.rfi.programmeDays ? ` · est ${rfiOpen.rfi.programmeDays} days` : ""}</span></div>
+                      {rfiOpen.rfi.criticalPath && <div className="rf-kv"><span className="k2">Critical path</span><span className="v warn">Flagged</span></div>}
+                      {rfiOpen.rfi.dateRequiredBy && <div className="rf-kv"><span className="k2">Required by</span><span className="v">{new Date(rfiOpen.rfi.dateRequiredBy).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</span></div>}
+                      {rfiOpen.rfi.dateAnswered && <div className="rf-kv"><span className="k2">Answered</span><span className="v">{new Date(rfiOpen.rfi.dateAnswered).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</span></div>}
+                    </div>
+                    <div className="rf-card">
+                      <div className="k">Activity (the audit trail)</div>
+                      {rfiOpen.transitions.length === 0 && <div className="page-sub" style={{ margin: 0 }}>Nothing yet.</div>}
+                      {rfiOpen.transitions.map((t) => (
+                        <div className="rf-aud" key={t.id}>
+                          <b>{t.fromStatus ?? "·"} → {t.toStatus}</b>{t.comment ? ` · ${t.comment}` : ""}
+                          <small>{t.byName ?? "system"} · {new Date(t.at).toLocaleString("en-NZ", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</small>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div></div>
+        )}
+
         {tab === "insights" && (
           <div className="page"><div className="page-inner">
             <div className="cal-top">
@@ -3100,6 +3563,79 @@ export default function Page() {
           onClose={() => setPinStage(null)}
           fetchApi={apiFetch}
         />
+      )}
+
+      {/* ─── New RFI (Feature 5) ─── */}
+      {newRfiOpen && (
+        <div className="scrim" onClick={() => { if (!rfiBusy) setNewRfiOpen(false); }}>
+          <div className="sheet" style={{ maxWidth: 600, maxHeight: "90vh" }} onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti"><b>New RFI</b><small>{projName}</small></div>
+              {!rfiBusy && <button className="sh-x" onClick={() => setNewRfiOpen(false)}>✕</button>}
+            </div>
+            <div className="form-body">
+              <div className="fld" style={{ marginBottom: 12 }}>
+                <label className="ev-lbl">Subject</label>
+                <input className="ev-in" value={nr.subject} placeholder="e.g. Lintel fixing at grid C3, Level 1" onChange={(e) => setNr((v) => ({ ...v, subject: e.target.value }))} />
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label className="ev-lbl">Discipline</label>
+                  <select className="ev-in" value={nr.discipline} onChange={(e) => setNr((v) => ({ ...v, discipline: e.target.value }))}>
+                    <option value="">Pick one…</option>
+                    {["Architectural", "Structural", "Civil", "Fire", "Mechanical", "Electrical", "Hydraulic", "Geotech", "Facade"].map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="ev-lbl">Priority</label>
+                  <select className="ev-in" value={nr.priority} onChange={(e) => setNr((v) => ({ ...v, priority: e.target.value }))}>
+                    <option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="ev-lbl">Location</label>
+                  <input className="ev-in" value={nr.location} placeholder="Level 1 · grid C3" onChange={(e) => setNr((v) => ({ ...v, location: e.target.value }))} />
+                </div>
+              </div>
+              <label className="ev-lbl" style={{ marginTop: 12 }}>Question</label>
+              <textarea className="ev-in" rows={3} value={nr.question} placeholder="What needs answering, with the drawing references in the text" onChange={(e) => setNr((v) => ({ ...v, question: e.target.value }))} />
+              <label className="ev-lbl" style={{ marginTop: 12 }}>Our proposed solution (expected on NZ jobs)</label>
+              <textarea className="ev-in" rows={2} value={nr.proposedSolution} placeholder="What you'd do - the consultant just has to say yes" onChange={(e) => setNr((v) => ({ ...v, proposedSolution: e.target.value }))} />
+              <label className="ev-lbl" style={{ marginTop: 12 }}>Code / standard references (comma-separated)</label>
+              <input className="ev-in" value={nr.codeRefs} placeholder="NZS 3604 cl 8.6, E2/AS1 fig 17" onChange={(e) => setNr((v) => ({ ...v, codeRefs: e.target.value }))} />
+              <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <label className="ev-lbl">Consultant (person)</label>
+                  <input className="ev-in" value={nr.consultantName} placeholder="Jane Smith" onChange={(e) => setNr((v) => ({ ...v, consultantName: e.target.value }))} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="ev-lbl">Their company</label>
+                  <input className="ev-in" value={nr.consultantCompany} placeholder="Holmes Structural" onChange={(e) => setNr((v) => ({ ...v, consultantCompany: e.target.value }))} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <label className="ev-lbl">Their email</label>
+                  <input className="ev-in" type="email" value={nr.consultantEmail} placeholder="jane@holmes.co.nz" onChange={(e) => setNr((v) => ({ ...v, consultantEmail: e.target.value }))} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="ev-lbl">Cc (comma-separated)</label>
+                  <input className="ev-in" value={nr.cc} placeholder="architect@…" onChange={(e) => setNr((v) => ({ ...v, cc: e.target.value }))} />
+                </div>
+              </div>
+              <p className="page-sub" style={{ margin: "12px 0 0" }}>
+                Send assigns the next RFI number, emails the consultant from this site&apos;s Soterra address (replies land in your inbox), starts the {`7`} working-day clock, and writes the audit line. A draft burns nothing. Pin a drawing from the RFI once it&apos;s created.
+              </p>
+              {rfiErr && <div className="ev-err">{rfiErr}</div>}
+              <div className="form-actions">
+                <button className="lg-btn" style={{ height: 46, margin: 0, width: "auto", padding: "0 18px" }} disabled={rfiBusy || !nr.subject.trim() || !nr.question.trim()} onClick={() => void createRfi(false)}>Save draft</button>
+                <button className="lg-btn primary" style={{ height: 46, margin: 0, flex: 1 }} disabled={rfiBusy || !nr.subject.trim() || !nr.question.trim() || !nr.consultantEmail.trim()} onClick={() => void createRfi(true)}>
+                  {rfiBusy ? "Sending…" : "Send RFI"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ─── send the Needs-fixing items to subs (Feature 4 finish) ─── */}
@@ -3555,6 +4091,7 @@ export default function Page() {
             </div>
             <div className="dm-body">
               {clErr && <div className="ev-err" style={{ marginBottom: 12 }}>{clErr}</div>}
+              {sendNotice && <div className="ck-notice" onClick={() => setSendNotice(null)}>{sendNotice}</div>}
               {openChecklist.items.map((it, itIdx) => (
                 <div className={"ck" + (it.status !== "pending" ? " ck-" + it.status : "")} key={it.id}>
                   <div className="ck-head">
@@ -3607,7 +4144,11 @@ export default function Page() {
                     {it.checkedByName && <span className="ck-by">{it.checkedByName}</span>}
                   </div>
                   {it.sentTo && (
-                    <div className="ck-sent">✉ Sent to {it.sentTo}{it.sentAt ? ` · ${new Date(it.sentAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : ""} · recorded</div>
+                    <div className="ck-sent" style={it.sentStatus !== "sent" ? { color: "var(--slate)" } : undefined}>
+                      {it.sentStatus === "sent" ? "✉ Sent to" : "🕓 Recorded for"} {it.sentTo}
+                      {it.sentAt ? ` · ${new Date(it.sentAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : ""}
+                      {it.sentStatus === "sent" ? " · recorded" : " · emails when sending goes live"}
+                    </div>
                   )}
                 </div>
               ))}

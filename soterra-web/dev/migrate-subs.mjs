@@ -22,6 +22,7 @@ await sql`CREATE TABLE IF NOT EXISTS subs (
 await sql`CREATE INDEX IF NOT EXISTS subs_company_idx ON subs(company_id)`;
 await sql`ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS sent_to text`;
 await sql`ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS sent_at timestamptz`;
+await sql`ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS sent_status text`;
 
 const t = await sql`SELECT table_name FROM information_schema.tables WHERE table_name = 'subs'`;
 const c = await sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'checklist_items' AND column_name = 'sent_to'`;

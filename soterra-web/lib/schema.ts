@@ -372,6 +372,10 @@ export const checklistItems = pgTable(
     // recorded" state the checklist shows. Cleared never; resend updates it.
     sentTo: text("sent_to"), // the sub's name at send time
     sentAt: timestamp("sent_at", { withTimezone: true }),
+    // "sent" = the provider accepted it. "recorded" = composed + logged but
+    // NOT transmitted (record-only mode). The UI must never show a recorded
+    // send as a delivered one — that distinction is this column.
+    sentStatus: text("sent_status"),
     checkedBy: text("checked_by"),
     checkedByName: text("checked_by_name"),
     checkedAt: timestamp("checked_at", { withTimezone: true }),
