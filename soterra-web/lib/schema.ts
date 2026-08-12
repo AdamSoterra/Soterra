@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, uuid, index, integer, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, uuid, index, integer, uniqueIndex, doublePrecision } from "drizzle-orm/pg-core";
 
 // ─── Companies: the BUSINESS a site belongs to, and the boundary that pooled
 //     failure history lives inside. Sites belong to a company; history and
@@ -441,6 +441,37 @@ export const emailLog = pgTable(
   })
 );
 
+// ─── Plan pins — Foundation 2. An x,y marker on one page of one uploaded
+//     drawing, tied to the record it annotates (a QA flag, an RFI, or a
+//     checklist item). x/y are % of the sheet (0-100), so they hold at any
+//     zoom and any render size. The sheet is addressed the way the whole app
+//     addresses sheets: projectId + doc title + page. A revised sheet uploads
+//     as its own doc (lib/sheetRev.ts), so pins stay with the revision they
+//     were dropped on — which is exactly what an evidentiary record wants. ───
+export const planPins = pgTable(
+  "plan_pins",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    doc: text("doc").notNull(), // plan_pages.doc of the sheet pinned on
+    page: integer("page").notNull(),
+    x: doublePrecision("x").notNull(), // % of sheet width, 0-100
+    y: doublePrecision("y").notNull(), // % of sheet height, 0-100
+    recordType: text("record_type").notNull(), // qa_flag | rfi | checklist_item
+    recordId: text("record_id").notNull(),
+    label: text("label"), // short marker text, e.g. "1" or "RFI-014"
+    createdBy: text("created_by"),
+    createdByName: text("created_by_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    bySheet: index("plan_pins_sheet_idx").on(t.projectId, t.doc, t.page),
+    byRecord: index("plan_pins_record_idx").on(t.recordType, t.recordId),
+    byCompany: index("plan_pins_company_idx").on(t.companyId),
+  })
+);
+
 export type Company = typeof companies.$inferSelect;
 export type Inspection = typeof inspections.$inferSelect;
 export type InspectionItem = typeof inspectionItems.$inferSelect;
@@ -457,3 +488,4 @@ export type ChatThread = typeof chatThreads.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type CodePage = typeof codePages.$inferSelect;
 export type EmailLog = typeof emailLog.$inferSelect;
+export type PlanPin = typeof planPins.$inferSelect;

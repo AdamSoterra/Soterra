@@ -712,3 +712,30 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 /* The choose-files pills are real buttons now (keyboard + assistive tech), so
    strip the default button chrome and keep the pill look. */
 .drop button.soon{border:none;font-family:inherit;cursor:pointer}
+
+/* ─── Pin stage (Foundation 2): full-screen sheet browser with the pin
+   overlay from plan-pinning-mock.html. ps- prefix — .sheet/.canvas are
+   taken by the citation modal. Pins are % positioned inside .ps-fit so
+   they stay glued to the drawing at any zoom width. ─── */
+.ps-scrim{position:fixed;inset:0;z-index:120;background:#39485C;display:flex;flex-direction:column}
+.ps-top{flex:0 0 auto;min-height:52px;display:flex;align-items:center;gap:12px;padding:8px 14px;background:#fff;border-bottom:1px solid var(--line2)}
+.ps-top .ti{min-width:0;flex:1}
+.ps-top .ti b{display:block;font-size:13.5px;font-weight:700;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ps-top .ti small{font-size:12px;color:var(--mut)}
+.ps-nav{display:flex;align-items:center;gap:4px}
+.ps-nav button{width:34px;height:34px;border:1px solid var(--line);background:#fff;border-radius:9px;font-size:16px;color:var(--navy);cursor:pointer}
+.ps-nav button:disabled{opacity:.35;cursor:default}
+.ps-nav span{font-size:12.5px;font-weight:600;color:var(--slate);min-width:64px;text-align:center}
+.ps-x{width:34px;height:34px;border:none;background:var(--bg);border-radius:9px;font-size:15px;color:var(--slate);cursor:pointer}
+.ps-canvas{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;display:flex;padding:18px}
+.ps-fit{margin:auto;position:relative;line-height:0}
+.ps-fit img{width:100%;height:auto;display:block;background:#fff;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.ps-pinlayer{position:absolute;inset:0}
+.ps-pin{position:absolute;transform:translate(-50%,-100%);cursor:pointer;z-index:5;line-height:1}
+.ps-pin .head{width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 10px rgba(0,0,0,.35);border:2px solid #fff;background:var(--amber, #F59E0B)}
+.ps-pin .head b{transform:rotate(45deg);color:#fff;font-size:11px;font-weight:800}
+.ps-pin.rfi .head{background:var(--brand)}
+.ps-pin.checklist_item .head{background:#8B5CF6}
+.ps-pin.sel .head{outline:3px solid rgba(255,255,255,.7);outline-offset:1px}
+.ps-msg{margin:auto;color:#DCE6F2;font-size:13.5px;font-weight:600}
+.ps-hint{position:absolute;top:64px;left:50%;transform:translateX(-50%);background:rgba(12,42,71,.85);color:#fff;font-size:12px;font-weight:600;padding:7px 14px;border-radius:20px;z-index:10;pointer-events:none}

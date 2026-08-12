@@ -367,7 +367,7 @@ function AppLogin({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted
 // The indexed-document list, collapsed by default. A full drawing set is 120+
 // sheets, which buried the rest of the page and made finding one to delete a
 // long scroll. Shown on both Plans and Update plans, so it lives here.
-function DocsList({ docs, onDelete }: { docs: { doc: string; indexed: number }[]; onDelete: (doc: string) => void }) {
+function DocsList({ docs, onDelete, onOpen }: { docs: { doc: string; indexed: number }[]; onDelete: (doc: string) => void; onOpen?: (doc: string, npages: number) => void }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const shown = q.trim() ? docs.filter((d) => d.doc.toLowerCase().includes(q.trim().toLowerCase())) : docs;
@@ -387,10 +387,16 @@ function DocsList({ docs, onDelete }: { docs: { doc: string; indexed: number }[]
           )}
           <div className="docs">
             {shown.map((d) => (
-              <div className="doc" key={d.doc}>
+              <div
+                className="doc"
+                key={d.doc}
+                onClick={onOpen ? () => onOpen(d.doc, d.indexed) : undefined}
+                style={onOpen ? { cursor: "pointer" } : undefined}
+                title={onOpen ? "Open the sheets" : undefined}
+              >
                 <div className="ic spc">PDF</div>
                 <div className="dt"><b>{d.doc}</b><small>{d.indexed} page{d.indexed === 1 ? "" : "s"} indexed</small></div>
-                <button className="sh-x" title="Remove from index" onClick={() => onDelete(d.doc)} style={{ position: "static" }}>✕</button>
+                <button className="sh-x" title="Remove from index" onClick={(e) => { e.stopPropagation(); onDelete(d.doc); }} style={{ position: "static" }}>✕</button>
               </div>
             ))}
             {shown.length === 0 && <div className="page-sub" style={{ margin: "4px 2px" }}>Nothing matches “{q}”.</div>}
@@ -407,6 +413,8 @@ export default function Page() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState<Cite | null>(null);
+  // Pin stage (Foundation 2): full-screen sheet browser, opened from Plans.
+  const [pinStage, setPinStage] = useState<{ doc: string; page: number; npages: number } | null>(null);
   // Reset the manufacturer-page image state each time a different source opens,
   // so a previous render error or spinner doesn't carry over.
   const [docImg, setDocImg] = useState<"loading" | "ok" | "error">("loading");
@@ -2528,7 +2536,7 @@ export default function Page() {
                     <div style={{ flex: 1 }}><small>{docs.length} document{docs.length > 1 ? "s" : ""} read and searchable by the assistant.</small><span className="grn">● Ready</span></div>
                   </div>
                   <div style={{ marginTop: 14 }}>
-                    <DocsList docs={docs} onDelete={deletePlan} />
+                    <DocsList docs={docs} onDelete={deletePlan} onOpen={(doc, npages) => setPinStage({ doc, page: 1, npages })} />
                   </div>
                 </>
               )}
@@ -2932,6 +2940,19 @@ export default function Page() {
       )}
 
       {/* ─── full-screen, zoomable page image ─── */}
+      {/* ─── pin stage: full-screen sheet browser with pins (Foundation 2) ─── */}
+      {pinStage && projectId && (
+        <PinStage
+          key={pinStage.doc}
+          projectId={projectId}
+          doc={pinStage.doc}
+          page={pinStage.page}
+          npages={pinStage.npages}
+          onClose={() => setPinStage(null)}
+          fetchApi={apiFetch}
+        />
+      )}
+
       {zoomImg && (
         <div ref={zoomScrimRef} className="zoomscrim" onClick={() => { setZoomImg(null); setZoomScale(1); }}
           onPointerDown={(e) => {
@@ -4010,6 +4031,169 @@ function TaskRow({ t, onToggle, full, onDelete }: { t: CalTask; onToggle: (t: Ca
       <div className="tk"><b>{t.title}</b>{meta && <small>{meta}</small>}</div>
       <span className={"vis " + vis}>{vis === "team" ? "Team" : "Just me"}</span>
       {onDelete && <button className="row-x" title="Delete" onClick={() => onDelete(t)}>✕</button>}
+    </div>
+  );
+}
+
+// ─── Pin stage (Foundation 2) ─────────────────────────────────────────────
+// Full-screen browser for one uploaded drawing: page nav, wheel/button zoom,
+// drag pan, and the pin overlay from plan-pinning-mock.html. Pins are stored
+// as % of the sheet so they stay glued to the drawing at any zoom.
+// Read-only by default; a feature (QA check, RFI, flag-to-sub) passes onDrop
+// to enable click-to-pin and onPinClick to open the pinned record.
+type PinRow = { id: string; doc: string; page: number; x: number; y: number; recordType: string; recordId: string; label: string | null };
+
+function PinStage(p: {
+  projectId: string;
+  doc: string;
+  page: number;
+  npages: number;
+  onClose: () => void;
+  fetchApi: (path: string, init?: RequestInit) => Promise<Response>;
+  onDrop?: (at: { x: number; y: number; page: number }) => void;
+  onPinClick?: (pin: PinRow) => void;
+}) {
+  const [page, setPage] = useState(p.page);
+  const [pins, setPins] = useState<PinRow[]>([]);
+  const [img, setImg] = useState<"loading" | "ok" | "error">("loading");
+  const [scale, setScale] = useState(1);
+  const [sel, setSel] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const scaleRef = useRef(1);
+  useEffect(() => { scaleRef.current = scale; }, [scale]);
+  useEffect(() => { setImg("loading"); setSel(null); }, [page]);
+
+  // The page's pins. fetchApi is recreated each parent render, so it is
+  // deliberately not a dependency — doc/page changing is what matters.
+  useEffect(() => {
+    let live = true;
+    p.fetchApi(`/api/pins?doc=${encodeURIComponent(p.doc)}&page=${page}`)
+      .then((r) => (r.ok ? r.json() : { pins: [] }))
+      .then((d) => { if (live) setPins(Array.isArray(d?.pins) ? d.pins : []); })
+      .catch(() => { if (live) setPins([]); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.doc, page]);
+
+  // Wheel / trackpad-pinch zoom anchored on the pointer — same approach as the
+  // full-screen citation zoom (native listener; React's onWheel is passive).
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const prev = scaleRef.current;
+      const next = Math.min(6, Math.max(1, prev * Math.exp(-e.deltaY * 0.0015)));
+      if (Math.abs(next - prev) < 0.001) return;
+      const rect = el.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const cx = el.scrollLeft + px;
+      const cy = el.scrollTop + py;
+      const ratio = next / prev;
+      scaleRef.current = next;
+      setScale(next);
+      requestAnimationFrame(() => {
+        el.scrollLeft = cx * ratio - px;
+        el.scrollTop = cy * ratio - py;
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const src = `/api/plan-page?project=${encodeURIComponent(p.projectId)}&doc=${encodeURIComponent(p.doc)}&p=${page}`;
+  return (
+    <div className="ps-scrim">
+      <div className="ps-top">
+        <div className="ti">
+          <b>{p.doc}</b>
+          <small>{pins.length ? `${pins.length} pin${pins.length === 1 ? "" : "s"} on this page` : "No pins on this page"}</small>
+        </div>
+        <div className="ps-nav">
+          <button disabled={page <= 1} onClick={() => setPage(page - 1)}>‹</button>
+          <span>page {page} / {p.npages}</span>
+          <button disabled={page >= p.npages} onClick={() => setPage(page + 1)}>›</button>
+        </div>
+        <button className="ps-x" onClick={p.onClose}>✕</button>
+      </div>
+      <div
+        className="ps-canvas"
+        ref={canvasRef}
+        onPointerDown={(e) => {
+          // Drag to pan. Skip pins (they take the click) and non-primary buttons.
+          if (e.button !== 0 || (e.target as HTMLElement).closest(".ps-pin")) return;
+          const el = canvasRef.current;
+          if (!el) return;
+          const sx = e.clientX, sy = e.clientY;
+          const l0 = el.scrollLeft, t0 = el.scrollTop;
+          let moved = false;
+          const move = (m: PointerEvent) => {
+            if (Math.abs(m.clientX - sx) + Math.abs(m.clientY - sy) > 3) moved = true;
+            el.scrollLeft = l0 - (m.clientX - sx);
+            el.scrollTop = t0 - (m.clientY - sy);
+          };
+          const up = () => {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+            // A drag must not also count as a click (which would drop a pin).
+            if (moved) window.addEventListener("click", (c) => { c.stopPropagation(); c.preventDefault(); }, { capture: true, once: true });
+          };
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", up);
+        }}
+      >
+        {img === "error" ? (
+          <div className="ps-msg">Couldn&apos;t load this sheet.</div>
+        ) : (
+          <div className="ps-fit" style={{ width: scale === 1 ? "min(100%, 1100px)" : `${scale * 100}%` }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={src}
+              alt={`${p.doc} page ${page}`}
+              draggable={false}
+              style={{ opacity: img === "ok" ? 1 : 0 }}
+              onLoad={() => setImg("ok")}
+              onError={() => setImg("error")}
+            />
+            {img === "ok" && (
+              <div
+                className="ps-pinlayer"
+                style={p.onDrop ? { cursor: "crosshair" } : undefined}
+                onClick={(e) => {
+                  if (!p.onDrop) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = Math.max(0.5, Math.min(99.5, ((e.clientX - rect.left) / rect.width) * 100));
+                  const y = Math.max(0.5, Math.min(99.5, ((e.clientY - rect.top) / rect.height) * 100));
+                  p.onDrop({ x, y, page });
+                }}
+              >
+                {pins.map((pin) => (
+                  <div
+                    key={pin.id}
+                    className={"ps-pin " + pin.recordType + (sel === pin.id ? " sel" : "")}
+                    style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
+                    onClick={(e) => { e.stopPropagation(); setSel(pin.id); p.onPinClick?.(pin); }}
+                  >
+                    <div className="head"><b>{pin.label || "•"}</b></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {img === "loading" && (
+          <div className="ps-msg" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+            Loading the sheet…
+          </div>
+        )}
+      </div>
+      {p.onDrop && img === "ok" && <div className="ps-hint">📌 Tap the drawing to drop a pin</div>}
+      <div className="zoomctl">
+        <button onClick={() => setScale((s) => Math.max(1, +(s - 0.4).toFixed(2)))}>−</button>
+        <span>{Math.round(scale * 100)}%</span>
+        <button onClick={() => setScale((s) => Math.min(6, +(s + 0.4).toFixed(2)))}>+</button>
+      </div>
     </div>
   );
 }
