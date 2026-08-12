@@ -397,6 +397,50 @@ export const checklistPhotos = pgTable(
   })
 );
 
+// ─── Outbound email log — every email Soterra sends, recorded BEFORE it is
+//     transmitted. The row is the product's memory of the send: the RFI
+//     analytics, the QA record and the EOT evidence pack all read this table,
+//     never the provider. status tells the story:
+//       recorded → composed + stored, not transmitted (no RESEND_API_KEY yet,
+//                  or record-only mode) — flips to real sending the moment the
+//                  key exists, with zero data difference
+//       sent     → accepted by Resend; providerId holds their message id
+//       failed   → provider rejected it; error says why (the record remains)
+//     One email can carry several records (three flags to the same sub), so
+//     recordIds is a JSON array. ───
+export const emailLog = pgTable(
+  "email_log",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    kind: text("kind").notNull(), // qa_flags | rfi | inspection_items | test
+    recordType: text("record_type"), // qa_flag | rfi | inspection_item
+    recordIds: text("record_ids"), // JSON array of record ids this email carries
+    toName: text("to_name"),
+    toEmail: text("to_email").notNull(),
+    cc: text("cc"), // JSON array of cc emails
+    fromEmail: text("from_email").notNull(), // e.g. kauri-tower@send.soterra.co.nz
+    replyTo: text("reply_to"), // the sender's real inbox — replies skip Soterra
+    subject: text("subject").notNull(),
+    html: text("html").notNull(), // the exact body sent — the evidentiary record
+    // JSON array of {filename, bytes} — what evidence rode along (photos, the
+    // pinned drawing snapshot). Content lives with the send, not the log.
+    attachments: text("attachments"),
+    status: text("status").default("recorded").notNull(), // recorded | sent | failed
+    providerId: text("provider_id"), // Resend message id (for reply threading later)
+    error: text("error"),
+    sentBy: text("sent_by"), // Clerk user id of who pressed Send
+    sentByName: text("sent_by_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+  },
+  (t) => ({
+    byProject: index("email_log_project_idx").on(t.projectId),
+    byCompany: index("email_log_company_idx").on(t.companyId),
+  })
+);
+
 export type Company = typeof companies.$inferSelect;
 export type Inspection = typeof inspections.$inferSelect;
 export type InspectionItem = typeof inspectionItems.$inferSelect;
@@ -412,3 +456,4 @@ export type NewTask = typeof tasks.$inferInsert;
 export type ChatThread = typeof chatThreads.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type CodePage = typeof codePages.$inferSelect;
+export type EmailLog = typeof emailLog.$inferSelect;
