@@ -739,3 +739,10 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .ps-pin.sel .head{outline:3px solid rgba(255,255,255,.7);outline-offset:1px}
 .ps-msg{margin:auto;color:#DCE6F2;font-size:13.5px;font-weight:600}
 .ps-hint{position:absolute;top:64px;left:50%;transform:translateX(-50%);background:rgba(12,42,71,.85);color:#fff;font-size:12px;font-weight:600;padding:7px 14px;border-radius:20px;z-index:10;pointer-events:none}
+
+/* Location picker chips in the New-check modal (Feature 4). */
+.loc-pick{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.loc-chip{font-family:var(--font);font-size:13px;font-weight:600;color:var(--slate);background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer}
+.loc-chip:hover{border-color:rgba(14,143,230,.4)}
+.loc-chip.act{border-color:var(--brand);color:var(--brand-d);background:rgba(65,195,255,.08)}
+.loc-chip small{font-weight:600;color:var(--mut);font-size:11px}

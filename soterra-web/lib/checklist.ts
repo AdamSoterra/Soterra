@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { checklistItems, checklistPhotos, checklists } from "./schema";
+import { checklistItems, checklistPhotos, checklists, planPins } from "./schema";
 import type { Scope } from "./company";
 import { CATEGORIES, CONSULTANT_TYPES, INSPECTION_CODES, codeName, inspectionType, isCategory, typeQuery } from "./categories";
 import { historyForCode, searchHistory, topItems } from "./history";
@@ -178,7 +178,15 @@ export type GenerateResult =
 
 export async function generateChecklistItems(
   scope: Scope,
-  opts: { kind: ChecklistKind; inspectionCode: string | null; title: string }
+  opts: {
+    kind: ChecklistKind;
+    inspectionCode: string | null;
+    title: string;
+    /** Feature 4: scope the check to one QA location. drawings = that
+     *  location's sheet titles (from lib/locations.ts); empty = prompt-only
+     *  scoping (a free-typed zone has no sheets of its own). */
+    location?: { label: string; drawings: string[] } | null;
+  }
 ): Promise<GenerateResult> {
   // A safety plan (SWMS / JSA) is grounded in HSWA + WorkSafe good practice, not
   // in this site's drawings, so it takes its own path — no plan/Code/manual
@@ -232,7 +240,14 @@ export async function generateChecklistItems(
     historyQuery,
   ]);
 
-  const planPages = retrieve(projectIdx.pages, projectIdx.df, q, 6);
+  // Location scoping: when the check is scoped to a location that owns sheets,
+  // retrieve from THOSE sheets, so "Unit 1 fire check" items come from Unit 1's
+  // drawings, not Unit 2's. If the filter leaves nothing (stale location cache
+  // after a re-upload), fall back to the whole set rather than starve the check.
+  const locDocs = new Set(opts.location?.drawings ?? []);
+  const scopedPages = locDocs.size ? projectIdx.pages.filter((pg) => locDocs.has(pg.doc)) : projectIdx.pages;
+  const planPool = scopedPages.length ? scopedPages : projectIdx.pages;
+  const planPages = retrieve(planPool, projectIdx.df, q, 6);
   const codeHits = retrieve(codeIdx.pages, codeIdx.df, q, 6);
   // ⚠️ visibleTo, exactly as the assistant's own search does. Without it a
   // checklist could quote a demo-tier manufacturer to an account that must
@@ -286,7 +301,12 @@ export async function generateChecklistItems(
       thinking: { type: "adaptive" },
       output_config: { effort: "high", format: { type: "json_schema", schema: ITEM_LIST_SCHEMA as unknown as Record<string, unknown> } },
       system: GEN_SYSTEM,
-      messages: [{ role: "user", content: `Write the pre-inspection checklist for: ${codeLabelName}\n\n${sources}` }],
+      messages: [{
+        role: "user",
+        content: `Write the pre-inspection checklist for: ${codeLabelName}${
+          opts.location ? `\nSCOPE: this check covers ${opts.location.label} ONLY — write items for that location, and skip anything that clearly belongs elsewhere on the job.` : ""
+        }\n\n${sources}`,
+      }],
     });
     const text = resp.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
     const parsed = JSON.parse(text) as { items?: Record<string, unknown>[] };
@@ -430,6 +450,7 @@ export async function createChecklist(
     kind: ChecklistKind;
     title: string;
     inspectionCode?: string | null;
+    location?: string | null;
     createdByName?: string | null;
     items: { title: string; detail?: string | null; source?: string; sourceRef?: string | null; category?: string | null }[];
   }
@@ -443,6 +464,7 @@ export async function createChecklist(
       kind: input.kind,
       title: input.title,
       inspectionCode: input.inspectionCode ?? null,
+      location: input.location ?? null,
       createdBy: scope.userId,
       createdByName: input.createdByName ?? null,
     })
@@ -494,9 +516,24 @@ export async function getChecklist(scope: Scope, checklistId: string) {
     byItem.set(p.itemId, list);
   }
 
+  // Drawing pins on these items (Feature 4) — one query, so the UI can show
+  // pinned state without a round-trip per item.
+  const pins = items.length
+    ? await db
+        .select({ id: planPins.id, recordId: planPins.recordId, doc: planPins.doc, page: planPins.page, x: planPins.x, y: planPins.y, label: planPins.label })
+        .from(planPins)
+        .where(and(eq(planPins.projectId, head.projectId), eq(planPins.recordType, "checklist_item"), inArray(planPins.recordId, items.map((i) => i.id))))
+    : [];
+  const pinsByItem = new Map<string, typeof pins>();
+  for (const p of pins) {
+    const list = pinsByItem.get(p.recordId) ?? [];
+    list.push(p);
+    pinsByItem.set(p.recordId, list);
+  }
+
   return {
     checklist: head,
-    items: items.map((it) => ({ ...it, photos: byItem.get(it.id) ?? [] })),
+    items: items.map((it) => ({ ...it, photos: byItem.get(it.id) ?? [], pins: pinsByItem.get(it.id) ?? [] })),
   };
 }
 

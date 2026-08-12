@@ -79,16 +79,20 @@ type Insights = {
   inspections: InspectionRow[];
 };
 type ChecklistPhoto = { id: string; itemId: string; url: string; caption: string | null };
+type ItemPin = { id: string; doc: string; page: number; x: number; y: number; label: string | null };
 type ChecklistItem = {
   id: string; ord: number; category: string | null; title: string; detail: string | null;
   source: string; sourceRef: string | null; status: "pending" | "ok" | "issue" | "na";
-  note: string | null; checkedByName: string | null; photos: ChecklistPhoto[];
+  note: string | null; checkedByName: string | null; photos: ChecklistPhoto[]; pins?: ItemPin[];
 };
 type ChecklistHead = {
   id: string; eventId: string | null; kind: string; title: string; inspectionCode: string | null;
+  location?: string | null;
   status: string; createdByName: string | null; createdAt: string;
   total?: number; done?: number; issues?: number;
 };
+// A QA-scope location (Feature 4): extracted from drawing titles, or user-typed.
+type QaLoc = { label: string; kind: string; drawings: string[]; source: "extracted" | "user" };
 type ChecklistFull = { checklist: ChecklistHead; items: ChecklistItem[] };
 
 // Consultant discipline codes → readable names (mirrors lib/categories.ts
@@ -622,6 +626,12 @@ export default function Page() {
   const [newCl, setNewCl] = useState<{ eventId: string | null; eventTitle: string | null } | null>(null);
   const [newClKind, setNewClKind] = useState<"inspection" | "ccc">("inspection");
   const [newClCode, setNewClCode] = useState("");
+  // Where the check is scoped (Feature 4): null = whole job.
+  const [newClLoc, setNewClLoc] = useState<string | null>(null);
+  const [newClLocs, setNewClLocs] = useState<QaLoc[]>([]);
+  const [newClLocCustom, setNewClLocCustom] = useState("");
+  // Pinning an item on a drawing: which item, and which sheet to open.
+  const [pinFor, setPinFor] = useState<{ itemId: string; label: string; doc: string; page: number; npages: number } | null>(null);
   const [noteFor, setNoteFor] = useState<string | null>(null); // item id whose note box is open
   const [noteText, setNoteText] = useState("");
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -1692,6 +1702,18 @@ export default function Page() {
       /* ignore */
     }
   };
+  // The location picker's options — loaded when the New-check modal opens.
+  // Instant when the cache is warm (it is, after any upload), and harmless to
+  // refetch: GET /api/locations is a table read.
+  useEffect(() => {
+    if (!newCl) return;
+    setNewClLoc(null); setNewClLocCustom("");
+    apiFetch("/api/locations")
+      .then((r) => (r.ok ? r.json() : { locations: [] }))
+      .then((d) => setNewClLocs(Array.isArray(d?.locations) ? d.locations : []))
+      .catch(() => setNewClLocs([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newCl]);
   const createChecklist = async () => {
     if (!newCl) return;
     setClBusy(true); setClErr(null);
@@ -1704,11 +1726,12 @@ export default function Page() {
           kind: newClKind,
           inspectionCode: newClKind === "inspection" ? newClCode || null : null,
           title: newClKind === "ccc" ? "CCC evidence pack" : undefined,
+          location: newClKind === "inspection" ? newClLoc || undefined : undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.checklist) throw new Error(data.error || "Couldn't build that checklist.");
-      setNewCl(null); setNewClCode("");
+      setNewCl(null); setNewClCode(""); setNewClLoc(null); setNewClLocCustom("");
       setOpenChecklist(data);
       loadChecklists();
     } catch (e) {
@@ -1716,6 +1739,39 @@ export default function Page() {
     } finally {
       setClBusy(false);
     }
+  };
+  // Open the pin stage for a checklist item. An already-pinned item opens on
+  // its pin's sheet; a fresh one opens on the check's location drawing, else
+  // the first doc on the site.
+  const openPinFor = async (it: ChecklistItem, n: number) => {
+    let doc: string | null = null;
+    let page = 1;
+    if (it.pins?.length) {
+      doc = it.pins[0].doc;
+      page = it.pins[0].page;
+    } else {
+      const locLabel = openChecklist?.checklist.location;
+      if (locLabel) {
+        try {
+          const r = await apiFetch("/api/locations");
+          const d = await r.json();
+          const loc = (Array.isArray(d?.locations) ? (d.locations as QaLoc[]) : []).find((l) => l.label.toLowerCase() === locLabel.toLowerCase());
+          if (loc?.drawings?.length) doc = loc.drawings[0];
+        } catch { /* fall through to first doc */ }
+      }
+    }
+    let dlist = docs;
+    if (!docsLoaded) {
+      try {
+        const r = await apiFetch("/api/plans");
+        const d = await r.json();
+        if (Array.isArray(d?.docs)) dlist = d.docs;
+      } catch { /* keep what we have */ }
+    }
+    if (!doc) doc = dlist[0]?.doc ?? null;
+    if (!doc) { setClErr("Upload this site's plans first — there's no drawing to pin on."); return; }
+    const nd = dlist.find((d) => d.doc === doc);
+    setPinFor({ itemId: it.id, label: String(n), doc, page, npages: Math.max(nd?.indexed ?? 0, page) });
   };
   // Tick an item. Optimistic — on site, on a phone, on bad reception, waiting
   // for a round trip before the tick lands is the difference between a tool
@@ -2958,6 +3014,35 @@ export default function Page() {
         />
       )}
 
+      {/* ─── pinning a checklist item on its drawing (Feature 4) ─── */}
+      {pinFor && projectId && (
+        <PinStage
+          key={"pin-" + pinFor.itemId}
+          projectId={projectId}
+          doc={pinFor.doc}
+          page={pinFor.page}
+          npages={pinFor.npages}
+          onClose={() => setPinFor(null)}
+          fetchApi={apiFetch}
+          onDrop={async (at) => {
+            const target = pinFor;
+            try {
+              const res = await apiFetch("/api/pins", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ doc: target.doc, page: at.page, x: at.x, y: at.y, recordType: "checklist_item", recordId: target.itemId, label: target.label }),
+              });
+              if (!res.ok) throw new Error();
+              setPinFor(null);
+              if (openChecklist) openChecklistById(openChecklist.checklist.id);
+            } catch {
+              setClErr("Couldn't save the pin — try again.");
+              setPinFor(null);
+            }
+          }}
+        />
+      )}
+
       {zoomImg && (
         <div ref={zoomScrimRef} className="zoomscrim" onClick={() => { setZoomImg(null); setZoomScale(1); }}
           onPointerDown={(e) => {
@@ -3261,8 +3346,27 @@ export default function Page() {
                       {clTypes.consultant.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
                     </optgroup>
                   </select>
+                  <label className="ev-lbl" style={{ marginTop: 14 }}>Where are you checking</label>
+                  <div className="loc-pick">
+                    <button type="button" className={"loc-chip" + (newClLoc === null ? " act" : "")} onClick={() => { setNewClLoc(null); setNewClLocCustom(""); }}>Whole job</button>
+                    {newClLocs.map((l) => (
+                      <button type="button" key={l.label} className={"loc-chip" + (newClLoc === l.label ? " act" : "")} onClick={() => { setNewClLoc(l.label); setNewClLocCustom(""); }}>
+                        {l.label}
+                        {l.drawings.length > 0 ? <small> · {l.drawings.length} dwg{l.drawings.length === 1 ? "" : "s"}</small> : l.source === "user" ? <small> · yours</small> : null}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    className="ev-in"
+                    style={{ marginTop: 8 }}
+                    value={newClLocCustom}
+                    placeholder="…or type your own zone (e.g. east corridor)"
+                    onChange={(e) => { setNewClLocCustom(e.target.value); setNewClLoc(e.target.value.trim() || null); }}
+                  />
                   <p className="page-sub" style={{ margin: "12px 0 0" }}>
-                    Soterra writes the check from three places: this site&apos;s drawings, the Building Code, and what your company has already been failed on. Every item says where it came from, and anything it can&apos;t back up gets left out.
+                    {newClLocs.length > 0
+                      ? "Locations come from the names of your uploaded drawings. Pick one and the check scopes to that location's sheets — and the report is titled by it."
+                      : "Soterra writes the check from three places: this site's drawings, the Building Code, and what your company has already been failed on. Every item says where it came from, and anything it can't back up gets left out."}
                   </p>
                 </>
               ) : (
@@ -3301,7 +3405,7 @@ export default function Page() {
             </div>
             <div className="dm-body">
               {clErr && <div className="ev-err" style={{ marginBottom: 12 }}>{clErr}</div>}
-              {openChecklist.items.map((it) => (
+              {openChecklist.items.map((it, itIdx) => (
                 <div className={"ck" + (it.status !== "pending" ? " ck-" + it.status : "")} key={it.id}>
                   <div className="ck-head">
                     <div className="ck-txt">
@@ -3347,6 +3451,9 @@ export default function Page() {
                   <div className="ck-tools">
                     <button onClick={() => { photoForRef.current = it.id; photoInputRef.current?.click(); }}>📷 Photo</button>
                     {noteFor !== it.id && <button onClick={() => { setNoteFor(it.id); setNoteText(it.note || ""); }}>{it.note ? "Edit note" : "＋ Note"}</button>}
+                    {openChecklist.checklist.kind !== "swms" && (
+                      <button onClick={() => void openPinFor(it, itIdx + 1)}>📍 {it.pins?.length ? `Pinned (${it.pins.length})` : "Pin on drawing"}</button>
+                    )}
                     {it.checkedByName && <span className="ck-by">{it.checkedByName}</span>}
                   </div>
                 </div>

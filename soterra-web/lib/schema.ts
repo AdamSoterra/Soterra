@@ -335,6 +335,9 @@ export const checklists = pgTable(
     title: text("title").notNull(),
     // What the checklist is FOR: an inspection code (ICA, IPL…) or a CCC pack.
     inspectionCode: text("inspection_code"),
+    // WHERE it's scoped: a QA location label ("Unit 1", "Level 3", a user
+    // zone). Null = whole job (and every checklist made before Feature 4).
+    location: text("location"),
     status: text("status").default("open").notNull(), // open | done
     createdBy: text("created_by"),
     createdByName: text("created_by_name"),

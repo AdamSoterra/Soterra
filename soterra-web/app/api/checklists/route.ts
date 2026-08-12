@@ -17,6 +17,7 @@ import {
   updateChecklistItem,
 } from "@/lib/checklist";
 import { codeName } from "@/lib/categories";
+import { addUserZone, getProjectLocations } from "@/lib/locations";
 
 export const runtime = "nodejs";
 // Generation reads the drawings, the Code and the company's history, then
@@ -85,11 +86,30 @@ export async function POST(req: Request) {
     eventTitle = ev.title;
   }
 
-  const title =
+  // Feature 4: the location this check is scoped to. The label comes from the
+  // client; the DRAWINGS are always resolved server-side from the project's own
+  // location cache — the client never gets to say which sheets a location owns.
+  // A label the cache doesn't know (free-typed zone) is remembered as a user
+  // zone for next time and scopes the prompt only.
+  const locationLabel = String(body.location ?? "").trim().slice(0, 60) || null;
+  let location: { label: string; drawings: string[] } | null = null;
+  if (locationLabel && kind === "inspection") {
+    const locs = await getProjectLocations(scope.projectId);
+    const found = locs.find((l) => l.label.toLowerCase() === locationLabel.toLowerCase());
+    if (found) location = { label: found.label, drawings: found.drawings };
+    else {
+      await addUserZone(scope.projectId, locationLabel);
+      location = { label: locationLabel, drawings: [] };
+    }
+  }
+
+  const baseTitle =
     String(body.title ?? "").trim() ||
     (kind === "ccc" ? "CCC evidence pack" : `${codeName(inspectionCode) ?? "Inspection"} check`) ||
     eventTitle ||
     "Inspection check";
+  // "Unit 1 - Fire check" — the report is titled by where it happened.
+  const title = location ? `${location.label} - ${baseTitle}` : baseTitle;
 
   if (kind === "inspection" && !inspectionCode && !eventTitle && !String(body.title ?? "").trim()) {
     return Response.json({ error: "Pick which inspection this is for" }, { status: 400 });
@@ -98,7 +118,12 @@ export async function POST(req: Request) {
   const generate = body.generate !== false;
   let items: { title: string; detail: string; source: string; sourceRef: string | null; category: string }[] = [];
   if (generate) {
-    const result = await generateChecklistItems(scope, { kind, inspectionCode, title: [eventTitle, title].filter(Boolean).join(" — ") });
+    const result = await generateChecklistItems(scope, {
+      kind,
+      inspectionCode,
+      title: [eventTitle, baseTitle].filter(Boolean).join(" — "),
+      location,
+    });
     if (!result.ok) {
       // 503 when the assistant itself is down (retryable), 422 when the sources
       // genuinely had nothing (retrying won't help).
@@ -113,6 +138,7 @@ export async function POST(req: Request) {
     kind,
     title,
     inspectionCode,
+    location: location?.label ?? null,
     createdByName: displayName(user),
     items,
   });
