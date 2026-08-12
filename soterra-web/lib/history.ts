@@ -207,10 +207,34 @@ export async function inspectionDetail(scope: Scope, inspectionId: string) {
     .limit(1);
   if (!head) return null;
   const items = await db
-    .select({ id: inspectionItems.id, category: inspectionItems.category, title: inspectionItems.title, detail: inspectionItems.detail, location: inspectionItems.location })
+    .select({
+      id: inspectionItems.id,
+      category: inspectionItems.category,
+      title: inspectionItems.title,
+      detail: inspectionItems.detail,
+      location: inspectionItems.location,
+      workStatus: inspectionItems.workStatus,
+      sentTo: inspectionItems.sentTo,
+      sentAt: inspectionItems.sentAt,
+      sentStatus: inspectionItems.sentStatus,
+    })
     .from(inspectionItems)
     .where(and(eq(inspectionItems.inspectionId, inspectionId), eq(inspectionItems.companyId, scope.companyId)));
   return { inspection: head, items };
+}
+
+const WORK_STATUSES = ["not_done", "in_progress", "done"] as const;
+export type WorkStatus = (typeof WORK_STATUSES)[number];
+export const isWorkStatus = (v: unknown): v is WorkStatus => WORK_STATUSES.includes(v as WorkStatus);
+
+/** Feature 6: tick a failed inspection item along the worklist. */
+export async function setItemWorkStatus(scope: Scope, itemId: string, workStatus: WorkStatus) {
+  const [row] = await db
+    .update(inspectionItems)
+    .set({ workStatus })
+    .where(and(eq(inspectionItems.id, itemId), eq(inspectionItems.companyId, scope.companyId)))
+    .returning({ id: inspectionItems.id, workStatus: inspectionItems.workStatus });
+  return row ?? null;
 }
 
 /**

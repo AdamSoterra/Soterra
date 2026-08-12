@@ -3,7 +3,7 @@ import { get } from "@vercel/blob";
 import { extractText, getDocumentProxy } from "unpdf";
 import { resolveScope } from "@/lib/company";
 import { extractInspection, hasUsableText } from "@/lib/inspectionExtract";
-import { deleteInspection, listInspections, saveInspection, inspectionDetail } from "@/lib/history";
+import { deleteInspection, listInspections, saveInspection, inspectionDetail, isWorkStatus, setItemWorkStatus } from "@/lib/history";
 
 // Inspection reports in → this COMPANY's failure history out. Same upload
 // mechanics as the plan indexer (client uploads straight to private Blob, then
@@ -149,6 +149,30 @@ export async function POST(req: Request) {
 // only correction was re-uploading a file with the identical name and relying
 // on the upsert. Company-scoped through resolveScope like everything else, so
 // nobody can delete another builder's history.
+// PATCH /api/inspections { itemId, workStatus } — Feature 6: the extracted
+// failed items are a live worklist (not_done | in_progress | done).
+export async function PATCH(req: Request) {
+  const { userId } = await auth();
+  if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
+  const scope = await resolveScope(req, userId);
+  if (!scope) return Response.json({ error: "No site selected" }, { status: 403 });
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const itemId = String(body.itemId ?? "").trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(itemId))
+    return Response.json({ error: "Bad itemId" }, { status: 400 });
+  if (!isWorkStatus(body.workStatus))
+    return Response.json({ error: "workStatus must be not_done, in_progress or done" }, { status: 400 });
+  const row = await setItemWorkStatus(scope, itemId, body.workStatus);
+  if (!row) return Response.json({ error: "Item not found" }, { status: 404 });
+  return Response.json({ item: row });
+}
+
 export async function DELETE(req: Request) {
   const { userId } = await auth();
   if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });

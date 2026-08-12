@@ -311,6 +311,13 @@ export const inspectionItems = pgTable(
     location: text("location"), // "Level 2, unit 2/4" — when the report says
     inspectionCode: text("inspection_code"), // denormalised from the parent, for grouping
     inspectedOn: text("inspected_on"), // denormalised, for "last 12 months" filters
+    // Feature 6: the extracted failed items are a live worklist, not just a
+    // record. not_done | in_progress | done.
+    workStatus: text("work_status").default("not_done").notNull(),
+    // And they can be emailed to the responsible sub (same rails as QA flags):
+    sentTo: text("sent_to"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    sentStatus: text("sent_status"), // sent | recorded (see checklist_items)
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({

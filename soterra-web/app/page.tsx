@@ -654,7 +654,7 @@ export default function Page() {
   // closed when its key is true. Lets a manager fold away the long lists.
   const [izClosed, setIzClosed] = useState<Record<string, boolean>>({});
   const izToggle = (k: string) => setIzClosed((s) => ({ ...s, [k]: !s[k] }));
-  const [openInspection, setOpenInspection] = useState<{ inspection: InspectionRow; items: { id: string; category: string; title: string; detail: string | null; location: string | null }[] } | null>(null);
+  const [openInspection, setOpenInspection] = useState<{ inspection: InspectionRow; items: { id: string; category: string; title: string; detail: string | null; location: string | null; workStatus?: string; sentTo?: string | null; sentAt?: string | null; sentStatus?: string | null }[] } | null>(null);
   const reportFileRef = useRef<HTMLInputElement>(null);
   const [repCurrent, setRepCurrent] = useState<{ name: string; phase: string; pct: number } | null>(null);
   const [repItems, setRepItems] = useState<{ name: string; ok: boolean; note: string }[]>([]);
@@ -686,6 +686,13 @@ export default function Page() {
   const [sendBusy, setSendBusy] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
   const [sendNotice, setSendNotice] = useState<string | null>(null); // post-send truth banner
+  // Feature 6: inspection-item worklist send (same rails, its own modal).
+  const [insSendOpen, setInsSendOpen] = useState(false);
+  const [insAssign, setInsAssign] = useState<Record<string, string>>({});
+  const [insSendMsg, setInsSendMsg] = useState("");
+  const [insBusy, setInsBusy] = useState(false);
+  const [insErr, setInsErr] = useState<string | null>(null);
+  const [insNotice, setInsNotice] = useState<string | null>(null);
   const [asOpen, setAsOpen] = useState(false); // inline new-sub form
   const [asName, setAsName] = useState("");
   const [asEmail, setAsEmail] = useState("");
@@ -1816,6 +1823,78 @@ export default function Page() {
   };
   // The post-send truth banner lives with the open checklist.
   useEffect(() => { if (!openChecklist) setSendNotice(null); }, [openChecklist]);
+  useEffect(() => { if (!openInspection) { setInsNotice(null); setInsSendOpen(false); } }, [openInspection]);
+  // Feature 6: tick a failed inspection item along the worklist. Optimistic.
+  const setInsItemStatus = async (itemId: string, workStatus: string) => {
+    const insId = openInspection?.inspection.id;
+    setOpenInspection((c) => (c ? { ...c, items: c.items.map((i) => (i.id === itemId ? { ...i, workStatus } : i)) } : c));
+    try {
+      const r = await apiFetch("/api/inspections", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemId, workStatus }) });
+      if (!r.ok) throw new Error();
+    } catch {
+      if (insId) {
+        try {
+          const r = await apiFetch(`/api/inspections?id=${encodeURIComponent(insId)}`);
+          const d = await r.json();
+          if (d?.inspection) setOpenInspection(d);
+        } catch { /* leave optimistic state */ }
+      }
+    }
+  };
+  const openInsSend = async () => {
+    if (!openInspection) return;
+    setInsErr(null); setInsSendMsg(""); setAsOpen(false);
+    let list: Sub[] = subsList;
+    try {
+      const r = await apiFetch("/api/subs");
+      const d = await r.json();
+      if (Array.isArray(d?.subs)) list = d.subs;
+    } catch { /* offer + New sub regardless */ }
+    setSubsList(list);
+    const next: Record<string, string> = {};
+    for (const it of openInspection.items.filter((i) => (i.workStatus ?? "not_done") !== "done")) {
+      next[it.id] = list.find((s) => s.trade && s.trade === it.category)?.id ?? "";
+    }
+    setInsAssign(next);
+    setInsSendOpen(true);
+  };
+  const sendInsItems = async () => {
+    if (!openInspection) return;
+    const assignments = Object.entries(insAssign)
+      .filter(([, subId]) => subId)
+      .map(([itemId, subId]) => ({ itemId, subId }));
+    if (!assignments.length) { setInsErr("Pick a sub for at least one item."); return; }
+    setInsBusy(true); setInsErr(null);
+    try {
+      const r = await apiFetch("/api/inspections/send-items", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inspectionId: openInspection.inspection.id, assignments, message: insSendMsg.trim() || undefined }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Couldn't send just now.");
+      const sent: { sub: string; items: number; status: string }[] = Array.isArray(d?.sent) ? d.sent : [];
+      const failed = sent.filter((s) => s.status === "failed");
+      try {
+        const rr = await apiFetch(`/api/inspections?id=${encodeURIComponent(openInspection.inspection.id)}`);
+        const dd = await rr.json();
+        if (dd?.inspection) setOpenInspection(dd);
+      } catch { /* stamps show on next open */ }
+      if (failed.length) {
+        setInsErr(`Couldn't email ${failed.map((f) => f.sub).join(", ")} - their items are NOT sent. Check the address and try again.`);
+        return;
+      }
+      setInsSendOpen(false);
+      setInsNotice(
+        d.transmitting === false
+          ? "Recorded on the project log. Email delivery isn't switched on yet, so nothing was emailed - these go out the moment sending is live."
+          : `Emailed ${sent.length} sub${sent.length === 1 ? "" : "s"} - recorded on each item.`
+      );
+    } catch (e) {
+      setInsErr(e instanceof Error ? e.message : "Couldn't send just now.");
+    } finally {
+      setInsBusy(false);
+    }
+  };
   // Open the send-fixes modal: load the company's subs and pre-assign each
   // Needs-fixing item to the sub whose trade matches its category.
   const openSendFixes = async () => {
@@ -3565,6 +3644,63 @@ export default function Page() {
         />
       )}
 
+      {/* ─── send failed inspection items to subs (Feature 6) ─── */}
+      {insSendOpen && openInspection && (
+        <div className="scrim" onClick={() => { if (!insBusy) setInsSendOpen(false); }}>
+          <div className="sheet" style={{ maxWidth: 530, maxHeight: "88vh" }} onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti"><b>Send failed items to subs</b><small>{openInspection.inspection.inspectionType || openInspection.inspection.doc}</small></div>
+              {!insBusy && <button className="sh-x" onClick={() => setInsSendOpen(false)}>✕</button>}
+            </div>
+            <div className="form-body">
+              {openInspection.items.map((it, i) => (it.workStatus ?? "not_done") !== "done" ? (
+                <div key={it.id} className="sf-row">
+                  <div className="sf-txt">
+                    <b>{i + 1}. {it.title}</b>
+                    <small>{[it.category, it.location].filter(Boolean).join(" · ") || "inspection item"}</small>
+                  </div>
+                  <select className="ev-in sf-sel" value={insAssign[it.id] ?? ""} onChange={(e) => setInsAssign((a) => ({ ...a, [it.id]: e.target.value }))}>
+                    <option value="">Don&apos;t send</option>
+                    {subsList.map((s) => <option key={s.id} value={s.id}>{s.name}{s.trade ? ` (${s.trade})` : ""}</option>)}
+                  </select>
+                </div>
+              ) : null)}
+
+              {asOpen ? (
+                <div className="sf-add">
+                  <input className="ev-in" placeholder="Sub's company name" value={asName} onChange={(e) => setAsName(e.target.value)} />
+                  <input className="ev-in" type="email" placeholder="their email" value={asEmail} onChange={(e) => setAsEmail(e.target.value)} />
+                  <select className="ev-in" value={asTrade} onChange={(e) => setAsTrade(e.target.value)}>
+                    <option value="">Trade (optional)</option>
+                    {TRADES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="lg-btn primary" style={{ height: 38, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} onClick={() => void addSub()}>Add sub</button>
+                    <button className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => setAsOpen(false)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="lg-btn" style={{ height: 38, margin: "4px 0 0", width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => setAsOpen(true)}>＋ New sub</button>
+              )}
+
+              <label className="ev-lbl" style={{ marginTop: 14 }}>Message (top of the email)</label>
+              <textarea
+                className="ev-in" rows={2} value={insSendMsg}
+                placeholder="The inspection failed these items - please work through the list and reply when each is done."
+                onChange={(e) => setInsSendMsg(e.target.value)}
+              />
+              {insErr && <div className="ev-err">{insErr}</div>}
+              <div className="form-actions">
+                <button className="lg-btn primary" style={{ height: 46, margin: 0, flex: 1 }} disabled={insBusy} onClick={() => void sendInsItems()}>
+                  {insBusy ? "Sending…" : "Send + record"}
+                </button>
+                <button className="lg-btn" style={{ height: 46, margin: 0, width: "auto", padding: "0 20px" }} disabled={insBusy} onClick={() => setInsSendOpen(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── New RFI (Feature 5) ─── */}
       {newRfiOpen && (
         <div className="scrim" onClick={() => { if (!rfiBusy) setNewRfiOpen(false); }}>
@@ -4200,6 +4336,7 @@ export default function Page() {
               <button className="sh-x" onClick={() => setOpenInspection(null)}>✕</button>
             </div>
             <div className="dm-body">
+              {insNotice && <div className="ck-notice" onClick={() => setInsNotice(null)}>{insNotice}</div>}
               {openInspection.items.length === 0 ? (
                 <div className="page-sub" style={{ marginBottom: 0 }}>Nothing was picked up on this one.</div>
               ) : (
@@ -4210,9 +4347,32 @@ export default function Page() {
                       <b>{it.title}</b>
                       <small>{[it.category, it.location].filter(Boolean).join(" · ")}</small>
                       {it.detail && <small className="ins-detail">{it.detail}</small>}
+                      <div className="ins-work">
+                        {(["not_done", "in_progress", "done"] as const).map((ws) => (
+                          <button key={ws} className={"ins-ws" + ((it.workStatus ?? "not_done") === ws ? " act " + ws : "")} onClick={() => void setInsItemStatus(it.id, ws)}>
+                            {ws === "not_done" ? "Not done" : ws === "in_progress" ? "In progress" : "Done"}
+                          </button>
+                        ))}
+                      </div>
+                      {it.sentTo && (
+                        <div className="ck-sent" style={it.sentStatus !== "sent" ? { color: "var(--slate)" } : undefined}>
+                          {it.sentStatus === "sent" ? "✉ Sent to" : "🕓 Recorded for"} {it.sentTo}
+                          {it.sentAt ? ` · ${new Date(it.sentAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : ""}
+                          {it.sentStatus === "sent" ? "" : " · emails when sending goes live"}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))
+              )}
+              {openInspection.items.some((i) => (i.workStatus ?? "not_done") !== "done") && (
+                <div className="ck-sendbar">
+                  <div className="cs-txt">
+                    <b>{openInspection.items.filter((i) => (i.workStatus ?? "not_done") !== "done").length} still to close out</b>
+                    <small>Email each failed item to the sub responsible, in the inspector&apos;s own words. Recorded on the item until it&apos;s done.</small>
+                  </div>
+                  <button className="lg-btn primary" style={{ height: 40, margin: 0, width: "auto", padding: "0 16px", fontSize: 13.5, flexShrink: 0 }} onClick={() => void openInsSend()}>Send to subs</button>
+                </div>
               )}
               {/* A badly-read report used to be permanent — the only correction
                   was re-uploading a file with the same name. Delete + re-upload
