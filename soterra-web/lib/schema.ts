@@ -512,6 +512,118 @@ export const planPins = pgTable(
   })
 );
 
+// ─── RFIs — Feature 5 (design: RFI-BUILD-SPEC.md + rfi-mock.html). The whole
+//     conversation lives here; Soterra sends the email; the analytics read
+//     ONLY these tables (never the provider). Project-scoped like everything
+//     else; the consultant fields are plain text + email because consultants
+//     don't hold Soterra accounts — accountability keys off consultantCompany. ───
+export const rfis = pgTable(
+  "rfis",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    // Register number, assigned ON SEND (a draft burns nothing): "RFI-014".
+    number: integer("number"),
+    revision: integer("revision").default(0).notNull(),
+    subject: text("subject").notNull(),
+    discipline: text("discipline"), // Architectural | Structural | … (spec list)
+    status: text("status").default("draft").notNull(), // draft | open | answered | closed | void
+    // Who holds the ball: "consultant" | "us" | "client" | "none" — plus the
+    // consultant's name when they do. Derived on every transition.
+    ballParty: text("ball_party").default("us").notNull(),
+    priority: text("priority").default("normal").notNull(), // normal | high | critical
+    location: text("location"),
+    question: text("question").notNull(),
+    proposedSolution: text("proposed_solution"),
+    codeRefs: text("code_refs"), // JSON array of strings ("NZS 3604 cl 8.6")
+    attachments: text("attachments"), // JSON array of {filename} listed on the RFI
+    costImpact: text("cost_impact").default("unknown").notNull(), // none | unknown | yes
+    costEstimate: text("cost_estimate"),
+    programmeImpact: text("programme_impact").default("unknown").notNull(), // none | unknown | yes
+    programmeDays: integer("programme_days"),
+    criticalPath: boolean("critical_path").default(false).notNull(),
+    raisedBy: text("raised_by"), // Clerk user id
+    raisedByName: text("raised_by_name"),
+    consultantName: text("consultant_name"), // the person: "Jane Smith"
+    consultantCompany: text("consultant_company"), // the accountability key: "Holmes Structural"
+    consultantEmail: text("consultant_email"),
+    cc: text("cc"), // JSON array of emails
+    dateRaised: timestamp("date_raised", { withTimezone: true }), // set on send
+    dateRequiredBy: timestamp("date_required_by", { withTimezone: true }),
+    dateAnswered: timestamp("date_answered", { withTimezone: true }),
+    dateClosed: timestamp("date_closed", { withTimezone: true }),
+    resultingCiId: uuid("resulting_ci_id"),
+    emailLogId: uuid("email_log_id"), // the outbound send record (Foundation 1)
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byProject: index("rfis_project_idx").on(t.projectId),
+    byCompany: index("rfis_company_idx").on(t.companyId),
+    byNumber: index("rfis_project_number_idx").on(t.projectId, t.number),
+  })
+);
+
+// The thread: the original question, ONE official answer, follow-ups, and
+// system lines (sent / status changed). Immutable once written.
+export const rfiMessages = pgTable(
+  "rfi_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    rfiId: uuid("rfi_id").notNull(),
+    type: text("type").notNull(), // question | official_answer | followup | system
+    authorSide: text("author_side").default("contractor").notNull(), // contractor | consultant | client
+    authorName: text("author_name"),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({ byRfi: index("rfi_messages_rfi_idx").on(t.rfiId) })
+);
+
+// The immutable audit — the evidentiary core the EOT pack stands on. One row
+// per transition, including the ball hand-off, so "who held it, when, for how
+// long" is provable line by line.
+export const rfiTransitions = pgTable(
+  "rfi_transitions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    rfiId: uuid("rfi_id").notNull(),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status").notNull(),
+    ballFrom: text("ball_from"),
+    ballTo: text("ball_to"),
+    byUser: text("by_user"),
+    byName: text("by_name"),
+    comment: text("comment"),
+    at: timestamp("at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({ byRfi: index("rfi_transitions_rfi_idx").on(t.rfiId) })
+);
+
+// Contract instructions spawned from an answered RFI. The link that lets the
+// assistant treat the CI as governing the drawing it amends.
+export const contractInstructions = pgTable(
+  "contract_instructions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    number: integer("number").notNull(), // CI-001, its own sequence per project
+    title: text("title").notNull(),
+    sourceRfiId: uuid("source_rfi_id"),
+    amendsDrawings: text("amends_drawings"), // JSON array of {doc, fromRev, toRev}
+    cost: text("cost"),
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({ byProject: index("cis_project_idx").on(t.projectId) })
+);
+
 export type Company = typeof companies.$inferSelect;
 export type Inspection = typeof inspections.$inferSelect;
 export type InspectionItem = typeof inspectionItems.$inferSelect;
@@ -529,3 +641,7 @@ export type ChatMessage = typeof chatMessages.$inferSelect;
 export type CodePage = typeof codePages.$inferSelect;
 export type EmailLog = typeof emailLog.$inferSelect;
 export type PlanPin = typeof planPins.$inferSelect;
+export type Rfi = typeof rfis.$inferSelect;
+export type RfiMessage = typeof rfiMessages.$inferSelect;
+export type RfiTransition = typeof rfiTransitions.$inferSelect;
+export type ContractInstruction = typeof contractInstructions.$inferSelect;
