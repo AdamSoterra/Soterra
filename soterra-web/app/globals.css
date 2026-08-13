@@ -869,3 +869,14 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .ins-ws.act.not_done{border-color:rgba(239,68,68,.5);color:#B91C1C;background:rgba(239,68,68,.07)}
 .ins-ws.act.in_progress{border-color:rgba(245,158,11,.5);color:#B45309;background:rgba(245,158,11,.08)}
 .ins-ws.act.done{border-color:rgba(16,185,129,.5);color:#0E7A55;background:rgba(16,185,129,.08)}
+
+/* Impact inputs on the New RFI form + the critical-path toggle on the detail rail (Feature 5). */
+.rf-cpbox{display:flex;gap:10px;align-items:flex-start;border:1.5px solid var(--line);border-radius:11px;padding:11px 13px;cursor:pointer;font-family:var(--font)}
+.rf-cpbox input{margin-top:2px;width:16px;height:16px;flex:0 0 16px;accent-color:var(--amber)}
+.rf-cpbox span{font-size:12.5px;color:var(--slate);line-height:1.45}
+.rf-cpbox span b{color:var(--navy)}
+.rf-cpbox.on{border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.07)}
+.rf-cptoggle{font-family:var(--font);font-size:11.5px;font-weight:700;border-radius:8px;padding:5px 10px;cursor:pointer;border:1.5px solid var(--line);background:#fff;color:var(--slate)}
+.rf-cptoggle:hover{border-color:rgba(245,158,11,.5)}
+.rf-cptoggle.on{border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.1);color:#B45309}
+.rf-cptoggle:disabled{opacity:.5;cursor:default}

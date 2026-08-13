@@ -392,6 +392,34 @@ export async function setRfiStatus(
   return transition(scope, rfi, toStatus, by, comment ?? null);
 }
 
+/** Set the impact flags — critical-path / cost / programme. These aren't
+ *  derivable (Soterra has no programme), so they're a human call, editable at
+ *  any time (an RFI often becomes critical-path only after it sits unanswered).
+ *  criticalPath drives the tile + the EOT pack. */
+export async function updateRfiImpact(
+  scope: Scope,
+  rfiId: string,
+  fields: {
+    criticalPath?: boolean;
+    costImpact?: "none" | "unknown" | "yes";
+    costEstimate?: string | null;
+    programmeImpact?: "none" | "unknown" | "yes";
+    programmeDays?: number | null;
+  }
+): Promise<Rfi> {
+  const rfi = await ourRfi(scope, rfiId);
+  if (!rfi) throw new Error("RFI not found");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const set: Record<string, any> = { updatedAt: new Date() };
+  if (fields.criticalPath !== undefined) set.criticalPath = !!fields.criticalPath;
+  if (fields.costImpact !== undefined) set.costImpact = fields.costImpact;
+  if (fields.costEstimate !== undefined) set.costEstimate = fields.costEstimate?.trim() || null;
+  if (fields.programmeImpact !== undefined) set.programmeImpact = fields.programmeImpact;
+  if (fields.programmeDays !== undefined) set.programmeDays = fields.programmeDays ?? null;
+  const [row] = await db.update(rfis).set(set).where(and(eq(rfis.id, rfiId), eq(rfis.projectId, scope.projectId))).returning();
+  return row;
+}
+
 export async function createCi(
   scope: Scope,
   rfiId: string,

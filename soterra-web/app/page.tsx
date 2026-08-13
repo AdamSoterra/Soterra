@@ -726,7 +726,7 @@ export default function Page() {
   const [ciOpen, setCiOpen] = useState(false);
   const [ciTitle, setCiTitle] = useState("");
   const [newRfiOpen, setNewRfiOpen] = useState(false);
-  const [nr, setNr] = useState({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "" });
+  const [nr, setNr] = useState({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "", criticalPath: false, costImpact: "unknown", costEstimate: "", programmeImpact: "unknown", programmeDays: "" });
   const [noteFor, setNoteFor] = useState<string | null>(null); // item id whose note box is open
   const [noteText, setNoteText] = useState("");
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -2121,7 +2121,7 @@ export default function Page() {
         loadRfis();
       }
       setNewRfiOpen(false);
-      setNr({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "" });
+      setNr({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "", criticalPath: false, costImpact: "unknown", costEstimate: "", programmeImpact: "unknown", programmeDays: "" });
     } catch (e) {
       setRfiErr(e instanceof Error ? e.message : "Couldn't save the RFI.");
     } finally { setRfiBusy(false); }
@@ -3387,7 +3387,19 @@ export default function Page() {
                       <div className="rf-kv"><span className="k2">Location</span><span className="v">{rfiOpen.rfi.location ?? "-"}</span></div>
                       <div className="rf-kv"><span className="k2">Cost impact</span><span className={"v" + (rfiOpen.rfi.costImpact !== "none" ? " warn" : "")}>{rfiOpen.rfi.costImpact}{rfiOpen.rfi.costEstimate ? ` · ${rfiOpen.rfi.costEstimate}` : ""}</span></div>
                       <div className="rf-kv"><span className="k2">Programme</span><span className={"v" + (rfiOpen.rfi.programmeImpact !== "none" ? " warn" : "")}>{rfiOpen.rfi.programmeImpact}{rfiOpen.rfi.programmeDays ? ` · est ${rfiOpen.rfi.programmeDays} days` : ""}</span></div>
-                      {rfiOpen.rfi.criticalPath && <div className="rf-kv"><span className="k2">Critical path</span><span className="v warn">Flagged</span></div>}
+                      {rfiOpen.rfi.status !== "void" && (
+                        <div className="rf-kv">
+                          <span className="k2">Critical path</span>
+                          <button
+                            className={"rf-cptoggle" + (rfiOpen.rfi.criticalPath ? " on" : "")}
+                            disabled={rfiBusy}
+                            title="Flag when this RFI is holding up work that sets the finish date"
+                            onClick={() => void rfiAction(rfiOpen.rfi.id, "update_impact", { criticalPath: !rfiOpen.rfi.criticalPath })}
+                          >
+                            {rfiOpen.rfi.criticalPath ? "⚑ On the critical path" : "Flag as critical path"}
+                          </button>
+                        </div>
+                      )}
                       {rfiOpen.rfi.dateRequiredBy && <div className="rf-kv"><span className="k2">Required by</span><span className="v">{new Date(rfiOpen.rfi.dateRequiredBy).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</span></div>}
                       {rfiOpen.rfi.dateAnswered && <div className="rf-kv"><span className="k2">Answered</span><span className="v">{new Date(rfiOpen.rfi.dateAnswered).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</span></div>}
                     </div>
@@ -3938,6 +3950,31 @@ export default function Page() {
                   <input className="ev-in" value={nr.cc} placeholder="everyone else who should know" onChange={(e) => setNr((v) => ({ ...v, cc: e.target.value }))} />
                 </div>
               </div>
+
+              <label className="ev-lbl" style={{ marginTop: 14 }}>Impact <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: "var(--mut)" }}>· drives the tracking and the EOT pack</span></label>
+              <div style={{ display: "flex", gap: 10 }}>
+                <select className="ev-in" style={{ flex: 1 }} value={nr.costImpact} onChange={(e) => setNr((v) => ({ ...v, costImpact: e.target.value }))}>
+                  <option value="none">Cost impact: none</option>
+                  <option value="unknown">Cost impact: unknown</option>
+                  <option value="yes">Cost impact: yes</option>
+                </select>
+                <select className="ev-in" style={{ flex: 1 }} value={nr.programmeImpact} onChange={(e) => setNr((v) => ({ ...v, programmeImpact: e.target.value }))}>
+                  <option value="none">Programme impact: none</option>
+                  <option value="unknown">Programme impact: unknown</option>
+                  <option value="yes">Programme impact: yes</option>
+                </select>
+              </div>
+              {(nr.costImpact === "yes" || nr.programmeImpact === "yes") && (
+                <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                  {nr.costImpact === "yes" && <input className="ev-in" style={{ flex: 1 }} value={nr.costEstimate} placeholder="Cost estimate, e.g. ~$8,500" onChange={(e) => setNr((v) => ({ ...v, costEstimate: e.target.value }))} />}
+                  {nr.programmeImpact === "yes" && <input className="ev-in" style={{ flex: 1 }} type="number" min="1" value={nr.programmeDays} placeholder="Days lost, e.g. 3" onChange={(e) => setNr((v) => ({ ...v, programmeDays: e.target.value }))} />}
+                </div>
+              )}
+              <label className={"rf-cpbox" + (nr.criticalPath ? " on" : "")} style={{ marginTop: 10 }}>
+                <input type="checkbox" checked={nr.criticalPath} onChange={(e) => setNr((v) => ({ ...v, criticalPath: e.target.checked }))} />
+                <span><b>Critical path</b> - this RFI is holding up work that sets the project finish date. Flags it for the EOT evidence pack.</span>
+              </label>
+
               <p className="page-sub" style={{ margin: "12px 0 0" }}>
                 The person you assign is who the response clock and the consultant scorecard count against. Cc is just kept in the loop. Send burns the next RFI number, emails the assignee from this site&apos;s Soterra address (replies land in your inbox), starts the 7 working-day clock, and writes the audit line. A draft burns nothing. Pin a drawing from the RFI once it&apos;s created.
               </p>

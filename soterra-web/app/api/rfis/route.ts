@@ -11,6 +11,7 @@ import {
   rfiAnalytics,
   sendRfi,
   setRfiStatus,
+  updateRfiImpact,
 } from "@/lib/rfi";
 
 export const runtime = "nodejs";
@@ -144,6 +145,23 @@ export async function PATCH(req: Request) {
     }
     if (action === "reopen") {
       const rfi = await setRfiStatus(scope, id, "open", by, String(body.comment ?? "").trim() || "reopened");
+      return Response.json({ rfi });
+    }
+    if (action === "update_impact") {
+      const impact = (v: unknown): "none" | "unknown" | "yes" | undefined =>
+        ["none", "unknown", "yes"].includes(String(v)) ? (String(v) as "none" | "unknown" | "yes") : undefined;
+      const rfi = await updateRfiImpact(scope, id, {
+        criticalPath: body.criticalPath === undefined ? undefined : body.criticalPath === true,
+        costImpact: impact(body.costImpact),
+        costEstimate: body.costEstimate === undefined ? undefined : String(body.costEstimate ?? ""),
+        programmeImpact: impact(body.programmeImpact),
+        programmeDays:
+          body.programmeDays === undefined
+            ? undefined
+            : Number.isInteger(Number(body.programmeDays)) && Number(body.programmeDays) > 0
+              ? Number(body.programmeDays)
+              : null,
+      });
       return Response.json({ rfi });
     }
     if (action === "create_ci") {
