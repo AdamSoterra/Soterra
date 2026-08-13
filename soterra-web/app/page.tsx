@@ -3168,7 +3168,7 @@ export default function Page() {
                   <div className="note">Worst offender first · RAG against the {rfiAna?.slaWd ?? 7} working-day allowance · this table goes in the monthly minutes</div>
                   {rfiAna && rfiAna.scorecard.length > 0 ? (
                     <table>
-                      <thead><tr><th>Consultant</th><th>Open</th><th>Avg (wd)</th><th>Median</th><th>% in SLA</th><th>Overdue</th><th>Avg late</th><th>Longest</th><th>Reopen %</th></tr></thead>
+                      <thead><tr><th>Consultant</th><th>Open</th><th>Avg (wd)</th><th>Median *</th><th>% in SLA †</th><th>Overdue</th><th>Avg late</th><th>Longest</th><th>Reopen %</th></tr></thead>
                       <tbody>
                         {rfiAna.scorecard.map((s) => {
                           const rag = (v: number, warn: number, bad: number) => (v >= bad ? "r" : v >= warn ? "a" : "g");
@@ -3191,6 +3191,11 @@ export default function Page() {
                     </table>
                   ) : (
                     <div className="page-sub" style={{ padding: "4px 15px 14px" }}>Numbers appear as RFIs are sent and answered.</div>
+                  )}
+                  {rfiAna && rfiAna.scorecard.length > 0 && (
+                    <div className="rf-guard" style={{ padding: "2px 15px 12px" }}>
+                      * Median = the middle answer time, so one slow RFI can&apos;t skew it. &nbsp; † % in SLA = share answered within the {rfiAna.slaWd} working-day allowance.
+                    </div>
                   )}
                 </div>
 
