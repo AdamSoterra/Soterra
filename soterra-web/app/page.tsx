@@ -3911,15 +3911,11 @@ export default function Page() {
                   <input className="ev-in" value={nr.location} placeholder="Level 1 · grid C3" onChange={(e) => setNr((v) => ({ ...v, location: e.target.value }))} />
                 </div>
               </div>
-              <label className="ev-lbl" style={{ marginTop: 12 }}>Question</label>
-              <textarea className="ev-in" rows={3} value={nr.question} placeholder="What needs answering, with the drawing references in the text" onChange={(e) => setNr((v) => ({ ...v, question: e.target.value }))} />
-              <label className="ev-lbl" style={{ marginTop: 12 }}>Our proposed solution (expected on NZ jobs)</label>
-              <textarea className="ev-in" rows={2} value={nr.proposedSolution} placeholder="What you'd do - the consultant just has to say yes" onChange={(e) => setNr((v) => ({ ...v, proposedSolution: e.target.value }))} />
-              <label className="ev-lbl" style={{ marginTop: 12 }}>Code / standard references (comma-separated)</label>
-              <input className="ev-in" value={nr.codeRefs} placeholder="NZS 3604 cl 8.6, E2/AS1 fig 17" onChange={(e) => setNr((v) => ({ ...v, codeRefs: e.target.value }))} />
+              <label className="ev-lbl" style={{ marginTop: 14, fontSize: 12.5, color: "var(--navy)" }}>The question</label>
+              <textarea className="ev-in" rows={7} style={{ fontSize: 15, lineHeight: 1.5 }} value={nr.question} placeholder="What needs answering? Put the drawing and any figures right in the text." onChange={(e) => setNr((v) => ({ ...v, question: e.target.value }))} />
               <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <label className="ev-lbl">Consultant (person)</label>
+                  <label className="ev-lbl">Assign to</label>
                   <input className="ev-in" value={nr.consultantName} placeholder="Jane Smith" onChange={(e) => setNr((v) => ({ ...v, consultantName: e.target.value }))} />
                 </div>
                 <div style={{ flex: 1 }}>
@@ -3933,12 +3929,12 @@ export default function Page() {
                   <input className="ev-in" type="email" value={nr.consultantEmail} placeholder="jane@holmes.co.nz" onChange={(e) => setNr((v) => ({ ...v, consultantEmail: e.target.value }))} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label className="ev-lbl">Cc (comma-separated)</label>
-                  <input className="ev-in" value={nr.cc} placeholder="architect@…" onChange={(e) => setNr((v) => ({ ...v, cc: e.target.value }))} />
+                  <label className="ev-lbl">Cc</label>
+                  <input className="ev-in" value={nr.cc} placeholder="everyone else who should know" onChange={(e) => setNr((v) => ({ ...v, cc: e.target.value }))} />
                 </div>
               </div>
               <p className="page-sub" style={{ margin: "12px 0 0" }}>
-                Send assigns the next RFI number, emails the consultant from this site&apos;s Soterra address (replies land in your inbox), starts the {`7`} working-day clock, and writes the audit line. A draft burns nothing. Pin a drawing from the RFI once it&apos;s created.
+                The person you assign is who the response clock and the consultant scorecard count against. Cc is just kept in the loop. Send burns the next RFI number, emails the assignee from this site&apos;s Soterra address (replies land in your inbox), starts the 7 working-day clock, and writes the audit line. A draft burns nothing. Pin a drawing from the RFI once it&apos;s created.
               </p>
               {rfiErr && <div className="ev-err">{rfiErr}</div>}
               <div className="form-actions">
