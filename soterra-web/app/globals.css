@@ -880,3 +880,11 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .rf-cptoggle:hover{border-color:rgba(245,158,11,.5)}
 .rf-cptoggle.on{border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.1);color:#B45309}
 .rf-cptoggle:disabled{opacity:.5;cursor:default}
+
+/* Clickable drawing rows on the Plans tab (open the full-screen sheet viewer). */
+.doc.clickable{cursor:pointer}
+.doc.clickable:hover{border-color:rgba(14,143,230,.45);box-shadow:0 4px 16px rgba(14,143,230,.12);transform:translateY(-1px)}
+.doc .dt{flex:1;min-width:0}
+.doc .dt b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-open{font-size:12.5px;font-weight:700;color:var(--brand-d);white-space:nowrap;flex-shrink:0}
+.doc.clickable:hover .doc-open{text-decoration:underline;text-underline-offset:3px}

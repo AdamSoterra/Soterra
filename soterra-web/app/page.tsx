@@ -419,8 +419,8 @@ function AppLogin({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted
 // The indexed-document list, collapsed by default. A full drawing set is 120+
 // sheets, which buried the rest of the page and made finding one to delete a
 // long scroll. Shown on both Plans and Update plans, so it lives here.
-function DocsList({ docs, onDelete, onOpen }: { docs: { doc: string; indexed: number }[]; onDelete: (doc: string) => void; onOpen?: (doc: string, npages: number) => void }) {
-  const [open, setOpen] = useState(false);
+function DocsList({ docs, onDelete, onOpen, defaultOpen }: { docs: { doc: string; indexed: number }[]; onDelete: (doc: string) => void; onOpen?: (doc: string, npages: number) => void; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen ?? false);
   const [q, setQ] = useState("");
   const shown = q.trim() ? docs.filter((d) => d.doc.toLowerCase().includes(q.trim().toLowerCase())) : docs;
   const pages = docs.reduce((n, d) => n + d.indexed, 0);
@@ -437,17 +437,17 @@ function DocsList({ docs, onDelete, onOpen }: { docs: { doc: string; indexed: nu
           {docs.length > 8 && (
             <input className="docs-find" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a sheet…" />
           )}
-          <div className="docs">
+          <div className="docs" style={docs.length > 10 ? { maxHeight: "58vh", overflowY: "auto" } : undefined}>
             {shown.map((d) => (
               <div
-                className="doc"
+                className={"doc" + (onOpen ? " clickable" : "")}
                 key={d.doc}
                 onClick={onOpen ? () => onOpen(d.doc, d.indexed) : undefined}
-                style={onOpen ? { cursor: "pointer" } : undefined}
-                title={onOpen ? "Open the sheets" : undefined}
+                title={onOpen ? "Open this drawing" : undefined}
               >
                 <div className="ic spc">PDF</div>
                 <div className="dt"><b>{d.doc}</b><small>{d.indexed} page{d.indexed === 1 ? "" : "s"} indexed</small></div>
+                {onOpen && <span className="doc-open">Open ›</span>}
                 <button className="sh-x" title="Remove from index" onClick={(e) => { e.stopPropagation(); onDelete(d.doc); }} style={{ position: "static" }}>✕</button>
               </div>
             ))}
@@ -2983,8 +2983,9 @@ export default function Page() {
                     <div><div className="big">{docs.reduce((n, d) => n + d.indexed, 0)}</div><small>pages indexed</small></div>
                     <div style={{ flex: 1 }}><small>{docs.length} document{docs.length > 1 ? "s" : ""} read and searchable by the assistant.</small><span className="grn">● Ready</span></div>
                   </div>
-                  <div style={{ marginTop: 14 }}>
-                    <DocsList docs={docs} onDelete={deletePlan} onOpen={(doc, npages) => setPinStage({ doc, page: 1, npages })} />
+                  <div className="pg-k" style={{ marginTop: 18 }}>Your drawings <span style={{ fontWeight: 500, color: "var(--mut)", textTransform: "none", letterSpacing: 0 }}>· tap any one to open it full screen, zoom, pan and pin issues</span></div>
+                  <div style={{ marginTop: 4 }}>
+                    <DocsList docs={docs} onDelete={deletePlan} onOpen={(doc, npages) => setPinStage({ doc, page: 1, npages })} defaultOpen />
                   </div>
                 </>
               )}
