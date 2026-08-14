@@ -141,6 +141,56 @@ type ChecklistHead = {
 type QaLoc = { label: string; kind: string; drawings: string[]; source: "extracted" | "user" };
 type ChecklistFull = { checklist: ChecklistHead; items: ChecklistItem[] };
 
+// ─── Floor-plan-first sheet pick ──────────────────────────────────────────
+// A location-scoped pin should land on the location's floor / GA plan — the
+// "you are here" map — not on whatever detail sheet the location list happened
+// to start with. Titles are all we have, so: reward plan wording and a
+// level/unit match, punish detail-ish wording, and refuse to guess when
+// nothing scores — callers keep their old first-drawing fallback.
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function locPartMatches(part: string, title: string): boolean {
+  const m = part.match(/^(level|unit|apartment|block|tower|building|stage)\s*0*([a-z0-9]+)$/i);
+  if (m) {
+    const noun: Record<string, string> = {
+      level: "(?:level|lvl|l)", unit: "(?:unit|u)", apartment: "(?:apartment|apt)",
+      building: "(?:building|bldg)", block: "block", tower: "tower", stage: "stage",
+    };
+    return new RegExp(`\\b${noun[m[1].toLowerCase()]}[ ._-]*0*${escRe(m[2])}\\b`, "i").test(title);
+  }
+  if (/^ground(\s*floor)?$/.test(part)) return /\bground\b|\bgf\b/i.test(title);
+  if (/^basement/.test(part)) return /\bbasement\b|\bbsmt\b/i.test(title);
+  if (part === "site-wide") return /\bsite\b/i.test(title);
+  const words = part.split(/\s+/).filter((w) => w.length > 2);
+  return words.length > 0 && words.every((w) => title.includes(w));
+}
+function floorPlanScore(locLabel: string, title: string): number {
+  const t = title.toLowerCase();
+  let s = 0;
+  if (/floor\s*plan|general\s*arrangement|\bga\b/.test(t)) s += 6;
+  else if (/\bplan\b/.test(t)) s += 3;
+  if (/\bdetails?\b|\bsections?\b|\belevations?\b|\bschedules?\b|\brcp\b|reflected\s*ceiling|\bsetout\b|\bschematic\b|\bdiagram\b|\briser\b|\blegend\b|\bnotes\b|\bcover\b|\bindex\b|drawing\s*list/.test(t)) s -= 6;
+  for (const part of locLabel.toLowerCase().split(" - ")) {
+    if (locPartMatches(part.trim(), t)) s += 4;
+  }
+  return s;
+}
+/** Best "you are here" sheet for a location, or null to keep the caller's
+ *  fallback. Own drawings need any positive score; borrowing from the rest of
+ *  the set demands plan wording AND a location match, so we never open some
+ *  other level's floor plan. */
+function floorPlanFor(locLabel: string, drawings: string[], allDocs: string[]): string | null {
+  const pick = (list: string[], min: number): string | null => {
+    let best: string | null = null;
+    let bestScore = min;
+    for (const d of list) {
+      const s = floorPlanScore(locLabel, d);
+      if (s > bestScore) { best = d; bestScore = s; }
+    }
+    return best;
+  };
+  return pick(drawings, 0) ?? pick(allDocs.filter((d) => !drawings.includes(d)), 6);
+}
+
 // Consultant discipline codes → readable names (mirrors lib/categories.ts
 // CONSULTANT_TYPES). Council codes come back on the row already named.
 const DISCIPLINE: Record<string, string> = {
@@ -715,7 +765,7 @@ export default function Page() {
   const [newClLocs, setNewClLocs] = useState<QaLoc[]>([]);
   const [newClLocCustom, setNewClLocCustom] = useState("");
   // Pinning an item on a drawing: which item, and which sheet to open.
-  const [pinFor, setPinFor] = useState<{ itemId: string; label: string; doc: string; page: number; npages: number } | null>(null);
+  const [pinFor, setPinFor] = useState<{ itemId: string; label: string; doc: string; page: number; npages: number; sheets?: { doc: string; npages: number }[] } | null>(null);
   // Send-fixes-to-subs modal (Feature 4 finish move).
   const [sendOpen, setSendOpen] = useState(false);
   const [subsList, setSubsList] = useState<Sub[]>([]);
@@ -2164,24 +2214,24 @@ export default function Page() {
   };
 
   // Open the pin stage for a checklist item. An already-pinned item opens on
-  // its pin's sheet; a fresh one opens on the check's location drawing, else
-  // the first doc on the site.
+  // its pin's sheet; a fresh one opens on the check's location FLOOR PLAN (the
+  // "you are here" map), else the location's first drawing, else the first doc
+  // on the site. The location's sheet list rides along for the sheet switcher.
   const openPinFor = async (it: ChecklistItem, n: number) => {
     let doc: string | null = null;
     let page = 1;
+    let loc: QaLoc | null = null;
+    const locLabel = openChecklist?.checklist.location;
+    if (locLabel) {
+      try {
+        const r = await apiFetch("/api/locations");
+        const d = await r.json();
+        loc = (Array.isArray(d?.locations) ? (d.locations as QaLoc[]) : []).find((l) => l.label.toLowerCase() === locLabel.toLowerCase()) ?? null;
+      } catch { /* fall through to first doc */ }
+    }
     if (it.pins?.length) {
       doc = it.pins[0].doc;
       page = it.pins[0].page;
-    } else {
-      const locLabel = openChecklist?.checklist.location;
-      if (locLabel) {
-        try {
-          const r = await apiFetch("/api/locations");
-          const d = await r.json();
-          const loc = (Array.isArray(d?.locations) ? (d.locations as QaLoc[]) : []).find((l) => l.label.toLowerCase() === locLabel.toLowerCase());
-          if (loc?.drawings?.length) doc = loc.drawings[0];
-        } catch { /* fall through to first doc */ }
-      }
     }
     let dlist = docs;
     if (!docsLoaded) {
@@ -2191,10 +2241,17 @@ export default function Page() {
         if (Array.isArray(d?.docs)) dlist = d.docs;
       } catch { /* keep what we have */ }
     }
+    if (!doc && loc?.drawings?.length) doc = floorPlanFor(loc.label, loc.drawings, dlist.map((d) => d.doc)) ?? loc.drawings[0];
     if (!doc) doc = dlist[0]?.doc ?? null;
     if (!doc) { setClErr("Upload this site's plans first — there's no drawing to pin on."); return; }
     const nd = dlist.find((d) => d.doc === doc);
-    setPinFor({ itemId: it.id, label: String(n), doc, page, npages: Math.max(nd?.indexed ?? 0, page) });
+    // The switcher's sheet list: the location's drawings when the check is
+    // location-scoped, the whole set otherwise — always including the open doc.
+    const locDrawings = loc?.drawings ?? [];
+    const inScope = locDrawings.length ? dlist.filter((d) => locDrawings.includes(d.doc)) : dlist;
+    const sheets = inScope.map((d) => ({ doc: d.doc, npages: Math.max(d.indexed, 1) }));
+    if (!sheets.some((s) => s.doc === doc)) sheets.unshift({ doc, npages: Math.max(nd?.indexed ?? 0, page) });
+    setPinFor({ itemId: it.id, label: String(n), doc, page, npages: Math.max(nd?.indexed ?? 0, page), sheets });
   };
   // Tick an item. Optimistic — on site, on a phone, on bad reception, waiting
   // for a round trip before the tick lands is the difference between a tool
@@ -3771,6 +3828,8 @@ export default function Page() {
           doc={pinStage.doc}
           page={pinStage.page}
           npages={pinStage.npages}
+          sheets={docs.map((d) => ({ doc: d.doc, npages: Math.max(d.indexed, 1) }))}
+          onSwitchSheet={(doc, npages) => setPinStage({ doc, page: 1, npages })}
           onClose={() => setPinStage(null)}
           fetchApi={apiFetch}
           refresh={pinRefresh}
@@ -4094,6 +4153,8 @@ export default function Page() {
           doc={pinFor.doc}
           page={pinFor.page}
           npages={pinFor.npages}
+          sheets={pinFor.sheets}
+          onSwitchSheet={(doc, npages) => setPinFor((f) => (f ? { ...f, doc, page: 1, npages } : f))}
           onClose={() => setPinFor(null)}
           fetchApi={apiFetch}
           onDrop={async (at) => {
@@ -5279,8 +5340,19 @@ function PinStage(p: {
   onPinClick?: (pin: PinRow) => void;
   /** Bump to refetch the pins (e.g. after a flag was created or deleted). */
   refresh?: number;
+  /** Sheets this stage may flip between (the location's drawings, or the whole
+   *  set). With 2+ the title becomes a switcher; the parent owns the doc. */
+  sheets?: { doc: string; npages: number }[];
+  onSwitchSheet?: (doc: string, npages: number) => void;
 }) {
   const [page, setPage] = useState(p.page);
+  // The parent swaps p.doc on a sheet switch (same mounted instance) — follow
+  // it back to the page the parent asked for, not the old sheet's page.
+  const lastDocRef = useRef(p.doc);
+  useEffect(() => {
+    if (lastDocRef.current !== p.doc) { lastDocRef.current = p.doc; setPage(p.page); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.doc]);
   const [pins, setPins] = useState<PinRow[]>([]);
   const [img, setImg] = useState<"loading" | "ok" | "error">("loading");
   const [scale, setScale] = useState(1);
@@ -5334,7 +5406,21 @@ function PinStage(p: {
     <div className="ps-scrim">
       <div className="ps-top">
         <div className="ti">
-          <b>{p.doc}</b>
+          {p.sheets && p.sheets.length > 1 && p.onSwitchSheet ? (
+            <select
+              className="ps-sheet"
+              value={p.doc}
+              title="Switch sheet"
+              onChange={(e) => {
+                const nd = p.sheets!.find((s) => s.doc === e.target.value);
+                if (nd && nd.doc !== p.doc) p.onSwitchSheet!(nd.doc, nd.npages);
+              }}
+            >
+              {p.sheets.map((s) => <option key={s.doc} value={s.doc}>{s.doc}</option>)}
+            </select>
+          ) : (
+            <b>{p.doc}</b>
+          )}
           <small>{pins.length ? `${pins.length} pin${pins.length === 1 ? "" : "s"} on this page` : "No pins on this page"}</small>
         </div>
         <div className="ps-nav">
