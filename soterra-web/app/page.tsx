@@ -3168,7 +3168,7 @@ export default function Page() {
                   <div className="note">Worst offender first · RAG against the {rfiAna?.slaWd ?? 7} working-day allowance · this table goes in the monthly minutes</div>
                   {rfiAna && rfiAna.scorecard.length > 0 ? (
                     <table>
-                      <thead><tr><th>Consultant</th><th>Open</th><th>Avg (wd)</th><th>Median *</th><th>% in SLA †</th><th>Overdue</th><th>Avg late</th><th>Longest</th><th>Reopen %</th></tr></thead>
+                      <thead><tr><th>Consultant</th><th>Open</th><th>Avg (wd)</th><th>Median *</th><th>% in SLA †</th><th>Overdue</th><th>Avg late</th><th>Longest</th></tr></thead>
                       <tbody>
                         {rfiAna.scorecard.map((s) => {
                           const rag = (v: number, warn: number, bad: number) => (v >= bad ? "r" : v >= warn ? "a" : "g");
@@ -3183,7 +3183,6 @@ export default function Page() {
                               <td className={s.overdue ? "r" : "g"}>{s.overdue}</td>
                               <td className={s.avgLateWd ? rag(s.avgLateWd, 2, 5) : "g"}>{s.avgLateWd ? `${s.avgLateWd} wd` : "-"}</td>
                               <td>{s.longestOpenWd ? `${s.longestOpenWd} wd` : "-"}</td>
-                              <td className={s.reopenPct >= 15 ? "a" : "g"}>{s.reopenPct}%</td>
                             </tr>
                           );
                         })}
@@ -3209,10 +3208,10 @@ export default function Page() {
                           <div className="rf-brow" key={s.consultant}>
                             <span className="bl">{s.consultant}</span>
                             <div className="rf-btrack">
-                              <div className={"rf-bfill" + (s.avgWd > rfiAna.slaWd ? " over" : "")} style={{ width: `${Math.min(96, (s.avgWd / max) * 100)}%` }} />
+                              <div className={"rf-bfill" + (s.avgWd > rfiAna.slaWd ? " over" : "")} style={{ width: `${Math.min(100, (s.avgWd / max) * 100)}%` }} />
                               <div className="rf-slaline" style={{ left: `${(rfiAna.slaWd / max) * 100}%` }} />
-                              <span className="rf-bval">{s.avgWd} wd</span>
                             </div>
+                            <span className="rf-bval">{s.avgWd} wd</span>
                           </div>
                         );
                       })}
