@@ -7,20 +7,11 @@ import { planPageImage } from "@/lib/planRender";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Render ONE page of a project's own uploaded plan to a PNG, so a citation can
-// show the actual drawing rather than a placeholder. Same rendering path as the
-// manufacturer viewer, but this serves PRIVATE customer drawings, so it is
-// gated hard:
-//   - the request must carry a signed-in Clerk session (the <img> sends the
-//     session cookie same-origin),
-//   - the user must be a member of the project it names,
-//   - the file is read from private Blob by the pathname WE stored, never a
-//     path the client supplies.
-// The project id travels in the query string because an <img> can't send the
-// x-soterra-project header the rest of the app uses; membership is re-checked
-// here regardless, so that's not a trust downgrade.
+// A small cached render of a plan page for the Plans preview grid. Same private
+// gating as /api/plan-page (membership re-checked; the <img> sends the session
+// cookie same-origin). Defaults to page 1 — the sheet's cover.
 //
-//   GET /api/plan-page?project=<id>&doc=<title>&p=1  →  image/png
+//   GET /api/plan-thumb?project=<id>&doc=<title>&p=1  →  image/png
 export async function GET(req: Request) {
   const { userId } = await auth();
   if (!userId) return new Response("Not signed in", { status: 401 });
@@ -28,7 +19,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const project = url.searchParams.get("project")?.trim();
   const doc = url.searchParams.get("doc")?.trim();
-  const p = Number(url.searchParams.get("p"));
+  const p = Number(url.searchParams.get("p") ?? "1");
   if (!project || !doc || !Number.isInteger(p) || p < 1) return new Response("Bad request", { status: 400 });
 
   const [member] = await db
@@ -38,14 +29,12 @@ export async function GET(req: Request) {
     .limit(1);
   if (!member) return new Response("Forbidden", { status: 403 });
 
-  // Renders once and caches to Blob; every view after is served from the store.
-  const buf = await planPageImage(project, doc, p);
+  const buf = await planPageImage(project, doc, p, { thumb: true });
   if (!buf) return new Response("Not found", { status: 404 });
 
   return new Response(buf, {
     headers: {
       "Content-Type": "image/png",
-      // Private customer drawing — the browser may cache it, a shared CDN must not.
       "Cache-Control": "private, max-age=86400",
     },
   });

@@ -459,6 +459,42 @@ function DocsList({ docs, onDelete, onOpen, defaultOpen }: { docs: { doc: string
   );
 }
 
+// Procore-style preview grid of a project's drawings (Plans tab). Each card
+// shows a cached thumbnail (rendered once, then instant) and opens the sheet.
+function PlanGrid({ docs, projectId, onOpen, onDelete }: { docs: { doc: string; indexed: number }[]; projectId: string; onOpen: (doc: string, npages: number) => void; onDelete: (doc: string) => void }) {
+  const [q, setQ] = useState("");
+  const shown = q.trim() ? docs.filter((d) => d.doc.toLowerCase().includes(q.trim().toLowerCase())) : docs;
+  return (
+    <>
+      {docs.length > 8 && (
+        <input className="docs-find" style={{ marginTop: 0, marginBottom: 12 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a sheet…" />
+      )}
+      <div className="plan-grid">
+        {shown.map((d) => (
+          <div className="plan-card" key={d.doc} onClick={() => onOpen(d.doc, d.indexed)} title="Open this drawing">
+            <div className="plan-thumb">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/plan-thumb?project=${encodeURIComponent(projectId)}&doc=${encodeURIComponent(d.doc)}&p=1`}
+                alt=""
+                loading="lazy"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.parentElement as HTMLElement).classList.add("noimg"); }}
+              />
+              <span className="plan-thumb-fallback">PDF</span>
+            </div>
+            <div className="plan-meta">
+              <b title={d.doc}>{d.doc}</b>
+              <small>{d.indexed} page{d.indexed === 1 ? "" : "s"}</small>
+            </div>
+            <button className="plan-del" title="Remove from index" onClick={(e) => { e.stopPropagation(); onDelete(d.doc); }}>✕</button>
+          </div>
+        ))}
+        {shown.length === 0 && <div className="page-sub" style={{ margin: "4px 2px" }}>Nothing matches “{q}”.</div>}
+      </div>
+    </>
+  );
+}
+
 export default function Page() {
   const [tab, setTab] = useState<Tab>("assistant");
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -2984,8 +3020,8 @@ export default function Page() {
                     <div style={{ flex: 1 }}><small>{docs.length} document{docs.length > 1 ? "s" : ""} read and searchable by the assistant.</small><span className="grn">● Ready</span></div>
                   </div>
                   <div className="pg-k" style={{ marginTop: 18 }}>Your drawings <span style={{ fontWeight: 500, color: "var(--mut)", textTransform: "none", letterSpacing: 0 }}>· tap any one to open it full screen, zoom, pan and pin issues</span></div>
-                  <div style={{ marginTop: 4 }}>
-                    <DocsList docs={docs} onDelete={deletePlan} onOpen={(doc, npages) => setPinStage({ doc, page: 1, npages })} defaultOpen />
+                  <div style={{ marginTop: 10 }}>
+                    {projectId && <PlanGrid docs={docs} projectId={projectId} onOpen={(doc, npages) => setPinStage({ doc, page: 1, npages })} onDelete={deletePlan} />}
                   </div>
                 </>
               )}

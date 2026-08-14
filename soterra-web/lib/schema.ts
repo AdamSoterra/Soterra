@@ -165,6 +165,12 @@ export const planPages = pgTable(
     title: text("title"), // sheet title, best-effort (nullable)
     disc: text("disc"), // discipline, best-effort (nullable)
     text: text("text").notNull(), // extracted page text
+    // Cached renders (populated lazily on first view, then reused so opening a
+    // sheet is instant instead of re-rendering the PDF every time). imageUrl =
+    // the full-res page; thumbUrl = a small render for the Plans preview grid.
+    // Both are private Blob pathnames; null = not rendered yet.
+    imageUrl: text("image_url"),
+    thumbUrl: text("thumb_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({ byProject: index("plan_pages_project_idx").on(t.projectId) })

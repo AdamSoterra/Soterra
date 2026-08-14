@@ -888,3 +888,19 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .doc .dt b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .doc-open{font-size:12.5px;font-weight:700;color:var(--brand-d);white-space:nowrap;flex-shrink:0}
 .doc.clickable:hover .doc-open{text-decoration:underline;text-underline-offset:3px}
+
+/* Plans preview grid (cached thumbnails, Procore-style). */
+.plan-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:14px}
+.plan-card{position:relative;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;cursor:pointer;box-shadow:0 2px 12px rgba(12,42,71,.05);transition:transform .15s,box-shadow .15s,border-color .15s}
+.plan-card:hover{border-color:rgba(14,143,230,.45);transform:translateY(-2px);box-shadow:0 12px 26px rgba(12,42,71,.12)}
+.plan-thumb{position:relative;aspect-ratio:1 / 1.15;background:#EEF3FA;border-bottom:1px solid var(--line2);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.plan-thumb img{width:100%;height:100%;object-fit:cover;object-position:top center;background:#fff}
+.plan-thumb-fallback{position:absolute;font-size:13px;font-weight:800;letter-spacing:.06em;color:var(--mut);display:none}
+.plan-thumb.noimg .plan-thumb-fallback{display:block}
+.plan-meta{padding:9px 11px 11px}
+.plan-meta b{display:block;font-size:12px;font-weight:700;color:var(--navy);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-meta small{font-size:11px;color:var(--mut)}
+.plan-del{position:absolute;top:7px;right:7px;width:26px;height:26px;border-radius:8px;border:none;background:rgba(255,255,255,.92);color:var(--slate);font-size:13px;cursor:pointer;opacity:0;transition:opacity .15s;box-shadow:0 1px 4px rgba(12,42,71,.15)}
+.plan-card:hover .plan-del{opacity:1}
+.plan-del:hover{color:var(--red)}
+@media(max-width:520px){.plan-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}}
