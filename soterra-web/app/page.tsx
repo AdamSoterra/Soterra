@@ -3220,14 +3220,10 @@ export default function Page() {
                   </div>
                 )}
 
-                <div className="rf-eot">
-                  <div className="t">
-                    <b>EOT evidence pack</b>
-                    <small>Every late, critical-path RFI as cause and effect: issued → required-by → answered → net consultant days late → schedule impact. {rfiAna?.eot.length ? `${rfiAna.eot.length} RFI${rfiAna.eot.length === 1 ? "" : "s"} qualify right now.` : "None qualify right now - that's a good thing."}</small>
-                  </div>
-                </div>
-                {rfiAna && rfiAna.eot.length > 0 && (
-                  <div className="rf-sc">
+                <div className="rf-sc">
+                  <h3>EOT evidence pack</h3>
+                  <div className="note">Every late, critical-path RFI as cause and effect: issued → required-by → answered → net consultant days late → schedule impact. {rfiAna?.eot.length ? `${rfiAna.eot.length} RFI${rfiAna.eot.length === 1 ? "" : "s"} qualify right now.` : "None qualify right now, which is a good thing."}</div>
+                  {rfiAna && rfiAna.eot.length > 0 ? (
                     <table>
                       <thead><tr><th>RFI</th><th>Subject</th><th>Consultant</th><th>Required by</th><th>Answered</th><th>Net late</th><th>Schedule impact</th><th>Status</th></tr></thead>
                       <tbody>
@@ -3245,9 +3241,11 @@ export default function Page() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                )}
-                <div className="rf-guard">Shown against the register&apos;s assumed allowance ({rfiAna?.slaWd ?? 7} working days). Turnaround is net of clarification bounce-backs (the clock pauses while the ball is back with us). Our own late-raised RFIs stay in the log - an honest register is what makes the pack defensible.</div>
+                  ) : (
+                    <div className="page-sub" style={{ padding: "2px 15px 8px" }}>No late critical-path RFIs right now, so there is nothing to claim.</div>
+                  )}
+                  <div className="rf-guard" style={{ padding: "2px 15px 12px" }}>Shown against the register&apos;s assumed allowance ({rfiAna?.slaWd ?? 7} working days). Turnaround is net of clarification bounce-backs (the clock pauses while the ball is back with us). Our own late-raised RFIs stay in the log - an honest register is what makes the pack defensible.</div>
+                </div>
               </>
             )}
 
