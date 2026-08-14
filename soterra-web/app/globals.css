@@ -481,7 +481,7 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .docs-toggle .docs-act{margin-left:auto;font-size:13px;font-weight:600;color:var(--brand)}
 .docs-find{width:100%;margin-top:10px;padding:10px 13px;border:1px solid var(--line);border-radius:11px;font-family:var(--font);font-size:13.5px;color:var(--navy);background:#fff;outline:none;transition:border-color .15s}
 .docs-find:focus{border-color:rgba(14,143,230,.5)}
-.docs-wrap .docs{margin-top:10px}
+.docs-wrap .docs{margin-top:10px;grid-template-columns:1fr;overflow-x:hidden}
 
 /* ════════ /install — device-aware install page ════════ */
 .inst{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 20px}
