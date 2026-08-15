@@ -1,0 +1,2726 @@
+{
+ "BCO20347761-2_4102336471_ISF_Pass_20250120.pdf": {
+  "shouldExtract": [],
+  "mustNotExtract": [
+   {
+    "match": "Approved consent documents sighted on site",
+    "reason": "admin"
+   },
+   {
+    "match": "QA documentation to be provided at CCC",
+    "reason": "admin"
+   },
+   {
+    "match": "Book next inspection when ready",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20347761-2_4102344827_IFG_Partial Pass_20250210.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Hold-down bolts missing to grid 3 bracing walls",
+    "match": "hold down bolts not yet installed both ends",
+    "location": "Ground floor, grid 3",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Stud spacing over maximum at unit G05 kitchen wall",
+    "match": "studs measured at 650 crs",
+    "location": "Ground floor, unit G05",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Lintel fixings not per detail, engineer to confirm",
+    "match": "lintel fixings to level 1 corridor openings not as per detail",
+    "location": "Level 1 corridor",
+    "category": "Structural",
+    "borderline": true
+   },
+   {
+    "title": "Split trimming stud at unit 1/3 window",
+    "match": "one split stud sighted",
+    "location": "Level 1, unit 1/3",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Cabinetry and vanity blocking still to install",
+    "match": "blocking for kitchen cabinetry and bathroom vanities to come",
+    "location": "Throughout ground and level 1",
+    "category": "Interior / Linings",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "Truss producer statement to come",
+    "reason": "admin"
+   },
+   {
+    "match": "PS4 to come from Matai",
+    "reason": "admin"
+   },
+   {
+    "match": "moisture checks at preline",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20347761-2_4102351196_IPB_Partial Pass_20250304.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Pipe clipping centres over maximum under vanities",
+    "match": "to clip at 600 max crs",
+    "location": "Ground floor, units G03 and G04",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "Insulation gaps to external walls",
+    "match": "unit G01 lounge and G06 bed 2",
+    "location": "Ground floor, units G01 and G06",
+    "category": "Interior / Linings",
+    "borderline": false
+   },
+   {
+    "title": "Wrap tears at unit G02 sill to tape",
+    "match": "tears and staple holes to tape before lining",
+    "location": "Ground floor, unit G02",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   },
+   {
+    "title": "Flashing tape lifting at G02 window head",
+    "match": "flashng tape lifting at G02 east window head",
+    "location": "Ground floor, unit G02",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   },
+   {
+    "title": "Fire blocking missing mid-height IT walls",
+    "match": "fire blocking to mid height of IT walls units 1/2-1/5",
+    "location": "Level 1, units 1/2-1/5",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "IT wall penetrations at unit 1/4 laundry to seal",
+    "match": "penertrations through IT wall at unit 1/4 laundry",
+    "location": "Level 1, unit 1/4",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "TMVs still to fit to all units",
+    "match": "TMV still to fit to all units",
+    "location": "Ground and level 1, all units",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "closed out with engineer letter",
+    "reason": "resolved"
+   },
+   {
+    "match": "QA to come for insulation installer",
+    "reason": "admin"
+   },
+   {
+    "match": "wet area board to bathrooms as per plans",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20347761-2_4102359441_IPB_Partial Pass_20250318.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Penetrations above bathroom ceilings to fire stop",
+    "match": "penos above bathroom ceilings units 2/2 and 2/5",
+    "location": "Level 2, units 2/2 and 2/5",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Nogs for accessible bathroom rails to come",
+    "match": "nogs for accessible bathroom rails unit 2/1",
+    "location": "Level 2, unit 2/1",
+    "category": "Access & Barriers",
+    "borderline": false
+   },
+   {
+    "title": "Earth bonding to level 3 riser pipework not run",
+    "match": "earth bonding to metal water pipework not yet run",
+    "location": "Level 3 riser",
+    "category": "Electrical",
+    "borderline": false
+   },
+   {
+    "title": "Shower mixer set too deep at unit 3/4",
+    "match": "shower mixer set too deep for lining thickness",
+    "location": "Level 3, unit 3/4",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "HWC seismic restraint straps not fitted level 4",
+    "match": "HWC seismic restraint straps not fitted",
+    "location": "Level 4, units 4/1-4/6",
+    "category": "Seismic",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "pipe clipping under G03 and G04 vanities CLIPS ADDED",
+    "reason": "resolved"
+   },
+   {
+    "match": "insulation gaps units G01 and G06 REINSTATED",
+    "reason": "resolved"
+   },
+   {
+    "match": "unit G02 TAPED AND ROLLED SIGHTED",
+    "reason": "resolved"
+   },
+   {
+    "match": "DWANGS INSTALLED SIGHTED 12/03/25",
+    "reason": "resolved"
+   },
+   {
+    "match": "unit 1/4 laundry SEALED WITH INTUMESCENT SEALANT",
+    "reason": "resolved"
+   },
+   {
+    "match": "TMVs to ground and level 1 units FITTED",
+    "reason": "resolved"
+   },
+   {
+    "match": "insulation certs and QA to be provided at CCC",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20347761-2_4102367208_IPL_Fail_20250402.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Service penetrations not fire stopped",
+    "match": "Passive fire: all service penetrations fire stopped",
+    "location": "Basement to level 2",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Basement fire doors to install and seal",
+    "match": "fire doors to stair and lift lobby to install and seal",
+    "location": "Basement",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Carpark ceiling penetrations open through fire separation",
+    "match": "cable trays and pipe runs open through fire separation",
+    "location": "Basement carpark ceiling",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Bin store fire door not latching",
+    "match": "bin store fire door not latching",
+    "location": "Ground floor bin store",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Corridor ceiling passive fire incomplete",
+    "match": "penos above gib open at services crossing",
+    "location": "Ground floor corridor",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Precast rib gaps and bathroom collars at unit 1/3",
+    "match": "gaps to precast floor ribs to seal",
+    "location": "Level 1, unit 1/3",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "IT wall penetrations at unit 1/5 to seal",
+    "match": "IT wall penos to stop and seal both sides",
+    "location": "Level 1, unit 1/5",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Smoke seals to level 1 entry doors to fit",
+    "match": "smoke seals to unit entry doors level 1",
+    "location": "Level 1",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Units 2/4-2/6 IT wall penetrations to fire stop",
+    "match": "units 2/4-2/6 service penos to IT walls to fire stop",
+    "location": "Level 2, units 2/4-2/6",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Terminal vents capped in ceiling space",
+    "match": "terminal vents still to run through roof",
+    "location": "Level 2, units 2/1 and 2/3",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "all preline items sighted complete",
+    "reason": "resolved"
+   },
+   {
+    "match": "PS3 for passive fire from fireshield passive ltd",
+    "reason": "admin"
+   },
+   {
+    "match": "fire stopping register to be kept on site",
+    "reason": "admin"
+   },
+   {
+    "match": "levels 3 and 4 not ready, still to inspect",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20347761-2_4102374913_IPL_Partial Pass_20250415.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Units 2/4-2/6 IT wall penetrations still to finish",
+    "match": "units 2/4-2/6 service penos to IT walls still to finish",
+    "location": "Level 2, units 2/4-2/6",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Query non fire rated sealant at unit 2/5",
+    "match": "appears to be a non fire rated product",
+    "location": "Level 2, unit 2/5 kitchen",
+    "category": "Fire",
+    "borderline": true
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "fire doors to stair and lift lobby INSTALLED AND SEALED",
+    "reason": "resolved"
+   },
+   {
+    "match": "cable trays STOPPED AND SEALED SIGHTED",
+    "reason": "resolved"
+   },
+   {
+    "match": "bin store fire door closer ADJUSTED AND LATCHING",
+    "reason": "resolved"
+   },
+   {
+    "match": "passive fire above ceilings COMPLETED AND SIGHTED",
+    "reason": "resolved"
+   },
+   {
+    "match": "bulkhead patches and collars COMPLETED SIGHTED",
+    "reason": "resolved"
+   },
+   {
+    "match": "IT wall penos SEALED BOTH SIDES SIGHTED",
+    "reason": "resolved"
+   },
+   {
+    "match": "smoke seals level 1 entry doors FITTED SIGHTED",
+    "reason": "resolved"
+   },
+   {
+    "match": "terminal vents RUN THROUGH ROOF WITH FLASHINGS",
+    "reason": "resolved"
+   },
+   {
+    "match": "PS3 still to come",
+    "reason": "admin"
+   },
+   {
+    "match": "updated fire stopping register and PS3",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20347761-2_4102355602_ICA_Fail_20250325.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Building wrap not to manufacturers specifications",
+    "match": "Building wrap installed as per manufacturers specifications",
+    "location": "North elevation",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   },
+   {
+    "title": "Wrap torn at fixings",
+    "match": "wrap torn at fixings north elevation",
+    "location": "North elevation",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   },
+   {
+    "title": "Head flashings to install to L1 windows",
+    "match": "head flashngs to install",
+    "location": "Level 1",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   },
+   {
+    "title": "T-bracket balcony junction protection unclear",
+    "match": "T-bracket junction to balcony",
+    "location": "Balcony, levels 1-2",
+    "category": "Weathertightness / Cladding",
+    "borderline": true
+   },
+   {
+    "title": "Inter-storey flashing missing at L1/L2 junction",
+    "match": "inter-storey flashing required at L1/L2 junction",
+    "location": "L1/L2 junction",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   },
+   {
+    "title": "Parapet junction detail to clarify",
+    "match": "parapet junction detail to clarify",
+    "location": "Parapet",
+    "category": "Weathertightness / Cladding",
+    "borderline": true
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "book ICA recheck when items complete",
+    "reason": "admin"
+   },
+   {
+    "match": "Structural PS4 for facade fixings to come at CCC",
+    "reason": "admin"
+   },
+   {
+    "match": "Approved consent documents on site",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20347761-2_4102363110_ICA_Partial Pass_20250408.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Cavity mesh vertical missing at stairwell side",
+    "match": "cavity mesh vertical not installed to stairwell side",
+    "location": "Stairwell",
+    "category": "Fire",
+    "borderline": true
+   },
+   {
+    "title": "Balustrade rails QA outstanding",
+    "match": "balustrade rails QA to come",
+    "location": "",
+    "category": "Access & Barriers",
+    "borderline": false
+   },
+   {
+    "title": "Backflashings between claddings to install",
+    "match": "backflashings between claddings to install",
+    "location": "",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "SIGHTED PHOTO EVIDENCE OF THIS COMPLETED",
+    "reason": "resolved"
+   },
+   {
+    "match": "wrap torn at fixings north elevation TAPED AND SIGHTED",
+    "reason": "resolved"
+   },
+   {
+    "match": "SIGHTED INSTALLED WITH FALL",
+    "reason": "resolved"
+   },
+   {
+    "match": "inter-storey flashing required at L1/L2 junction INSTALLED",
+    "reason": "resolved"
+   },
+   {
+    "match": "DETAIL A5-315 RECEIVED FROM PURIRI ARCHITECTURE",
+    "reason": "resolved"
+   },
+   {
+    "match": "parapet junction detail to clarify CLARIFIED",
+    "reason": "resolved"
+   },
+   {
+    "match": "wrap acceptable to close in balance of elevations",
+    "reason": "acceptance"
+   }
+  ]
+ },
+ "BCO20347761-2_4102389477_ICL_Partial Pass_20250506.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Ground clearance to paving possibly under 100mm",
+    "match": "ground clearance to paving appears less than 100",
+    "location": "South elevation",
+    "category": "Weathertightness / Cladding",
+    "borderline": true
+   },
+   {
+    "title": "Sealant to meter box penetrations incomplete",
+    "match": "sealant to meter box penos to complete",
+    "location": "",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   },
+   {
+    "title": "Scriber junction open at unit G/2",
+    "match": "scriber junction open at unit G/2",
+    "location": "Unit G/2, south west corner",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "backflashings sighted at this visit, complete",
+    "reason": "resolved"
+   },
+   {
+    "match": "fire engineer confirmed mesh not required",
+    "reason": "resolved"
+   },
+   {
+    "match": "u/s soffit linings sighted, ok",
+    "reason": "acceptance"
+   },
+   {
+    "match": "head flashings sighted with fall, ok",
+    "reason": "acceptance"
+   },
+   {
+    "match": "cladding QA docs to be provided at CCC",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20347761-2_4102347730_IDT_Partial Pass_20250225.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Marginal fall on stormwater run to verify",
+    "match": "fall looks marginal over 6m run",
+    "location": "West side, SW connection",
+    "category": "Plumbing & Drainage",
+    "borderline": true
+   },
+   {
+    "title": "Buried inspection point to expose",
+    "match": "IP buried near boundary to expose",
+    "location": "Near boundary, west side",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "Drain bedding material to confirm",
+    "match": "bedding material to confirm",
+    "location": "West side trench",
+    "category": "Plumbing & Drainage",
+    "borderline": true
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "water test sighted and held",
+    "reason": "acceptance"
+   },
+   {
+    "match": "as-built drainage plan to be provided at CCC",
+    "reason": "admin"
+   },
+   {
+    "match": "Book recheck once IP exposed",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20347761-2_4102353918_IPP_Pass_20250311.pdf": {
+  "shouldExtract": [],
+  "mustNotExtract": [
+   {
+    "match": "TMV to come at fitout",
+    "reason": "admin"
+   },
+   {
+    "match": "PS3 from torrent plumbing to be provided at CCC",
+    "reason": "admin"
+   },
+   {
+    "match": "consent documents sighted on site",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20347761-2_4102380054_IME_Completed_20250422.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Basement passive fire stopping incomplete",
+    "match": "basement passive fire still incomplete",
+    "location": "Basement",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Fire door to stair 2 not sealed",
+    "match": "fire door to stair 2 yet to be sealed",
+    "location": "Stair 2",
+    "category": "Fire",
+    "borderline": true
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "QA documentation to be provided at CCC",
+    "reason": "admin"
+   },
+   {
+    "match": "next inspection to be booked for postline recheck",
+    "reason": "admin"
+   },
+   {
+    "match": "postline inspections passed to level 2",
+    "reason": "admin"
+   },
+   {
+    "match": "targeting CCC application July",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20351140-1_4102340115_ISF_Pass_20250218.pdf": {
+  "shouldExtract": [],
+  "mustNotExtract": [
+   {
+    "match": "PS4 for slab design to be provided at CCC",
+    "reason": "admin"
+   },
+   {
+    "match": "saw cuts to control joints to be completed within 24 hrs",
+    "reason": "admin"
+   },
+   {
+    "match": "QA docs for block B and C pours to come",
+    "reason": "admin"
+   },
+   {
+    "match": "Consent documents and approved plans on site",
+    "reason": "admin"
+   },
+   {
+    "match": "Book pre pour for block B slab",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20351140-1_4102349688_IFG_Fail_20250312.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Bracing layout not as per bracing plan",
+    "match": "GS1 panels short unit A2",
+    "location": "Block A, unit A2",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Lintel fixings not as per specification",
+    "match": "lintel fixings to install as per lintel schedule",
+    "location": "Block A",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Stud spacing 600 not 400, unit A3 north wall",
+    "match": "stud spacing to north wall at 600 crs",
+    "location": "Unit A3",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Dwangs missing to wet walls",
+    "match": "dwangs to wet walls to install",
+    "location": "Units A1-A3",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Top plate laps short of 900",
+    "match": "top plate laps to fix",
+    "location": "Block A",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Truss fixings incomplete units A5-A6",
+    "match": "truss fixings to complete",
+    "location": "Units A5-A6",
+    "category": "Structural",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "PS3 for truss design to provide",
+    "reason": "admin"
+   },
+   {
+    "match": "Truss PS3 not yet received",
+    "reason": "admin"
+   },
+   {
+    "match": "book when all items complete",
+    "reason": "admin"
+   },
+   {
+    "match": "Consent documents on site",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20351140-1_4102356822_IFG_Partial Pass_20250326.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Truss fixings unit A6 still to finish",
+    "match": "truss fixings to unit A6 still to finish",
+    "location": "Unit A6",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Brace panel hold-downs block B incomplete",
+    "match": "brace panel hold downs to block B started but not complete",
+    "location": "Block B",
+    "category": "Structural",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "GS1 panels short unit A2 NOW REINSTATED",
+    "reason": "resolved"
+   },
+   {
+    "match": "lintel fixings not as per lintel schedule SIGHTED COMPLETED",
+    "reason": "resolved"
+   },
+   {
+    "match": "stud spacing north wall unit A3 at 600 crs ADDITIONAL STUDS INSTALLED",
+    "reason": "resolved"
+   },
+   {
+    "match": "dwangs to wet walls units A1-A3 INSTALLED AND SIGHTED",
+    "reason": "resolved"
+   },
+   {
+    "match": "top plate laps short SIGHTED PHOTO EVIDENCE",
+    "reason": "resolved"
+   },
+   {
+    "match": "QA to come at preline",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20351140-1_4102364501_IPB_Partial Pass_20250416.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Fire wall penetrations between units not stopped",
+    "match": "penertrations to fire walls b/n units to stop",
+    "location": "Blocks A and B",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Pipework not clipped at required centres",
+    "match": "pipework not clippped at required centres",
+    "location": "Units A1-A4",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "Acoustic sealant to IT wall bottom plates missing",
+    "match": "accoustic sealant to IT wall bottom plates to complete",
+    "location": "Blocks A and B",
+    "category": "Acoustic",
+    "borderline": false
+   },
+   {
+    "title": "Power points back to back on IT wall, unit B2",
+    "match": "power points back to back on IT walls unit B2",
+    "location": "Unit B2",
+    "category": "Acoustic",
+    "borderline": false
+   },
+   {
+    "title": "Garage ceiling insulation not installed",
+    "match": "insullation to garage ceilings to come",
+    "location": "Blocks A and B",
+    "category": "Interior / Linings",
+    "borderline": false
+   },
+   {
+    "title": "Insulation behind baths to fit, unit B3",
+    "match": "insullation to be fitted behind baths",
+    "location": "Unit B3",
+    "category": "Interior / Linings",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "QA documentation to be provided at postline",
+    "reason": "admin"
+   },
+   {
+    "match": "PS3 from fireshield passive to be provided",
+    "reason": "admin"
+   },
+   {
+    "match": "QA to come",
+    "reason": "admin"
+   },
+   {
+    "match": "fireshield passive booked for next week",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20351140-1_4102372290_IPL_Partial Pass_20250508.pdf": {
+  "shouldExtract": [
+   {
+    "title": "gib fixing edge distances under 12mm, IT wall unit A3",
+    "match": "edge distances under 12mm along one wall",
+    "location": "Unit A3, IT wall garage side",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "IT wall penetrations above ceiling not sealed",
+    "match": "penos above ceiling line not sealed",
+    "location": "Block A, IT walls",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Wrong board in wet area, unit A2 bathroom",
+    "match": "standard board not wet area board",
+    "location": "Unit A2 bathroom",
+    "category": "Interior / Linings",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "items completed and sighted at site visit",
+    "reason": "resolved"
+   },
+   {
+    "match": "QA to come at final",
+    "reason": "admin"
+   },
+   {
+    "match": "gib fixing QA sheets to come",
+    "reason": "admin"
+   },
+   {
+    "match": "Membrane inspection to book",
+    "reason": "admin"
+   },
+   {
+    "match": "fireshield passive ltd",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20351140-1_4102381063_ICL_Partial Pass_20250527.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Deck clearance possibly under 35mm, unit A4",
+    "match": "appears under 35mm, not measured, possibly non-compliant",
+    "location": "Unit A4 deck",
+    "category": "Weathertightness / Cladding",
+    "borderline": true
+   },
+   {
+    "title": "Weep holes blocked by texture, unit A1",
+    "match": "blocked with applied texture, to clear",
+    "location": "Unit A1 north elevation",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   },
+   {
+    "title": "Apron flashing kickout missing, unit B1",
+    "match": "no kickout formed at bottom end",
+    "location": "Unit B1 garage roof",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "cladding maintenance schedule to be provided at CCC",
+    "reason": "admin"
+   },
+   {
+    "match": "wrap and cavity sighted at spot checks",
+    "reason": "acceptance"
+   },
+   {
+    "match": "still going on, not inspected this visit",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20351140-1_4102368734_IDT_Fail_20250430.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Drainage gradient wrong, invert at IP3 out 40mm",
+    "match": "invert at IP3 out by 40mm",
+    "location": "Run IP2 to IP3",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "Bedding scoured, one run to redo",
+    "match": "bedding to redo and recompact one run",
+    "location": "",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "Gully traps low garden side, units A4-A6",
+    "match": "gully trap heights garden side units A4-A6 to raise",
+    "location": "Units A4-A6 garden side",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "As-built drainage plan to update",
+    "match": "as-built drainage plan to update and provide",
+    "location": "",
+    "category": "Other",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "retest water test after regrade",
+    "reason": "admin"
+   },
+   {
+    "match": "book reinspection before backfill",
+    "reason": "admin"
+   },
+   {
+    "match": "water test sighted and held",
+    "reason": "acceptance"
+   }
+  ]
+ },
+ "BCO20351140-1_4102398412_IF1_Partial Pass_20250715.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Stair barrier 995mm, 1000 required, unit A3",
+    "match": "measured 995 at one point, 1000 required",
+    "location": "Unit A3 stair",
+    "category": "Access & Barriers",
+    "borderline": true
+   },
+   {
+    "title": "Smoke alarm interconnect not tested",
+    "match": "alarms to interconnect test all units",
+    "location": "Block A, all units",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Hot water tempering to verify, unit A2",
+    "match": "hot water tempering to verify at unit A2",
+    "location": "Unit A2",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "Downpipe not connected, unit A6 rear",
+    "match": "downpipe to unit A6 rear not connected",
+    "location": "Unit A6 rear",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "Extract fan terminates in roof space, unit A5",
+    "match": "terminates in roof space, duct to exterior",
+    "location": "Unit A5 ensuite",
+    "category": "Mechanical",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "SIGHTED 40MM CLEARANCE ACHIEVED",
+    "reason": "resolved"
+   },
+   {
+    "match": "items sighted complete 22/05/25",
+    "reason": "resolved"
+   },
+   {
+    "match": "postline items closed 22/05/25",
+    "reason": "resolved"
+   },
+   {
+    "match": "site drainage completion certificate to provide",
+    "reason": "admin"
+   },
+   {
+    "match": "CCC application to lodge",
+    "reason": "admin"
+   },
+   {
+    "match": "paint touch ups scotia unit A1",
+    "reason": "admin"
+   },
+   {
+    "match": "walked decks and thresholds, ok",
+    "reason": "acceptance"
+   }
+  ]
+ },
+ "BCO20355892-1_4102358870_ISF_Partial Pass_20250320.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Edge beam reo cover possibly under 60mm",
+    "match": "appears short of 60, not measured",
+    "location": "Edge beam, gridline A",
+    "category": "Structural",
+    "borderline": true
+   },
+   {
+    "title": "Displaced chairs to re-set before pour",
+    "match": "chairs displaced in bay C-D/2-3",
+    "location": "Bay C-D/2-3, stage 2 slab",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Vapour barrier laps to tape, tears to patch",
+    "match": "vapour barrier laps to tape at north end",
+    "location": "Stage 2 slab, north end",
+    "category": "Other",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "Under slab drainage inspected and passed 06/03/25",
+    "reason": "resolved"
+   },
+   {
+    "match": "Hardfill compaction certificates received",
+    "reason": "admin"
+   },
+   {
+    "match": "PS4 to come at completion of structure",
+    "reason": "admin"
+   },
+   {
+    "match": "Consent documents on site",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20355892-1_4102366049_IFG_Partial Pass_20250410.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Intumescent DFT report to provide",
+    "match": "DFT report to provide from applicator",
+    "location": "Ground floor transfer beams",
+    "category": "Fire",
+    "borderline": true
+   },
+   {
+    "title": "Grid C baseplate bolts not torqued",
+    "match": "bolts to grid C baseplates not torqued",
+    "location": "Grid C baseplates",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Purlin bridging incomplete L2 east bays",
+    "match": "purlin bridging to complete L2 east bays",
+    "location": "Level 2 east bays",
+    "category": "Structural",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "minor items, since attended to",
+    "reason": "resolved"
+   },
+   {
+    "match": "grid A and B baseplates sighted, nuts and washers on, grouted ok",
+    "reason": "acceptance"
+   },
+   {
+    "match": "Consent documents on site",
+    "reason": "admin"
+   },
+   {
+    "match": "PS4 at completion",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20355892-1_4102373558_IPB_Partial Pass_20250501.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Ground floor comms riser penos to fire stop",
+    "match": "riser penos at ground floor comms riser to fire stop",
+    "location": "Ground floor comms riser",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Power/data cable segregation not maintained L1",
+    "match": "cable segregation power/data not maintained in L1 ceiling",
+    "location": "Level 1 ceiling, east side",
+    "category": "Electrical",
+    "borderline": false
+   },
+   {
+    "title": "Seismic clearance to services at bulkheads to check",
+    "match": "seismic clearance to services at gib bulkheads to check",
+    "location": "Level 2, grid 2",
+    "category": "Seismic",
+    "borderline": false
+   },
+   {
+    "title": "Nogs missing to sheet edges L1 lift lobby bulkhead",
+    "match": "no nogs to sheet edges at L1 lift lobby bulkhead",
+    "location": "Level 1 lift lobby",
+    "category": "Interior / Linings",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "since torqued and marked, sighted 24/04/25",
+    "reason": "resolved"
+   },
+   {
+    "match": "purlin bridging L2 complete, sighted",
+    "reason": "resolved"
+   },
+   {
+    "match": "DFT report received from applicator",
+    "reason": "resolved"
+   },
+   {
+    "match": "wrap items being worked through",
+    "reason": "admin"
+   },
+   {
+    "match": "insulation certificate to provide with CCC application",
+    "reason": "admin"
+   },
+   {
+    "match": "still to check L3 west tenancy",
+    "reason": "admin"
+   },
+   {
+    "match": "later stage, check at final",
+    "reason": "admin"
+   },
+   {
+    "match": "to come later",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20355892-1_4102382101_IPL_Partial Pass_20250520.pdf": {
+  "shouldExtract": [
+   {
+    "title": "L2 corridor penetrations incomplete",
+    "match": "L2 corridor penos not complete",
+    "location": "Level 2 corridor",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Access panels to fire dampers not fitted",
+    "match": "access panels to fire dampers not yet fitted",
+    "location": "Levels 1 and 2",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Shaft wall gaps at underside of slab",
+    "match": "shaft wall gaps at u/s of slab east shaft",
+    "location": "East shaft",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Seismic clearance at grid 2 bulkheads unconfirmed",
+    "match": "seismic clearance at gib bulkheads grid 2 still to check",
+    "location": "Level 2, grid 2",
+    "category": "Seismic",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "FIRE COLLARS AND INTUMESCENT SEALANT INSTALLED SIGHTED THIS VISIT COMPLETE",
+    "reason": "resolved"
+   },
+   {
+    "match": "SEPARATION NOW PROVIDED PHOTO EVIDENCE SIGHTED",
+    "reason": "resolved"
+   },
+   {
+    "match": "DWANGS FITTED AND SIGHTED",
+    "reason": "resolved"
+   },
+   {
+    "match": "L3 west tenancy preline completed 09/05/25, passed",
+    "reason": "resolved"
+   },
+   {
+    "match": "plasterer QA sheets to come at CCC",
+    "reason": "admin"
+   },
+   {
+    "match": "doors to come",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20355892-1_4102369917_ICA_Partial Pass_20250424.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Wrap substitution acceptability unconfirmed",
+    "match": "subsitution from the specified product",
+    "location": "All elevations",
+    "category": "Weathertightness / Cladding",
+    "borderline": true
+   },
+   {
+    "title": "Sill tape returns missing 3 windows L1 north",
+    "match": "sill tape returns missing to 3 windows L1 north elevation",
+    "location": "Level 1 north elevation",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   },
+   {
+    "title": "Cavity closers to base of walls to fit",
+    "match": "cavity closers to base of walls to fit",
+    "location": "South and west elevations",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "structural items closed by engineer 17/04/25",
+    "reason": "resolved"
+   },
+   {
+    "match": "head flashngs sighted to ground floor joinery, tabs turned, ok",
+    "reason": "acceptance"
+   },
+   {
+    "match": "pipe penertration through wrap west elevation taped, ok",
+    "reason": "acceptance"
+   },
+   {
+    "match": "QA to come",
+    "reason": "admin"
+   },
+   {
+    "match": "Consent documents on site",
+    "reason": "admin"
+   }
+  ]
+ },
+ "BCO20355892-1_4102411736_IF2_Fail_20250730.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Tactile indicators to main stair to install",
+    "match": "tactiles to main stair to install",
+    "location": "Ground floor, main stair",
+    "category": "Access & Barriers",
+    "borderline": false
+   },
+   {
+    "title": "Handrail extension short at main stair base",
+    "match": "handrail extension short at bottom of main stair",
+    "location": "Ground floor, main stair",
+    "category": "Access & Barriers",
+    "borderline": false
+   },
+   {
+    "title": "Accessible WC grab rail heights incorrect",
+    "match": "grab rail heights out, rear rail at 850",
+    "location": "Ground floor accessible WC",
+    "category": "Access & Barriers",
+    "borderline": false
+   },
+   {
+    "title": "Accessible WC TMV delivering 55 degrees",
+    "match": "TMV to accessible WC delivering 55 deg",
+    "location": "Ground floor accessible WC",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "L1 fire door closers not latching",
+    "match": "not latching doors D1.07 and D1.09",
+    "location": "Level 1, doors D1.07 and D1.09",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Hold open device not releasing on alarm test",
+    "match": "hold open device to D1.02 not releasing",
+    "location": "Level 1, door D1.02",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "L2 corridor fire door closers not latching",
+    "match": "closers to corridor doors not latching L2",
+    "location": "Level 2 corridor",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Exit sign missing over east stair door",
+    "match": "exit sign missing over east stair door",
+    "location": "Level 2, east stair",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Penetrations above L2 ceiling incomplete",
+    "match": "penos above L2 ceiling incomplete",
+    "location": "Level 2 corridor ceiling",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Emergency light fitting not operating L2 east",
+    "match": "emergency light fitting u/s L2 east corridor",
+    "location": "Level 2 east corridor",
+    "category": "Electrical",
+    "borderline": false
+   },
+   {
+    "title": "Fire damper commissioning results outstanding",
+    "match": "fire damper commissioning results to provide",
+    "location": "",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "HWC seismic restraint straps to fit",
+    "match": "HWC seismic restraint straps to fit",
+    "location": "Ground floor cleaners cupboard",
+    "category": "Seismic",
+    "borderline": false
+   },
+   {
+    "title": "Fire door keep closed signage missing",
+    "match": "keep closed signage missing to stair doors",
+    "location": "Stair doors, all levels",
+    "category": "Fire",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "all items since closed, photo evidence and fireshield schedule sighted",
+    "reason": "resolved"
+   },
+   {
+    "match": "fire engineer confirmed detail acceptable, sealant installed and sighted",
+    "reason": "resolved"
+   },
+   {
+    "match": "commissioning certificate sighted, Beacon Fire Consultants",
+    "reason": "admin"
+   },
+   {
+    "match": "compliance certificate to come with CCC",
+    "reason": "admin"
+   },
+   {
+    "match": "CCC application to be lodged with all producer statements",
+    "reason": "admin"
+   },
+   {
+    "match": "safety stickers sighted",
+    "reason": "acceptance"
+   },
+   {
+    "match": "L3 shell tenancy walked, no items this level",
+    "reason": "acceptance"
+   },
+   {
+    "match": "Consent documents on site",
+    "reason": "admin"
+   }
+  ]
+ },
+ "24118FS CANF03 Site Inspection 250306.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Basement stair 1 door binding, not latching",
+    "match": "stair 1 door binding on frame at the head",
+    "location": "Basement, stair 1",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Ground lobby fire door closer too slow",
+    "match": "closer sweep speed too slow",
+    "location": "Ground floor, main lobby",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Apt 102 entrance door closer not latching",
+    "match": "Apt 102 entrance door closer needs adjustment",
+    "location": "Level 1, Apt 102",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Apt 204 entrance door slams but does not latch",
+    "match": "slams but does not latch",
+    "location": "Level 2, Apt 204",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Level 3 stair 2 door dragging on carpet",
+    "match": "stair 2 door dragging on carpet",
+    "location": "Level 3, stair 2",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Apt 401 door closer not latching",
+    "match": "Apt 401 door closer needs adjustment",
+    "location": "Level 4, Apt 401",
+    "category": "Fire",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "Damper operation is okay and acceptable levels 1-4",
+    "reason": "acceptance"
+   },
+   {
+    "match": "Fire door leaf and frame tags were sighted",
+    "reason": "acceptance"
+   },
+   {
+    "match": "basement: SD-B02, SD-B07 tested okay",
+    "reason": "acceptance"
+   },
+   {
+    "match": "ground: SD-G01, SD-G04 tested okay",
+    "reason": "acceptance"
+   },
+   {
+    "match": "level 1: SD-1.03 tested okay",
+    "reason": "acceptance"
+   },
+   {
+    "match": "level 2: SD-2.05 tested okay",
+    "reason": "acceptance"
+   },
+   {
+    "match": "level 3: SD-3.02 tested okay",
+    "reason": "acceptance"
+   },
+   {
+    "match": "level 4: SD-4.01 tested okay",
+    "reason": "acceptance"
+   },
+   {
+    "match": "Vortex HVAC to provide commissioning records with the PS3",
+    "reason": "admin"
+   },
+   {
+    "match": "Certificates to come with QA at CCC",
+    "reason": "admin"
+   }
+  ]
+ },
+ "24118FS CANF05 Site Inspection 250327.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Penetrations unsealed u/s ground slab",
+    "match": "penos u/s ground floor slab over the basement carpark not sealed",
+    "location": "Basement carpark, grids B3 to C4",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Fire collars proud of soffit, not hard against slab",
+    "match": "sitting proud of the soffit",
+    "location": "Basement ceiling",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Unlabelled penetrations in MSB room",
+    "match": "unlabelled penos in MSB room",
+    "location": "Basement, MSB room",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Cable tray peno packed with wrap offcuts",
+    "match": "packed with wrap offcuts",
+    "location": "Basement stair wall",
+    "category": "Fire",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "destructive test of the ground floor corridor wall lining was carried out and it looked okay",
+    "reason": "acceptance"
+   },
+   {
+    "match": "acceptable from a fire perspective to follow the same detail at grid F",
+    "reason": "acceptance"
+   },
+   {
+    "match": "QA to come from FireShield Passive Ltd",
+    "reason": "admin"
+   }
+  ]
+ },
+ "24118FS CANF08 Penetration Register Review 250417.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Retail IT wall data cable peno awaiting label and QA",
+    "match": "awaiting label and QA record from FireShield",
+    "location": "Ground floor, retail IT wall",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Unit 102 waste peno has no fire collar",
+    "match": "waste peno u/s slab to unit 102 bathroom",
+    "location": "Level 1, unit 102",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Three corridor bulkhead penos unsealed",
+    "match": "three penos above the corridor gib bulkhead left unsealed",
+    "location": "Level 2 corridor",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Hydrant riser sleeve far side unsealed",
+    "match": "far side still to complete",
+    "location": "Level 2, hydrant riser",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Apt 302 ensuite waste collars to install",
+    "match": "Apt 302 ensuite waste penos",
+    "location": "Level 3, Apt 302",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Switchboard cupboard peno sealed with non-tested foam",
+    "match": "sealed with expanding foam, product is not a tested system",
+    "location": "Level 3, switchboard cupboard",
+    "category": "Fire",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "services peno above fire door B-D2 left unsealed after cable pull",
+    "reason": "closed"
+   },
+   {
+    "match": "cable tray peno cut oversized and packed with gib offcuts",
+    "reason": "closed"
+   },
+   {
+    "match": "sprinkler pipe peno at the stair wall",
+    "reason": "closed"
+   },
+   {
+    "match": "labels sighted to all sealed penos, CLOSED",
+    "reason": "closed"
+   },
+   {
+    "match": "basement services peno above fire door B-D2",
+    "reason": "closed"
+   },
+   {
+    "match": "L1 riser cable tray peno oversized opening",
+    "reason": "closed"
+   },
+   {
+    "match": "L4 sprinkler pipe peno at stair wall",
+    "reason": "closed"
+   },
+   {
+    "match": "MSB room peno labels",
+    "reason": "closed"
+   },
+   {
+    "match": "data cables through ground IT wall to retail, no collar",
+    "reason": "duplicate"
+   },
+   {
+    "match": "waste peno unit 102 - collar to install",
+    "reason": "duplicate"
+   },
+   {
+    "match": "L2 corridor bulkhead penos unsealed",
+    "reason": "duplicate"
+   },
+   {
+    "match": "L2 hydrant riser sleeve annulus",
+    "reason": "duplicate"
+   },
+   {
+    "match": "Apt 302 ensuite waste collars",
+    "reason": "duplicate"
+   },
+   {
+    "match": "L3 switchboard cupboard foam to remove",
+    "reason": "duplicate"
+   },
+   {
+    "match": "head of wall gap at grid B in the basement to be grouted - completed. CLOSED",
+    "reason": "closed"
+   },
+   {
+    "match": "register to be provided at CCC",
+    "reason": "admin"
+   }
+  ]
+ },
+ "24118FS CANF11 Site Inspection 250515.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Level 2 corridor bulkhead penos remain unsealed",
+    "match": "remain unsealed, ceiling close in is being held up",
+    "location": "Level 2 corridor",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Apt 302 ensuite waste collars still not installed",
+    "match": "waste collars still not installed",
+    "location": "Level 3, Apt 302",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Sealant substitution to confirm with council",
+    "match": "Product substitution to confirm with council",
+    "location": "Level 2 riser",
+    "category": "Fire",
+    "borderline": true
+   },
+   {
+    "title": "Fire door signage to basement stair doors missing",
+    "match": "fire door signage to the basement stair doors still to install",
+    "location": "Basement stair doors",
+    "category": "Fire",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "now sealed and labelled - completed. CLOSED",
+    "reason": "closed"
+   },
+   {
+    "match": "riser side seal - completed. CLOSED",
+    "reason": "closed"
+   },
+   {
+    "match": "destructive test was carried out and it looked okay",
+    "reason": "acceptance"
+   },
+   {
+    "match": "accepts this as a concession",
+    "reason": "acceptance"
+   }
+  ]
+ },
+ "24132FS CANF02 Site Inspection 250514.pdf": {
+  "shouldExtract": [
+   {
+    "title": "IT wall wastes at B2/B3 unsealed, collars to install",
+    "match": "wastes through the IT wall at units B2/B3",
+    "location": "Block B, units B2/B3 ground floor",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Garage ceiling gib junctions to IT wall not stopped",
+    "match": "garage ceiling gib junctions to the IT wall not stopped",
+    "location": "Block B, units B1-B4 garages",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Power cable peno at B4/B5 garage unsealed",
+    "match": "power cable peno through the IT wall at B4/B5",
+    "location": "Block B, units B4/B5 garage",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Second layer gib to u/s stair B5 incomplete",
+    "match": "second layer gib to u/s stair unit B5 not complete",
+    "location": "Block B, unit B5",
+    "category": "Fire",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "destructive check of the IT wall lining between units B3/B4 was carried out and it looked okay",
+    "reason": "acceptance"
+   },
+   {
+    "match": "QA to come from Mako",
+    "reason": "admin"
+   }
+  ]
+ },
+ "24141FS CANF04 Site Inspection 250612.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Ground stair 1 door not latching",
+    "match": "stair 1 door not latching shut from a half open position",
+    "location": "Ground floor, stair 1",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Level 1 riser access door has no fire door tag",
+    "match": "riser access door has no fire door tag sighted",
+    "location": "Level 1, riser",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Level 2 stair 2 door binding on threshold",
+    "match": "binding on the threshold plate",
+    "location": "Level 2, stair 2",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Level 3 stair 1 delayed action closer too slow",
+    "match": "delayed action closer set too slow",
+    "location": "Level 3, stair 1",
+    "category": "Fire",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "Damper operation is okay and acceptable levels 1-3",
+    "reason": "acceptance"
+   },
+   {
+    "match": "the ground retail damper tested okay",
+    "reason": "acceptance"
+   },
+   {
+    "match": "Damper access panels were generally installed within reach",
+    "reason": "acceptance"
+   },
+   {
+    "match": "Door tags sighted to stair doors at all levels",
+    "reason": "acceptance"
+   },
+   {
+    "match": "Vortex to issue the commissioning schedule with their PS3",
+    "reason": "admin"
+   }
+  ]
+ },
+ "24141FS CANF06 Site Inspection 250717.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Level 1 riser door certificate still outstanding",
+    "match": "fire door certificate has still to be provided",
+    "location": "Level 1, riser access door",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Level 3 stair 1 delayed action closer still too slow",
+    "match": "delayed action closer remains set too slow",
+    "location": "Level 3, stair 1",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Damper access panel location to confirm vs shop drawings",
+    "match": "access panel location to confirm against the duct shop drawings",
+    "location": "Level 2 ceiling void, grid C3",
+    "category": "Fire",
+    "borderline": true
+   },
+   {
+    "title": "Fire door signage to stair doors missing",
+    "match": "Fire door signage to stair doors levels 1-3 still to install",
+    "location": "Levels 1-3, stair doors",
+    "category": "Fire",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "closer adjusted by Apex Interiors",
+    "reason": "closed"
+   },
+   {
+    "match": "tag now fitted and sighted",
+    "reason": "closed"
+   },
+   {
+    "match": "door eased and re-hung, closing and latching",
+    "reason": "closed"
+   },
+   {
+    "match": "Next visit to be the final door check",
+    "reason": "admin"
+   }
+  ]
+ },
+ "MSE2417 SOR-04 Harbourview Site Observation 250214.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Bracing panel edge fixings at 300 not 150 crs",
+    "match": "requires 150 crs at panel edges",
+    "location": "Ground floor, bracing line 3",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Hold-down anchors to panel BR-7 not installed",
+    "match": "hold-down anchors to panel BR-7 not installed",
+    "location": "Ground floor, panel BR-7",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Dwangs missing at sheet edges bracing line D",
+    "match": "dwangs not installed at sheet edges to bracing line D",
+    "location": "Ground floor, bracing line D near stair",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Bottom plate bolts missing square washers at grid 5",
+    "match": "missing 50x50 square washers",
+    "location": "Ground floor, grid 5",
+    "category": "Structural",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "line A and line B sighted complete and is acceptable",
+    "reason": "acceptance"
+   },
+   {
+    "match": "QA records for bracing fixings to be provided",
+    "reason": "admin"
+   },
+   {
+    "match": "next visit to be arranged by Karaka",
+    "reason": "admin"
+   },
+   {
+    "match": "Ground floor bracing line 3, general view",
+    "reason": "caption"
+   },
+   {
+    "match": "Panel BR-7 bottom plate prior to anchors",
+    "reason": "caption"
+   },
+   {
+    "match": "Bracing line D at stair, sheet edge",
+    "reason": "caption"
+   },
+   {
+    "match": "Unit G02 garage wall framing",
+    "reason": "caption"
+   }
+  ]
+ },
+ "MSE2417 SOR-07 Harbourview Site Observation 250321.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Backpropping level 3 to remain until grout results",
+    "match": "backpropping to level 3 slab to remain in place",
+    "location": "Level 3",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Panel P12 grout tube blocked, connection not verified",
+    "match": "grout tube blocked at base",
+    "location": "Ground floor, panel P12",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Slab crack at grid C4 under monitoring",
+    "match": "slab crack adjacent grid C4",
+    "location": "Level 1, grid C4",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Transfer beam TB2 web stiffeners not installed",
+    "match": "web stiffeners not installed as per detail 5 on S3-201",
+    "location": "Transfer beam TB2",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Oversize core drilled penetration through shear wall SW1",
+    "match": "core drilled penertration through shear wall SW1",
+    "location": "Level 2 riser",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Block wall grout lift exceeded 1.2m, cores required",
+    "match": "grout lift to lift shaft exceeded 1.2m",
+    "location": "Lift shaft",
+    "category": "Structural",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "propping removal to level 2 slab - removed under engineer supervision",
+    "reason": "closed"
+   },
+   {
+    "match": "bracket installed and fixings verified on site, CLOSED",
+    "reason": "closed"
+   },
+   {
+    "match": "washers fitted, sighted on site, CLOSED",
+    "reason": "closed"
+   },
+   {
+    "match": "bolt torque QA records for level 1 steel still to be provided",
+    "reason": "admin"
+   },
+   {
+    "match": "Register to be reviewed again at the next site visit",
+    "reason": "admin"
+   }
+  ]
+ },
+ "MSE2417 SOR-09 Harbourview Site Observation 250429.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Transfer beam bearing at grid B appears under 90",
+    "match": "bearing length onto the concrete corbel appears less than the 90 detailed",
+    "location": "Level 1, grid B",
+    "category": "Structural",
+    "borderline": true
+   },
+   {
+    "title": "Grout to column baseplates incomplete",
+    "match": "grout to steel column baseplates incomplete",
+    "location": "Grids C1, C3 and D2",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Anchor bolt projection at grid B appears short",
+    "match": "anchor bolt projection at grid B baseplate appears short",
+    "location": "Grid B baseplate",
+    "category": "Structural",
+    "borderline": true
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "stair flight seating at level 2 sighted, bearing and fixings ok",
+    "reason": "acceptance"
+   },
+   {
+    "match": "Propping removal sign-off for the level 2 topping to be provided",
+    "reason": "admin"
+   },
+   {
+    "match": "PS4 documentation will be issued at completion",
+    "reason": "admin"
+   }
+  ]
+ },
+ "MSE2431 SOR-02 Rimu Terraces Site Observation 250319.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Nail plates possibly missing at 3 of 14 piles",
+    "match": "nail plates possibly missing at 3 of the 14 piles inspected",
+    "location": "Block B subfloor",
+    "category": "Structural",
+    "borderline": true
+   },
+   {
+    "title": "Coach screws to anchor piles not installed, unit B2",
+    "match": "coach screws to anchor piles not installed at two locations",
+    "location": "Unit B2 subfloor",
+    "category": "Structural",
+    "borderline": false
+   },
+   {
+    "title": "Solid blocking missing at braced bays, unit B1",
+    "match": "Solid blocking not installed at braced bay lines",
+    "location": "Unit B1 subfloor",
+    "category": "Structural",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "Pile embedment sighted at four random locations",
+    "reason": "acceptance"
+   },
+   {
+    "match": "PS3 for pile installation to be provided",
+    "reason": "admin"
+   },
+   {
+    "match": "Recheck to be booked",
+    "reason": "admin"
+   }
+  ]
+ },
+ "MSE2431 SOR-05 Rimu Terraces Seismic Restraint 250611.pdf": {
+  "shouldExtract": [
+   {
+    "title": "No rigid bracing to community room ceiling grid",
+    "match": "no rigid bracing installed to the grid",
+    "location": "Community room",
+    "category": "Seismic",
+    "borderline": false
+   },
+   {
+    "title": "HWC top seismic strap not installed, unit A4",
+    "match": "top seismic strap not installed",
+    "location": "Unit A4",
+    "category": "Seismic",
+    "borderline": false
+   },
+   {
+    "title": "Pipe restraint centres 3m vs 2m max spec",
+    "match": "sighted at approx 3m crs, spec calls 2m max",
+    "location": "Community room plant area",
+    "category": "Seismic",
+    "borderline": false
+   },
+   {
+    "title": "Ceiling hanger wires slack, unit C2 garage",
+    "match": "hanger wires slack at two points",
+    "location": "Unit C2 garage",
+    "category": "Seismic",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "perimeter fixings sighted, ok",
+    "reason": "acceptance"
+   },
+   {
+    "match": "units B1-B3 sighted, bracing ok",
+    "reason": "acceptance"
+   },
+   {
+    "match": "restraint QA to come from Vortex HVAC",
+    "reason": "admin"
+   },
+   {
+    "match": "next visit to be arranged with Mako",
+    "reason": "admin"
+   }
+  ]
+ },
+ "MSE2442 SOR-03 Fernleaf Seismic Walkdown 250722.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Services restraint spacing appears over 2m, level 2",
+    "match": "restraint spacing to the level 2 corridor runs appears over 2m",
+    "location": "Level 2 corridor",
+    "category": "Seismic",
+    "borderline": true
+   },
+   {
+    "title": "Ceiling perimeter fixings at 900 not 600 crs",
+    "match": "fixings at approx 900 crs to the western edge",
+    "location": "Level 1 retail, western edge",
+    "category": "Seismic",
+    "borderline": false
+   },
+   {
+    "title": "Sprinkler pipe sway bracing incomplete, level 2",
+    "match": "sprinkler pipe sway bracing to level 2 still to complete",
+    "location": "Level 2",
+    "category": "Seismic",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "restraint to ductwork level 1 sighted and acceptable",
+    "reason": "acceptance"
+   },
+   {
+    "match": "level 3 was not accessible and is still to check",
+    "reason": "scope"
+   },
+   {
+    "match": "walkdown notes to be appended to the PS4 file",
+    "reason": "admin"
+   },
+   {
+    "match": "recheck to be arranged via Karaka site office",
+    "reason": "admin"
+   }
+  ]
+ },
+ "CHC-1152 Harbourview Hydraulic Site Observation 250313.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Marginal falls to floor wastes, two bathrooms",
+    "match": "unit 2/1 and unit 2/4 bathrooms look marginal",
+    "location": "Level 2, units 2/1 and 2/4 bathrooms",
+    "category": "Plumbing & Drainage",
+    "borderline": true
+   },
+   {
+    "title": "Tundish missing to plant area relief discharge",
+    "match": "no tundish installed to the plant area temp relief",
+    "location": "Plant area",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "HWC relief drain terminates in wall cavity",
+    "match": "terminates inside the wall cavity",
+    "location": "Unit 1/2",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "penos is by FireShield Passive under their own programme",
+    "reason": "admin"
+   },
+   {
+    "match": "QA records for pressure testing to be provided at CCC",
+    "reason": "admin"
+   }
+  ]
+ },
+ "CHC-1152 Harbourview Hydraulic Site Observation 250424.pdf": {
+  "shouldExtract": [
+   {
+    "title": "HWC relief drain still terminates in cavity",
+    "match": "still terminates in the cavity, remains open",
+    "location": "Unit 1/2",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "Ensuite pipework uninsulated in external wall",
+    "match": "not insulated where it runs through the external wall framing",
+    "location": "Unit 3/2 ensuite",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "Refuse room floor waste not installed",
+    "match": "floor waste to the level 1 refuse room not installed",
+    "location": "Level 1 refuse room",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "re-screeded and falls were verified with a level",
+    "reason": "closed"
+   },
+   {
+    "match": "installed and sighted, discharge visible",
+    "reason": "closed"
+   },
+   {
+    "match": "Unit 2/4 bathroom, falls after re-screed",
+    "reason": "caption"
+   },
+   {
+    "match": "Plant area tundish installed",
+    "reason": "caption"
+   },
+   {
+    "match": "Unit 3/2 ensuite pipework in external wall",
+    "reason": "caption"
+   },
+   {
+    "match": "Level 1 refuse room floor",
+    "reason": "caption"
+   }
+  ]
+ },
+ "CHC-1163 Rimu Terraces Hydraulic Site Observation 250529.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Vent terminal too close to bedroom window",
+    "match": "terminates approx 400 off the bedroom window",
+    "location": "Unit B3",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "Gully trap rims below finished ground level",
+    "match": "gully trap rims to units A1 and A2",
+    "location": "Units A1 and A2",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   },
+   {
+    "title": "Vent terminated under soffit, not through roof",
+    "match": "vent terminated u/s of the soffit",
+    "location": "Unit C1",
+    "category": "Plumbing & Drainage",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "now installed and sighted on the roof",
+    "reason": "resolved"
+   },
+   {
+    "match": "not inspected this visit, to be covered at the next visit",
+    "reason": "admin"
+   },
+   {
+    "match": "as-builts and pressure test QA to be provided",
+    "reason": "admin"
+   }
+  ]
+ },
+ "NVM-2408 Harbourview Mechanical Site Observation 250403.pdf": {
+  "shouldExtract": [
+   {
+    "title": "No access panels to fire dampers",
+    "match": "dampers cannot be reached for testing or reset",
+    "location": "Level 2 corridor bulkheads",
+    "category": "Mechanical",
+    "borderline": false
+   },
+   {
+    "title": "Flex duct runs over maximum length",
+    "match": "well over the 1.5m max",
+    "location": "Level 3 diffusers",
+    "category": "Mechanical",
+    "borderline": false
+   },
+   {
+    "title": "Duct support centres exceed spec",
+    "match": "approx 3.5m centres, spec is 2.4m max",
+    "location": "Level 1 main run",
+    "category": "Mechanical",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "air balance QA prior to CCC",
+    "reason": "admin"
+   },
+   {
+    "match": "next visit once the level 3 flex is sorted",
+    "reason": "admin"
+   }
+  ]
+ },
+ "NVM-2408 Harbourview Mechanical Register 250522.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Kitchen extract duct fire wrap incomplete",
+    "match": "levels 2-3 still bare",
+    "location": "Kitchen extract riser, levels 2-3",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "AHU-1 condensate drain has no trap",
+    "match": "condensate drain has no trap",
+    "location": "AHU-1",
+    "category": "Mechanical",
+    "borderline": false
+   },
+   {
+    "title": "Controls point-to-point testing not started",
+    "match": "point-to-point testing not started",
+    "location": "",
+    "category": "Mechanical",
+    "borderline": false
+   },
+   {
+    "title": "Damper access panel outstanding at grid C4",
+    "match": "still outstanding at grid C4",
+    "location": "Level 2 corridor, grid C4",
+    "category": "Mechanical",
+    "borderline": false
+   },
+   {
+    "title": "No seismic restraint to level 3 duct",
+    "match": "no seismic restraint to the level 3 duct",
+    "location": "Level 3, at IT wall",
+    "category": "Seismic",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "rigid duct extensions fitted and take-offs shifted",
+    "reason": "closed"
+   },
+   {
+    "match": "additional hangers in, sighted",
+    "reason": "closed"
+   },
+   {
+    "match": "register to be updated following the next site visit",
+    "reason": "admin"
+   }
+  ]
+ },
+ "NVM-2419 Fernleaf Mechanical Register 250626.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Riser duct penetrations not fire stopped",
+    "match": "not fire stopped, gaps sighted around both ducts",
+    "location": "Level 2 slab, east riser",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "Fire damper drop tests outstanding",
+    "match": "drop tests not yet carried out",
+    "location": "",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "VAV boxes not commissioned, level 2 east",
+    "match": "installed but not commissioned, no air balance figures",
+    "location": "Level 2 east wing",
+    "category": "Mechanical",
+    "borderline": false
+   },
+   {
+    "title": "VAV-2.6 actuator damaged",
+    "match": "arrived damaged, unit runs full cold only",
+    "location": "VAV-2.6",
+    "category": "Mechanical",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "L2 riser duct penos unsealed",
+    "reason": "duplicate"
+   },
+   {
+    "match": "fire damper drop test results",
+    "reason": "duplicate"
+   },
+   {
+    "match": "VAV boxes L2 east not commissioned",
+    "reason": "duplicate"
+   },
+   {
+    "match": "VAV-2.6 actuator damaged",
+    "reason": "duplicate"
+   },
+   {
+    "match": "riser duct clash w/ steel beam L1",
+    "reason": "closed"
+   },
+   {
+    "match": "access door to RD-1.2",
+    "reason": "closed"
+   },
+   {
+    "match": "duct re-routed as per the revised shop drawing",
+    "reason": "closed"
+   },
+   {
+    "match": "door fitted and damper reachable",
+    "reason": "closed"
+   },
+   {
+    "match": "next register update following commissioning",
+    "reason": "admin"
+   }
+  ]
+ },
+ "KED-2511 Harbourview Electrical Site Observation 250327.pdf": {
+  "shouldExtract": [
+   {
+    "title": "No segregation of power and data in riser",
+    "match": "no segregation, sharing the same tray",
+    "location": "Level 1 riser",
+    "category": "Electrical",
+    "borderline": false
+   },
+   {
+    "title": "Cable tray section possibly not bonded",
+    "match": "no earth strap sighted across the join",
+    "location": "Level 1 riser, past riser door",
+    "category": "Electrical",
+    "borderline": true
+   },
+   {
+    "title": "Back to back metal flush boxes on IT walls",
+    "match": "metal flush boxes fitted back to back",
+    "location": "Level 1 IT walls",
+    "category": "Fire",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "PS3 and test certs at CCC",
+    "reason": "admin"
+   }
+  ]
+ },
+ "KED-2511 Harbourview Electrical Site Observation 250509.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Riser segregation still outstanding",
+    "match": "divider material still on order",
+    "location": "Level 1 riser",
+    "category": "Electrical",
+    "borderline": false
+   },
+   {
+    "title": "Emergency light on wrong circuit",
+    "match": "wired to the local lighting circuit",
+    "location": "Level 2 stair landing",
+    "category": "Electrical",
+    "borderline": false
+   },
+   {
+    "title": "Data cable bundle unsupported over ceiling",
+    "match": "cables laid directly on the ceiling gib",
+    "location": "Level 2 ceiling",
+    "category": "Electrical",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "sighted and is acceptable, circuit schedules match",
+    "reason": "acceptance"
+   },
+   {
+    "match": "intumescent pads fitted and sighted this visit",
+    "reason": "closed"
+   },
+   {
+    "match": "earth strap now fitted, continuity tested",
+    "reason": "closed"
+   },
+   {
+    "match": "it looked okay, acceptable to follow the same detail",
+    "reason": "acceptance"
+   },
+   {
+    "match": "next review at switchboard fit-off",
+    "reason": "admin"
+   }
+  ]
+ },
+ "KED-2528 Fernleaf Electrical Site Observation 250708.pdf": {
+  "shouldExtract": [
+   {
+    "title": "No segregation on tray into switch room",
+    "match": "share the tray into the main switch room",
+    "location": "Ground floor switch room",
+    "category": "Electrical",
+    "borderline": false
+   },
+   {
+    "title": "Emergency lighting discharge test records outstanding",
+    "match": "no test records yet, discharge test results to come",
+    "location": "Ground and level 1",
+    "category": "Electrical",
+    "borderline": false
+   },
+   {
+    "title": "Cable penetrations above switchboard not fire stopped",
+    "match": "daylight visible around the bundle",
+    "location": "Above main switchboard",
+    "category": "Fire",
+    "borderline": false
+   },
+   {
+    "title": "No arc flash labelling to MSB",
+    "match": "no arc flash / danger labelling to the MSB",
+    "location": "Main switchboard",
+    "category": "Electrical",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "as-built drawings and RCD test results to be handed over at CCC",
+    "reason": "admin"
+   }
+  ]
+ },
+ "HA-2530 Harbourview Acoustic Site Observation 250513.pdf": {
+  "shouldExtract": [
+   {
+    "title": "IT wall service penetrations unsealed level 2",
+    "match": "services penos above ceiling line are unsealed both sides",
+    "location": "Level 2, units 2/2 - 2/3",
+    "category": "Acoustic",
+    "borderline": true
+   },
+   {
+    "title": "Resilient mount clips missing two rooms",
+    "match": "resilient mount clips not sighted to ceiling battens",
+    "location": "Level 2, units 2/5 and 2/6",
+    "category": "Acoustic",
+    "borderline": false
+   },
+   {
+    "title": "Acoustic sealant to bottom plates incomplete",
+    "match": "sealant to bottom plates of IT walls incomplete",
+    "location": "Level 2",
+    "category": "Acoustic",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "gib fixing centres sighted at 300 crs",
+    "reason": "acceptance"
+   },
+   {
+    "match": "QA documentation for acoustic sealant to be provided at CCC",
+    "reason": "admin"
+   },
+   {
+    "match": "recheck to be booked when sealing complete",
+    "reason": "admin"
+   }
+  ]
+ },
+ "PA-2415 Harbourview Architectural Site Observation 250411.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Wrong substrate to shower walls unit 1/4",
+    "match": "standard gib, not wet area board as scheduled",
+    "location": "Level 1, unit 1/4 bathroom",
+    "category": "Interior / Linings",
+    "borderline": false
+   },
+   {
+    "title": "Balcony threshold possibly under 100mm",
+    "match": "possibly under the 100mm required for this exposure",
+    "location": "Level 1, unit 1/2 balcony",
+    "category": "Weathertightness / Cladding",
+    "borderline": true
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "Head flashings to ground floor joinery installed and sighted",
+    "reason": "acceptance"
+   },
+   {
+    "match": "Unit 1/4 bathroom, shower wall substrate",
+    "reason": "caption"
+   },
+   {
+    "match": "Unit 1/2 balcony threshold at door sill",
+    "reason": "caption"
+   },
+   {
+    "match": "Level 1 corridor, linings progressing",
+    "reason": "caption"
+   },
+   {
+    "match": "Ground floor joinery, head flashing typical",
+    "reason": "caption"
+   }
+  ]
+ },
+ "PA-2415 Harbourview Architectural QA Walkthrough 250605.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Scriber gaps at joinery head junctions",
+    "match": "gaps of up to 4mm at head junctions",
+    "location": "Level 4, units 4/1 and 4/2",
+    "category": "Interior / Linings",
+    "borderline": false
+   },
+   {
+    "title": "Paint defects level 3 corridor",
+    "match": "sanding marks and patchy sheen along the southern run",
+    "location": "Level 3 corridor",
+    "category": "Interior / Linings",
+    "borderline": false
+   },
+   {
+    "title": "Door hardware wrong finish level 2 lobby",
+    "match": "door hardwear to the entry doors",
+    "location": "Level 2 lobby",
+    "category": "Architect",
+    "borderline": false
+   },
+   {
+    "title": "Skirting mitres open unit 3/6 living room",
+    "match": "skirting mitres to the living room are open",
+    "location": "Level 3, unit 3/6",
+    "category": "Interior / Linings",
+    "borderline": false
+   },
+   {
+    "title": "Matwell frame proud of tiles, trip edge",
+    "match": "matwell frame sits proud of the tile finish",
+    "location": "Ground floor lobby",
+    "category": "Access & Barriers",
+    "borderline": false
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "Ceiling access panels sit flush and are acceptable",
+    "reason": "acceptance"
+   },
+   {
+    "match": "Signage and letterboxes were not yet installed",
+    "reason": "admin"
+   },
+   {
+    "match": "QA documentation to come from Apex Interiors",
+    "reason": "admin"
+   },
+   {
+    "match": "final walkthrough is to be booked",
+    "reason": "admin"
+   }
+  ]
+ },
+ "PA-2426 Rimu Terraces Cladding Review 250624.pdf": {
+  "shouldExtract": [
+   {
+    "title": "Vertical cladding joints misaligned block B",
+    "match": "joints do not align between ground and first floor",
+    "location": "Block B north elevation, units B1-B3",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   },
+   {
+    "title": "Soffit junction gap unit B4",
+    "match": "gap of approx 8mm with no closure strip",
+    "location": "Unit B4",
+    "category": "Weathertightness / Cladding",
+    "borderline": false
+   },
+   {
+    "title": "Sealant colour mismatch inter-storey joint block A",
+    "match": "a colour mismatch that reads clearly from the street",
+    "location": "Block A",
+    "category": "Architect",
+    "borderline": false
+   },
+   {
+    "title": "Head junction differs from detail 7 on A5-301",
+    "match": "differs from detail 7 on A5-301",
+    "location": "Block C stair window",
+    "category": "Weathertightness / Cladding",
+    "borderline": true
+   }
+  ],
+  "mustNotExtract": [
+   {
+    "match": "inter-storey flashings are correctly lapped",
+    "reason": "acceptance"
+   },
+   {
+    "match": "All other block C junctions opened for review matched the details",
+    "reason": "acceptance"
+   },
+   {
+    "match": "Duraclad are to provide their QA records",
+    "reason": "admin"
+   },
+   {
+    "match": "Photos held on file",
+    "reason": "admin"
+   }
+  ]
+ }
+}
