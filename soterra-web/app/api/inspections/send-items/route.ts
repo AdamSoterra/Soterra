@@ -6,17 +6,18 @@ import { resolveScope, companyName } from "@/lib/company";
 import { inspectionDetail } from "@/lib/history";
 import { emailEnabled, projectSenderAddress, sendEmail } from "@/lib/email";
 import { renderItemsEmail, type EmailItem } from "@/lib/emailTemplates";
+import { resolveRecipients, recipientsLabel } from "@/lib/sendRecipients";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 // POST /api/inspections/send-items
-//   { inspectionId, assignments: [{ itemId, subId }], message? }
+//   { inspectionId, subIds: [id], extras: [{ name?, email }], message? }
 //
-// Feature 6: the failed items off a filed inspection report, emailed to the
-// subs responsible — one email per sub, the inspector's own wording quoted,
-// recorded through Foundation 1 and stamped on each item. "We generate this
-// nice list; why not send them out and record them."
+// Feature 6: the still-open items off a filed inspection report, emailed with
+// the inspector's own wording quoted, recorded through Foundation 1 and
+// stamped on each item. ONE recipient pool per send (Adam's simplification):
+// every recipient gets the same full list.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -35,8 +36,6 @@ export async function POST(req: Request) {
 
   const inspectionId = String(body.inspectionId ?? "").trim();
   if (!UUID_RE.test(inspectionId)) return Response.json({ error: "Bad inspectionId" }, { status: 400 });
-  const rawAssignments = Array.isArray(body.assignments) ? body.assignments : [];
-  if (rawAssignments.length > 100) return Response.json({ error: "Too many assignments in one send" }, { status: 400 });
   const message = String(body.message ?? "").trim().slice(0, 1000) || null;
 
   const detail = await inspectionDetail(scope, inspectionId);
@@ -48,23 +47,13 @@ export async function POST(req: Request) {
   }
 
   const companySubs = await db.select().from(subs).where(eq(subs.companyId, scope.companyId));
-  const subById = new Map(companySubs.map((s) => [s.id, s]));
-  const itemById = new Map(items.map((it, idx) => [it.id, { ...it, n: idx + 1 }]));
+  const recipients = resolveRecipients(body, companySubs);
+  if (typeof recipients === "string") return Response.json({ error: recipients }, { status: 400 });
+  if (!recipients.length) return Response.json({ error: "Pick at least one recipient" }, { status: 400 });
 
-  const seenPair = new Set<string>();
-  const assignments: { item: (typeof items)[number] & { n: number }; sub: (typeof companySubs)[number] }[] = [];
-  for (const a of rawAssignments) {
-    const itemId = String((a as Record<string, unknown>)?.itemId ?? "");
-    const subId = String((a as Record<string, unknown>)?.subId ?? "");
-    const pair = `${itemId}::${subId}`;
-    if (seenPair.has(pair)) continue;
-    seenPair.add(pair);
-    const item = itemById.get(itemId);
-    const sub = subById.get(subId);
-    if (!item || !sub) return Response.json({ error: "Unknown item or sub in assignments" }, { status: 400 });
-    assignments.push({ item, sub });
-  }
-  if (!assignments.length) return Response.json({ error: "Nothing assigned to send" }, { status: 400 });
+  // Every recipient gets the SAME email: all the still-open items.
+  const sendItems = items.map((it, idx) => ({ ...it, n: idx + 1 })).filter((it) => (it.workStatus ?? "not_done") !== "done");
+  if (!sendItems.length) return Response.json({ error: "Every item on this report is already done" }, { status: 400 });
 
   const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
   const projectName = proj?.name ?? "This project";
@@ -75,64 +64,64 @@ export async function POST(req: Request) {
   const inspectionLabel = inspection.inspectionType || inspection.doc;
   const failedLabel = inspection.inspectedOn ? `inspected ${inspection.inspectedOn}` : "from the filed report";
 
-  const bySub = new Map<string, typeof assignments>();
-  for (const a of assignments) {
-    const list = bySub.get(a.sub.id) ?? [];
-    list.push(a);
-    bySub.set(a.sub.id, list);
-  }
+  // Composed ONCE — every recipient gets the identical email.
+  const emailItems: EmailItem[] = sendItems.map((it) => ({
+    n: it.n,
+    title: it.title,
+    meta: [it.category, it.location].filter(Boolean).join(" · ") || "Inspection item",
+    // The inspector's own wording, quoted — that's what the sub answers to.
+    note: it.detail ? `Inspector: "${it.detail}"` : null,
+    statusLabel: it.workStatus === "in_progress" ? "in progress" : "not done",
+  }));
+
+  const rendered = renderItemsEmail({
+    companyName: company,
+    contextLine: `${projectName} · ${inspectionLabel} · ${failedLabel}`,
+    intro:
+      message ||
+      `The ${inspectionLabel} inspection failed the item${sendItems.length === 1 ? "" : "s"} below, listed exactly as the inspector wrote ${sendItems.length === 1 ? "it" : "them"}. Please work through the list and reply when each is done; we re-book the inspection once all are closed.`,
+    items: emailItems,
+    numberColor: "red",
+    replyName: `${senderName} at ${company}`,
+    replyExtra: "Each item is tracked on the project until it is closed.",
+    footerNote: "Sent with Soterra · from the filed inspection report",
+    refLabel: `${inspectionLabel} · item${sendItems.length === 1 ? "" : "s"} ${sendItems.map((i) => i.n).join(", ")}`,
+  });
 
   const results: { sub: string; items: number; status: string }[] = [];
-  for (const group of bySub.values()) {
-    const sub = group[0].sub;
-    const groupItems = group.map((g) => g.item).sort((a, b) => a.n - b.n);
-
-    const emailItems: EmailItem[] = groupItems.map((it) => ({
-      n: it.n,
-      title: it.title,
-      meta: [it.category, it.location].filter(Boolean).join(" · ") || "Inspection item",
-      // The inspector's own wording, quoted — that's what the sub answers to.
-      note: it.detail ? `Inspector: "${it.detail}"` : null,
-      statusLabel: it.workStatus === "in_progress" ? "in progress" : "not done",
-    }));
-
-    const rendered = renderItemsEmail({
-      companyName: company,
-      contextLine: `${projectName} · ${inspectionLabel} · ${failedLabel}`,
-      intro:
-        message ||
-        `The ${inspectionLabel} inspection failed ${groupItems.length === 1 ? "an item that sits" : `${groupItems.length} items that sit`} with you, listed below exactly as the inspector wrote ${groupItems.length === 1 ? "it" : "them"}. Please work through the list and reply when each is done; we re-book the inspection once all are closed.`,
-      items: emailItems,
-      numberColor: "red",
-      replyName: `${senderName} at ${company}`,
-      replyExtra: "Each item is tracked on the project until it is closed.",
-      footerNote: "Sent with Soterra · from the filed inspection report",
-      refLabel: `${inspectionLabel} · item${groupItems.length === 1 ? "" : "s"} ${groupItems.map((i) => i.n).join(", ")}`,
-    });
-
+  const okStatuses = new Set<string>();
+  const okRecipients: { name: string; email: string }[] = [];
+  for (const recipient of recipients) {
     const result = await sendEmail({
       scope,
       kind: "inspection_items",
       recordType: "inspection_item",
-      recordIds: groupItems.map((i) => i.id),
-      to: { name: sub.name, email: sub.email },
+      recordIds: sendItems.map((i) => i.id),
+      to: recipient,
       fromName: `${company} (via Soterra)`,
       fromEmail: projectSenderAddress(projectName, scope.projectId),
       replyTo: senderEmail,
-      subject: `${projectName} · ${groupItems.length} failed inspection item${groupItems.length === 1 ? "" : "s"} for you · ${inspectionLabel}`,
+      subject: `${projectName} · ${sendItems.length} failed inspection item${sendItems.length === 1 ? "" : "s"} to close out · ${inspectionLabel}`,
       html: rendered.html,
       text: rendered.text,
       sentBy: scope.userId,
       sentByName: senderName,
     });
+    if (result.status !== "failed") { okStatuses.add(result.status); okRecipients.push(recipient); }
+    results.push({ sub: recipient.name, items: sendItems.length, status: result.status });
+  }
 
-    if (result.status !== "failed") {
-      await db
-        .update(inspectionItems)
-        .set({ sentTo: sub.name, sentAt: new Date(), sentStatus: result.status })
-        .where(and(eq(inspectionItems.companyId, scope.companyId), inArray(inspectionItems.id, groupItems.map((i) => i.id))));
-    }
-    results.push({ sub: sub.name, items: groupItems.length, status: result.status });
+  // Stamp once, naming only the recipients whose send went through;
+  // all-failed stamps nothing so the UI never claims a dead send.
+  if (okRecipients.length) {
+    await db
+      .update(inspectionItems)
+      .set({
+        sentTo: recipientsLabel(okRecipients),
+        sentAt: new Date(),
+        sentStatus: okStatuses.has("sent") ? "sent" : "recorded",
+      })
+      .where(and(eq(inspectionItems.companyId, scope.companyId), inArray(inspectionItems.id, sendItems.map((i) => i.id))));
   }
 
   return Response.json({ sent: results, transmitting: emailEnabled() });

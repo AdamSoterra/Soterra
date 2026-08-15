@@ -760,6 +760,22 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .sf-row .sf-txt small{font-size:11.5px;color:var(--mut)}
 .sf-sel{width:190px;flex:0 0 190px}
 .sf-add{display:flex;flex-direction:column;gap:8px;margin-top:10px;padding:12px;border:1.5px dashed var(--line);border-radius:12px}
+/* Recipients picker on the send modals: chips box + checkbox panel */
+.rp-box{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:8px 12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;text-align:left;font:inherit}
+.rp-box .rp-empty{color:var(--mut);font-size:13.5px}
+.rp-box .rp-caret{margin-left:auto;color:var(--slate);font-size:12px}
+.rp-chips{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.rp-chip{display:inline-block;padding:4px 10px;border-radius:99px;background:rgba(31,111,235,.1);color:var(--navy);font-size:12.5px;font-weight:600;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-panel{margin-top:8px;border:1.5px solid var(--line);border-radius:12px;padding:6px 12px;max-height:260px;overflow:auto;background:#fff}
+.rp-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line2);cursor:pointer;font-size:13.5px;color:var(--navy)}
+.rp-row:last-of-type{border-bottom:none}
+.rp-row input[type="checkbox"]{width:17px;height:17px;accent-color:var(--brand);flex:0 0 auto}
+.rp-row .rp-name{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-row small{margin-left:auto;color:var(--mut);font-size:11.5px;flex:0 0 auto}
+.rp-none{padding:9px 0;font-size:13px;color:var(--mut)}
+.rp-manual{display:flex;gap:8px;padding:10px 0 6px;border-top:1px solid var(--line2);margin-top:2px}
+.rp-manual .ev-in{margin:0}
+@media (max-width:560px){.rp-manual{flex-direction:column}}
 @media(max-width:560px){
   .sf-row{flex-direction:column;align-items:stretch;gap:6px}
   .sf-sel{width:100%;flex:1 1 auto}

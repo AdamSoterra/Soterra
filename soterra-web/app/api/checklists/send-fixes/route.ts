@@ -9,18 +9,21 @@ import { getChecklist } from "@/lib/checklist";
 import { emailEnabled, projectSenderAddress, sendEmail, type EmailAttachment } from "@/lib/email";
 import { renderItemsEmail, type EmailItem } from "@/lib/emailTemplates";
 import { renderSheetWithPins } from "@/lib/pinSnapshot";
+import { resolveRecipients, recipientsLabel } from "@/lib/sendRecipients";
 
 export const runtime = "nodejs";
 // Renders drawing snapshots and fetches photos — give it room.
 export const maxDuration = 300;
 
 // POST /api/checklists/send-fixes
-//   { checklistId, assignments: [{ itemId, subId }], message? }
+//   { checklistId, subIds: [id], extras: [{ name?, email }], message? }
 //
-// Sends each assigned Needs-fixing item to its sub: one email PER SUB carrying
-// all their items, the drawing snapshot with their pins drawn on it, and the
-// site photos. Every send is recorded on email_log (Foundation 1) and each
-// item is stamped sentTo/sentAt — that stamp is what the checklist shows.
+// ONE recipient pool per send (Adam's simplification): every recipient gets
+// the same email carrying ALL the Needs-fixing items, the drawing snapshots
+// with the pins drawn on, and the site photos. subIds are saved subs; extras
+// are one-off addresses that don't create a sub. Every send is recorded on
+// email_log (Foundation 1) and the items are stamped sentTo/sentAt — that
+// stamp is what the checklist shows.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Keep the total attachment payload sane: Resend caps requests at 40MB; base64
@@ -42,7 +45,6 @@ export async function POST(req: Request) {
 
   const checklistId = String(body.checklistId ?? "").trim();
   if (!UUID_RE.test(checklistId)) return Response.json({ error: "Bad checklistId" }, { status: 400 });
-  const rawAssignments = Array.isArray(body.assignments) ? body.assignments : [];
   const message = String(body.message ?? "").trim().slice(0, 1000) || null;
 
   const full = await getChecklist(scope, checklistId);
@@ -55,28 +57,13 @@ export async function POST(req: Request) {
   }
 
   const companySubs = await db.select().from(subs).where(eq(subs.companyId, scope.companyId));
-  const subById = new Map(companySubs.map((s) => [s.id, s]));
-  const itemById = new Map(items.map((it, idx) => [it.id, { ...it, n: idx + 1 }]));
+  const recipients = resolveRecipients(body, companySubs);
+  if (typeof recipients === "string") return Response.json({ error: recipients }, { status: 400 });
+  if (!recipients.length) return Response.json({ error: "Pick at least one recipient" }, { status: 400 });
 
-  // Validate every assignment against THIS checklist's issue items and THIS
-  // company's subs — anything else is a bug or a probe. Capped + de-duplicated:
-  // a 300s function fetching blobs must not be an amplification lever.
-  if (rawAssignments.length > 100) return Response.json({ error: "Too many assignments in one send" }, { status: 400 });
-  const seenPair = new Set<string>();
-  const assignments: { item: (typeof items)[number] & { n: number }; sub: (typeof companySubs)[number] }[] = [];
-  for (const a of rawAssignments) {
-    const itemId = String((a as Record<string, unknown>)?.itemId ?? "");
-    const subId = String((a as Record<string, unknown>)?.subId ?? "");
-    const pair = `${itemId}::${subId}`;
-    if (seenPair.has(pair)) continue;
-    seenPair.add(pair);
-    const item = itemById.get(itemId);
-    const sub = subById.get(subId);
-    if (!item || !sub) return Response.json({ error: "Unknown item or sub in assignments" }, { status: 400 });
-    if (item.status !== "issue") return Response.json({ error: `"${item.title}" isn't marked Needs fixing` }, { status: 400 });
-    assignments.push({ item, sub });
-  }
-  if (!assignments.length) return Response.json({ error: "Nothing assigned to send" }, { status: 400 });
+  // Every recipient gets the SAME email: all the Needs-fixing items.
+  const sendItems = items.map((it, idx) => ({ ...it, n: idx + 1 })).filter((it) => it.status === "issue");
+  if (!sendItems.length) return Response.json({ error: "Nothing marked Needs fixing to send" }, { status: 400 });
 
   const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
   const projectName = proj?.name ?? "This project";
@@ -86,133 +73,131 @@ export async function POST(req: Request) {
   const senderEmail = user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || null;
   const dateLabel = new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric", timeZone: "Pacific/Auckland" });
 
-  // One email per sub, carrying all their items.
-  const bySub = new Map<string, typeof assignments>();
-  for (const a of assignments) {
-    const list = bySub.get(a.sub.id) ?? [];
-    list.push(a);
-    bySub.set(a.sub.id, list);
+  // ── Attachments FIRST, tracking what actually made it — the email body
+  // may only claim what is truly attached (it is the evidentiary record).
+  // Built ONCE: every recipient gets the identical email.
+  const attachments: EmailAttachment[] = [];
+  let attachBytes = 0;
+  const pinsBySheet = new Map<string, { doc: string; page: number; pins: { x: number; y: number; label: string }[]; itemIds: string[] }>();
+  for (const it of sendItems) {
+    for (const pin of it.pins ?? []) {
+      const key = `${pin.doc}::${pin.page}`;
+      const entry = pinsBySheet.get(key) ?? { doc: pin.doc, page: pin.page, pins: [], itemIds: [] };
+      entry.pins.push({ x: pin.x, y: pin.y, label: pin.label || String(it.n) });
+      entry.itemIds.push(it.id);
+      pinsBySheet.set(key, entry);
+    }
+  }
+  let snapshotCount = 0;
+  const snapshotOk = new Set<string>(); // items whose pins ARE on an attached snapshot
+  for (const sheet of pinsBySheet.values()) {
+    if (snapshotCount >= 6 || attachBytes >= MAX_ATTACH_BYTES) break; // cap renders per send
+    const png = await renderSheetWithPins(scope.projectId, sheet.doc, sheet.page, sheet.pins);
+    if (png && attachBytes + png.length <= MAX_ATTACH_BYTES) {
+      const safe = sheet.doc.replace(/[^a-zA-Z0-9.-]+/g, "-").slice(0, 60);
+      attachments.push({ filename: `${safe}-p${sheet.page}-pins.png`, content: png.toString("base64") });
+      attachBytes += png.length;
+      snapshotCount++;
+      for (const id of sheet.itemIds) snapshotOk.add(id);
+    }
+  }
+  const photoAttached = new Map<string, number>(); // itemId → photos actually attached
+  let photosFetched = 0;
+  for (const it of sendItems) {
+    for (const [pi, photo] of (it.photos ?? []).entries()) {
+      if (photosFetched >= 20 || attachBytes >= MAX_ATTACH_BYTES) break; // cap blob fetches per send
+      try {
+        const got = await get(photo.url, { access: "private" });
+        if (!got || got.statusCode !== 200 || !got.stream) continue;
+        const buf = Buffer.from(await new Response(got.stream).arrayBuffer());
+        photosFetched++;
+        if (attachBytes + buf.length > MAX_ATTACH_BYTES) continue;
+        // Every checklist photo is re-encoded to JPEG client-side before
+        // upload, so the honest extension is .jpg whatever the source name.
+        attachments.push({ filename: `item${it.n}-photo${pi + 1}.jpg`, content: buf.toString("base64") });
+        attachBytes += buf.length;
+        photoAttached.set(it.id, (photoAttached.get(it.id) ?? 0) + 1);
+      } catch {
+        /* a missing photo must not sink the send */
+      }
+    }
   }
 
+  // ── Now the body, claiming only what's real.
+  const emailItems: EmailItem[] = sendItems.map((it) => {
+    const attached = photoAttached.get(it.id) ?? 0;
+    const total = it.photos.length;
+    return {
+      n: it.n,
+      title: it.title,
+      meta: [
+        it.category,
+        it.pins?.[0] ? `${it.pins[0].doc}${snapshotOk.has(it.id) ? " (pinned, snapshot attached)" : ""}` : null,
+        checklist.location,
+      ].filter(Boolean).join(" · ") || "QA check",
+      note: it.note || it.detail || null,
+      photoNote:
+        attached === 0
+          ? null
+          : attached === total
+            ? `${attached} site photo${attached === 1 ? "" : "s"} attached`
+            : `${attached} of ${total} site photos attached`,
+    };
+  });
+
+  const rendered = renderItemsEmail({
+    companyName: company,
+    contextLine: `${projectName} · ${checklist.title} · ${dateLabel}`,
+    intro:
+      message ||
+      `Hi team, these ${sendItems.length === 1 ? "came up" : `${sendItems.length} came up`} on today's ${checklist.title}. Please put them right and reply with a photo when done.`,
+    items: emailItems,
+    numberColor: "amber",
+    snapshotCaption: snapshotCount
+      ? `Drawing snapshot${snapshotCount === 1 ? "" : "s"} with the numbered pins attached full-size`
+      : null,
+    replyName: `${senderName} at ${company}`,
+    footerNote: "Sent with Soterra · recorded on the project QA log",
+    refLabel: `${checklist.title} · item${sendItems.length === 1 ? "" : "s"} ${sendItems.map((i) => i.n).join(", ")}`,
+  });
+
   const results: { sub: string; items: number; status: string }[] = [];
-  for (const group of bySub.values()) {
-    const sub = group[0].sub;
-    const groupItems = group.map((g) => g.item).sort((a, b) => a.n - b.n);
-
-    // ── Attachments FIRST, tracking what actually made it — the email body
-    // may only claim what is truly attached (it is the evidentiary record).
-    const attachments: EmailAttachment[] = [];
-    let attachBytes = 0;
-    const pinsBySheet = new Map<string, { doc: string; page: number; pins: { x: number; y: number; label: string }[]; itemIds: string[] }>();
-    for (const it of groupItems) {
-      for (const pin of it.pins ?? []) {
-        const key = `${pin.doc}::${pin.page}`;
-        const entry = pinsBySheet.get(key) ?? { doc: pin.doc, page: pin.page, pins: [], itemIds: [] };
-        entry.pins.push({ x: pin.x, y: pin.y, label: pin.label || String(it.n) });
-        entry.itemIds.push(it.id);
-        pinsBySheet.set(key, entry);
-      }
-    }
-    let snapshotCount = 0;
-    const snapshotOk = new Set<string>(); // items whose pins ARE on an attached snapshot
-    for (const sheet of pinsBySheet.values()) {
-      if (snapshotCount >= 6 || attachBytes >= MAX_ATTACH_BYTES) break; // cap renders per send
-      const png = await renderSheetWithPins(scope.projectId, sheet.doc, sheet.page, sheet.pins);
-      if (png && attachBytes + png.length <= MAX_ATTACH_BYTES) {
-        const safe = sheet.doc.replace(/[^a-zA-Z0-9.-]+/g, "-").slice(0, 60);
-        attachments.push({ filename: `${safe}-p${sheet.page}-pins.png`, content: png.toString("base64") });
-        attachBytes += png.length;
-        snapshotCount++;
-        for (const id of sheet.itemIds) snapshotOk.add(id);
-      }
-    }
-    const photoAttached = new Map<string, number>(); // itemId → photos actually attached
-    let photosFetched = 0;
-    for (const it of groupItems) {
-      for (const [pi, photo] of (it.photos ?? []).entries()) {
-        if (photosFetched >= 20 || attachBytes >= MAX_ATTACH_BYTES) break; // cap blob fetches per send
-        try {
-          const got = await get(photo.url, { access: "private" });
-          if (!got || got.statusCode !== 200 || !got.stream) continue;
-          const buf = Buffer.from(await new Response(got.stream).arrayBuffer());
-          photosFetched++;
-          if (attachBytes + buf.length > MAX_ATTACH_BYTES) continue;
-          // Every checklist photo is re-encoded to JPEG client-side before
-          // upload, so the honest extension is .jpg whatever the source name.
-          attachments.push({ filename: `item${it.n}-photo${pi + 1}.jpg`, content: buf.toString("base64") });
-          attachBytes += buf.length;
-          photoAttached.set(it.id, (photoAttached.get(it.id) ?? 0) + 1);
-        } catch {
-          /* a missing photo must not sink the send */
-        }
-      }
-    }
-
-    // ── Now the body, claiming only what's real.
-    const emailItems: EmailItem[] = groupItems.map((it) => {
-      const attached = photoAttached.get(it.id) ?? 0;
-      const total = it.photos.length;
-      return {
-        n: it.n,
-        title: it.title,
-        meta: [
-          it.category,
-          it.pins?.[0] ? `${it.pins[0].doc}${snapshotOk.has(it.id) ? " (pinned, snapshot attached)" : ""}` : null,
-          checklist.location,
-        ].filter(Boolean).join(" · ") || "QA check",
-        note: it.note || it.detail || null,
-        photoNote:
-          attached === 0
-            ? null
-            : attached === total
-              ? `${attached} site photo${attached === 1 ? "" : "s"} attached`
-              : `${attached} of ${total} site photos attached`,
-      };
-    });
-
-    const rendered = renderItemsEmail({
-      companyName: company,
-      contextLine: `${projectName} · ${checklist.title} · ${dateLabel}`,
-      intro:
-        message ||
-        `Hi team, these ${groupItems.length === 1 ? "came up" : `${groupItems.length} came up`} on today's ${checklist.title}. Please put them right and reply with a photo when done.`,
-      items: emailItems,
-      numberColor: "amber",
-      snapshotCaption: snapshotCount
-        ? `Drawing snapshot${snapshotCount === 1 ? "" : "s"} with the numbered pins attached full-size`
-        : null,
-      replyName: `${senderName} at ${company}`,
-      footerNote: "Sent with Soterra · recorded on the project QA log",
-      refLabel: `${checklist.title} · item${groupItems.length === 1 ? "" : "s"} ${groupItems.map((i) => i.n).join(", ")}`,
-    });
-
+  const okStatuses = new Set<string>();
+  const okRecipients: { name: string; email: string }[] = [];
+  for (const recipient of recipients) {
     const result = await sendEmail({
       scope,
       kind: "qa_flags",
       recordType: "checklist_item",
-      recordIds: groupItems.map((i) => i.id),
-      to: { name: sub.name, email: sub.email },
+      recordIds: sendItems.map((i) => i.id),
+      to: recipient,
       fromName: `${company} (via Soterra)`,
       fromEmail: projectSenderAddress(projectName, scope.projectId),
       replyTo: senderEmail,
-      subject: `${projectName} · ${groupItems.length} item${groupItems.length === 1 ? "" : "s"} to put right · ${sub.trade || "QA"} · ${checklist.title}`,
+      subject: `${projectName} · ${sendItems.length} item${sendItems.length === 1 ? "" : "s"} to put right · ${checklist.title}`,
       html: rendered.html,
       text: rendered.text,
       attachments,
       sentBy: scope.userId,
       sentByName: senderName,
     });
+    if (result.status !== "failed") { okStatuses.add(result.status); okRecipients.push(recipient); }
+    results.push({ sub: recipient.name, items: sendItems.length, status: result.status });
+  }
 
-    // Stamp the items — with the HONEST status: "sent" only when the provider
-    // accepted it, "recorded" in record-only mode (the UI words them apart).
-    // A "failed" transmit stamps nothing so the UI never claims a dead send.
-    if (result.status !== "failed") {
-      await db
-        .update(checklistItems)
-        .set({ sentTo: sub.name, sentAt: new Date(), sentStatus: result.status })
-        .where(and(eq(checklistItems.companyId, scope.companyId), inArray(checklistItems.id, groupItems.map((i) => i.id))));
-    }
-    results.push({ sub: sub.name, items: groupItems.length, status: result.status });
+  // Stamp the items once — with the HONEST status: "sent" only when a provider
+  // accepted it, "recorded" in record-only mode (the UI words them apart).
+  // The stamp names only the recipients whose send went through; all-failed
+  // stamps nothing so the UI never claims a dead send.
+  if (okRecipients.length) {
+    await db
+      .update(checklistItems)
+      .set({
+        sentTo: recipientsLabel(okRecipients),
+        sentAt: new Date(),
+        sentStatus: okStatuses.has("sent") ? "sent" : "recorded",
+      })
+      .where(and(eq(checklistItems.companyId, scope.companyId), inArray(checklistItems.id, sendItems.map((i) => i.id))));
   }
 
   return Response.json({ sent: results, transmitting: emailEnabled() });

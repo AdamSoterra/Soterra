@@ -769,7 +769,14 @@ export default function Page() {
   // Send-fixes-to-subs modal (Feature 4 finish move).
   const [sendOpen, setSendOpen] = useState(false);
   const [subsList, setSubsList] = useState<Sub[]>([]);
-  const [assign, setAssign] = useState<Record<string, string>>({}); // itemId → subId ("" = don't send)
+  // ONE recipient pool per send (Adam's call): tick existing subs, or add a
+  // one-off email. Shared by the checklist and inspection send modals — they
+  // are never open at the same time, and each open* handler resets them.
+  const [recipSubs, setRecipSubs] = useState<Record<string, boolean>>({});
+  const [recipExtras, setRecipExtras] = useState<{ name: string; email: string }[]>([]);
+  const [recipOpen, setRecipOpen] = useState(false); // the checkbox panel
+  const [exName, setExName] = useState("");
+  const [exEmail, setExEmail] = useState("");
   const [sendMsg, setSendMsg] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
@@ -788,15 +795,10 @@ export default function Page() {
   const [pinRefresh, setPinRefresh] = useState(0);
   // Feature 6: inspection-item worklist send (same rails, its own modal).
   const [insSendOpen, setInsSendOpen] = useState(false);
-  const [insAssign, setInsAssign] = useState<Record<string, string>>({});
   const [insSendMsg, setInsSendMsg] = useState("");
   const [insBusy, setInsBusy] = useState(false);
   const [insErr, setInsErr] = useState<string | null>(null);
   const [insNotice, setInsNotice] = useState<string | null>(null);
-  const [asOpen, setAsOpen] = useState(false); // inline new-sub form
-  const [asName, setAsName] = useState("");
-  const [asEmail, setAsEmail] = useState("");
-  const [asTrade, setAsTrade] = useState("");
   // ─── RFIs (Feature 5) ───
   const [rfiList, setRfiList] = useState<RfiRow[]>([]);
   const [rfiLoaded, setRfiLoaded] = useState(false);
@@ -1941,34 +1943,108 @@ export default function Page() {
       }
     }
   };
+  // Tick the subs whose trade matches anything on the list — the common case
+  // costs zero taps. Open the panel when nothing pre-ticked, so an empty
+  // recipients box never looks like a dead end.
+  const preTickRecipients = (list: Sub[], categories: (string | null | undefined)[]) => {
+    const cats = new Set(categories.filter(Boolean));
+    const ticks: Record<string, boolean> = {};
+    for (const s of list) if (s.trade && cats.has(s.trade)) ticks[s.id] = true;
+    setRecipSubs(ticks);
+    setRecipExtras([]);
+    setExName(""); setExEmail("");
+    setRecipOpen(Object.keys(ticks).length === 0);
+  };
+  const addExtraRecipient = () => {
+    const email = exEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    // The server caps one-off addresses at 10 per send — stop at the same line
+    // here so the send never dead-ends on "too many recipients".
+    setRecipExtras((x) => (x.length >= 10 || x.some((e) => e.email === email) ? x : [...x, { name: exName.trim(), email }]));
+    setExName(""); setExEmail("");
+  };
+  const chosenRecipientCount = () => Object.values(recipSubs).filter(Boolean).length + recipExtras.length;
+  const recipientPayload = () => ({
+    subIds: Object.keys(recipSubs).filter((id) => recipSubs[id]),
+    extras: recipExtras,
+  });
+  // The one recipients control both send modals share: chips for who's picked,
+  // a checkbox row per saved sub, and a one-off email add at the bottom.
+  const renderRecipients = () => {
+    const chosen = subsList.filter((s) => recipSubs[s.id]);
+    return (
+      <>
+        <label className="ev-lbl" style={{ marginTop: 14 }}>Recipients</label>
+        <button type="button" className="rp-box" onClick={() => setRecipOpen((o) => !o)}>
+          {chosen.length || recipExtras.length ? (
+            <span className="rp-chips">
+              {chosen.map((s) => <span key={s.id} className="rp-chip">{s.name}</span>)}
+              {recipExtras.map((x) => <span key={x.email} className="rp-chip">{x.name || x.email}</span>)}
+            </span>
+          ) : (
+            <span className="rp-empty">Choose who gets this…</span>
+          )}
+          <span className="rp-caret">{recipOpen ? "▴" : "▾"}</span>
+        </button>
+        {recipOpen && (
+          <div className="rp-panel">
+            {subsList.map((s) => (
+              <label key={s.id} className="rp-row">
+                <input
+                  type="checkbox"
+                  checked={!!recipSubs[s.id]}
+                  onChange={(e) => setRecipSubs((r) => ({ ...r, [s.id]: e.target.checked }))}
+                />
+                <span className="rp-name">{s.name}</span>
+                {s.trade && <small>{s.trade}</small>}
+              </label>
+            ))}
+            {recipExtras.map((x) => (
+              <label key={x.email} className="rp-row">
+                <input type="checkbox" checked onChange={() => setRecipExtras((list) => list.filter((e) => e.email !== x.email))} />
+                <span className="rp-name">{x.name || x.email}</span>
+                <small>{x.name ? x.email : "one-off"}</small>
+              </label>
+            ))}
+            {subsList.length === 0 && recipExtras.length === 0 && (
+              <div className="rp-none">No subs saved for this company yet - add an email below.</div>
+            )}
+            <div className="rp-manual">
+              <input className="ev-in" type="email" placeholder="Send to any email…" value={exEmail}
+                onChange={(e) => setExEmail(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtraRecipient(); } }} />
+              <input className="ev-in" placeholder="Name (optional)" value={exName}
+                onChange={(e) => setExName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtraRecipient(); } }} />
+              <button type="button" className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }}
+                disabled={recipExtras.length >= 10 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(exEmail.trim())} onClick={addExtraRecipient}>Add</button>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
   const openInsSend = async () => {
     if (!openInspection) return;
-    setInsErr(null); setInsSendMsg(""); setAsOpen(false);
+    setInsErr(null); setInsSendMsg("");
     let list: Sub[] = subsList;
     try {
       const r = await apiFetch("/api/subs");
       const d = await r.json();
       if (Array.isArray(d?.subs)) list = d.subs;
-    } catch { /* offer + New sub regardless */ }
+    } catch { /* manual add still works */ }
     setSubsList(list);
-    const next: Record<string, string> = {};
-    for (const it of openInspection.items.filter((i) => (i.workStatus ?? "not_done") !== "done")) {
-      next[it.id] = list.find((s) => s.trade && s.trade === it.category)?.id ?? "";
-    }
-    setInsAssign(next);
+    preTickRecipients(list, openInspection.items.filter((i) => (i.workStatus ?? "not_done") !== "done").map((i) => i.category));
     setInsSendOpen(true);
   };
   const sendInsItems = async () => {
     if (!openInspection) return;
-    const assignments = Object.entries(insAssign)
-      .filter(([, subId]) => subId)
-      .map(([itemId, subId]) => ({ itemId, subId }));
-    if (!assignments.length) { setInsErr("Pick a sub for at least one item."); return; }
+    if (!chosenRecipientCount()) { setInsErr("Pick at least one recipient."); return; }
     setInsBusy(true); setInsErr(null);
     try {
       const r = await apiFetch("/api/inspections/send-items", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inspectionId: openInspection.inspection.id, assignments, message: insSendMsg.trim() || undefined }),
+        body: JSON.stringify({ inspectionId: openInspection.inspection.id, ...recipientPayload(), message: insSendMsg.trim() || undefined }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Couldn't send just now.");
@@ -1995,63 +2071,29 @@ export default function Page() {
       setInsBusy(false);
     }
   };
-  // Open the send-fixes modal: load the company's subs and pre-assign each
-  // Needs-fixing item to the sub whose trade matches its category.
+  // Open the send-fixes modal: load the company's subs and pre-tick the ones
+  // whose trade matches anything on the Needs-fixing list.
   const openSendFixes = async () => {
     if (!openChecklist) return;
-    setSendErr(null); setSendMsg(""); setAsOpen(false);
+    setSendErr(null); setSendMsg("");
     let list: Sub[] = [];
     try {
       const r = await apiFetch("/api/subs");
       const d = await r.json();
       if (Array.isArray(d?.subs)) list = d.subs;
-    } catch { /* empty list is fine — the modal offers + New sub */ }
+    } catch { /* manual add still works */ }
     setSubsList(list);
-    const next: Record<string, string> = {};
-    for (const it of openChecklist.items.filter((i) => i.status === "issue")) {
-      next[it.id] = list.find((s) => s.trade && s.trade === it.category)?.id ?? "";
-    }
-    setAssign(next);
+    preTickRecipients(list, openChecklist.items.filter((i) => i.status === "issue").map((i) => i.category));
     setSendOpen(true);
-  };
-  const addSub = async () => {
-    setSendErr(null);
-    try {
-      const r = await apiFetch("/api/subs", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: asName, email: asEmail, trade: asTrade || undefined }),
-      });
-      const d = await r.json();
-      if (!r.ok || !d.sub) throw new Error(d.error || "Couldn't add that sub.");
-      const sub: Sub = d.sub;
-      setSubsList((s) => [...s, sub].sort((a, b) => a.name.localeCompare(b.name)));
-      // Fill the gaps the new sub plausibly covers: unassigned items of their
-      // trade (or any unassigned item when the sub has no trade set).
-      setAssign((a) => {
-        const n = { ...a };
-        for (const [itemId, v] of Object.entries(n)) {
-          if (v) continue;
-          const it = openChecklist?.items.find((i) => i.id === itemId);
-          if (!sub.trade || it?.category === sub.trade) n[itemId] = sub.id;
-        }
-        return n;
-      });
-      setAsOpen(false); setAsName(""); setAsEmail(""); setAsTrade("");
-    } catch (e) {
-      setSendErr(e instanceof Error ? e.message : "Couldn't add that sub.");
-    }
   };
   const sendFixes = async () => {
     if (!openChecklist) return;
-    const assignments = Object.entries(assign)
-      .filter(([, subId]) => subId)
-      .map(([itemId, subId]) => ({ itemId, subId }));
-    if (!assignments.length) { setSendErr("Pick a sub for at least one item."); return; }
+    if (!chosenRecipientCount()) { setSendErr("Pick at least one recipient."); return; }
     setSendBusy(true); setSendErr(null);
     try {
       const r = await apiFetch("/api/checklists/send-fixes", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ checklistId: openChecklist.checklist.id, assignments, message: sendMsg.trim() || undefined }),
+        body: JSON.stringify({ checklistId: openChecklist.checklist.id, ...recipientPayload(), message: sendMsg.trim() || undefined }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Couldn't send just now.");
@@ -2088,7 +2130,7 @@ export default function Page() {
   };
   const dropFlag = async (at: { x: number; y: number; page: number }) => {
     await loadSubsIfNeeded();
-    setFlTitle(""); setFlTrade(""); setFlSub(""); setFlNote(""); setFlagErr(null); setAsOpen(false);
+    setFlTitle(""); setFlTrade(""); setFlSub(""); setFlNote(""); setFlagErr(null);
     setFlagAt(at);
   };
   const saveFlag = async () => {
@@ -3957,29 +3999,10 @@ export default function Page() {
                     <b>{i + 1}. {it.title}</b>
                     <small>{[it.category, it.location].filter(Boolean).join(" · ") || "inspection item"}</small>
                   </div>
-                  <select className="ev-in sf-sel" value={insAssign[it.id] ?? ""} onChange={(e) => setInsAssign((a) => ({ ...a, [it.id]: e.target.value }))}>
-                    <option value="">Don&apos;t send</option>
-                    {subsList.map((s) => <option key={s.id} value={s.id}>{s.name}{s.trade ? ` (${s.trade})` : ""}</option>)}
-                  </select>
                 </div>
               ) : null)}
 
-              {asOpen ? (
-                <div className="sf-add">
-                  <input className="ev-in" placeholder="Sub's company name" value={asName} onChange={(e) => setAsName(e.target.value)} />
-                  <input className="ev-in" type="email" placeholder="their email" value={asEmail} onChange={(e) => setAsEmail(e.target.value)} />
-                  <select className="ev-in" value={asTrade} onChange={(e) => setAsTrade(e.target.value)}>
-                    <option value="">Trade (optional)</option>
-                    {TRADES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button className="lg-btn primary" style={{ height: 38, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} onClick={() => void addSub()}>Add sub</button>
-                    <button className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => setAsOpen(false)}>Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <button className="lg-btn" style={{ height: 38, margin: "4px 0 0", width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => setAsOpen(true)}>＋ New sub</button>
-              )}
+              {renderRecipients()}
 
               <label className="ev-lbl" style={{ marginTop: 14 }}>Message (top of the email)</label>
               <textarea
@@ -3987,6 +4010,9 @@ export default function Page() {
                 placeholder="The inspection failed these items - please work through the list and reply when each is done."
                 onChange={(e) => setInsSendMsg(e.target.value)}
               />
+              <p className="page-sub" style={{ margin: "10px 0 0" }}>
+                Everyone picked gets the full list in one email, in the inspector&apos;s own words. Every send is recorded on the items and the project log.
+              </p>
               {insErr && <div className="ev-err">{insErr}</div>}
               <div className="form-actions">
                 <button className="lg-btn primary" style={{ height: 46, margin: 0, flex: 1 }} disabled={insBusy} onClick={() => void sendInsItems()}>
@@ -4109,29 +4135,10 @@ export default function Page() {
                     <b>{i + 1}. {it.title}</b>
                     <small>{[it.category, it.pins?.length ? "📍 pinned" : null, it.photos.length ? `${it.photos.length} photo${it.photos.length === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ") || "no extras"}</small>
                   </div>
-                  <select className="ev-in sf-sel" value={assign[it.id] ?? ""} onChange={(e) => setAssign((a) => ({ ...a, [it.id]: e.target.value }))}>
-                    <option value="">Don&apos;t send</option>
-                    {subsList.map((s) => <option key={s.id} value={s.id}>{s.name}{s.trade ? ` (${s.trade})` : ""}</option>)}
-                  </select>
                 </div>
               ) : null)}
 
-              {asOpen ? (
-                <div className="sf-add">
-                  <input className="ev-in" placeholder="Sub's company name" value={asName} onChange={(e) => setAsName(e.target.value)} />
-                  <input className="ev-in" type="email" placeholder="their email" value={asEmail} onChange={(e) => setAsEmail(e.target.value)} />
-                  <select className="ev-in" value={asTrade} onChange={(e) => setAsTrade(e.target.value)}>
-                    <option value="">Trade (optional)</option>
-                    {TRADES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button className="lg-btn primary" style={{ height: 38, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} onClick={() => void addSub()}>Add sub</button>
-                    <button className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => setAsOpen(false)}>Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <button className="lg-btn" style={{ height: 38, margin: "4px 0 0", width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => setAsOpen(true)}>＋ New sub</button>
-              )}
+              {renderRecipients()}
 
               <label className="ev-lbl" style={{ marginTop: 14 }}>Message (top of the email)</label>
               <textarea
@@ -4140,7 +4147,7 @@ export default function Page() {
                 onChange={(e) => setSendMsg(e.target.value)}
               />
               <p className="page-sub" style={{ margin: "10px 0 0" }}>
-                One email per sub, from {projName ? `your ${projName}` : "this site's"} Soterra address, replies land in your own inbox. Every send is recorded on the item and the project log.
+                Everyone picked gets the full list in one email, from {projName ? `your ${projName}` : "this site's"} Soterra address - pins, photos and notes ride along, and replies land in your own inbox. Every send is recorded on the items and the project log.
               </p>
 
               {sendErr && <div className="ev-err">{sendErr}</div>}
