@@ -780,6 +780,9 @@ export default function Page() {
 
   // ─── Checklists (attached to a calendar event) ───
   const [checklists, setChecklists] = useState<ChecklistHead[]>([]);
+  // Inspections-tab QA-check filters: free-text + status (open/done).
+  const [clSearch, setClSearch] = useState("");
+  const [clStatus, setClStatus] = useState(""); // "" = all
   // Inspection types you can build a check for, grouped the way they actually
   // arrive: the council's statutory ones, then the consultants' disciplines.
   const [clTypes, setClTypes] = useState<{ council: { code: string; name: string }[]; consultant: { code: string; name: string }[] }>({ council: [], consultant: [] });
@@ -1068,7 +1071,9 @@ export default function Page() {
   useEffect(() => {
     if (!projectId) return;
     if ((tab === "plans" || tab === "upload") && !docsLoaded) loadPlans();
-    if (tab === "insights" && !insightsLoaded) loadInsights();
+    // Both tabs need the filed reports now: Insights derives its analytics from
+    // them, and the Inspections tab lists them beneath the QA checks.
+    if ((tab === "insights" || tab === "inspections") && !insightsLoaded) loadInsights();
     // The Inspections tab (and Insights, for the failure counts) needs the
     // checklists — the pre-inspection QA checks and the safety plans.
     if ((tab === "inspections" || tab === "insights") && !checklists.length) loadChecklists();
@@ -3240,19 +3245,140 @@ export default function Page() {
               <div>
                 <div className="page-h">Inspections</div>
                 <div className="page-sub" style={{ marginBottom: 0 }}>
-                  Pre-inspection QA checks and site safety plans for {projName}. Tap one to open and tick it off on site.
+                  Your pre-inspection checks and the council and consultant reports filed on {projName}.
                 </div>
               </div>
               <button className="cal-new" onClick={() => { setNewCl({ eventId: null, eventTitle: null }); setNewClKind("inspection"); setNewClCode(""); setClErr(null); }}>＋ New check</button>
             </div>
 
+            {/* ── Section 1: the pre-inspection QA checks we generate ── */}
+            <div className="sub-k" style={{ marginTop: 20 }}>Pre-inspection checks<span>{checklists.length}</span></div>
             {checklists.length === 0 ? (
-              <div className="page-sub" style={{ marginTop: 18 }}>
+              <div className="page-sub" style={{ marginTop: 4 }}>
                 None yet on {projName}. Ask the assistant to get you ready for an inspection (&quot;what will I fail on at pre-line, build me the check&quot;) or to draft a safety plan for a task — or hit ＋ New check. Each is built from this site&apos;s drawings, the Building Code and your history, and you tick it off on your phone.
               </div>
-            ) : (
-              <div style={{ marginTop: 18 }}>
-                {checklists.map((c) => <ChecklistRow key={c.id} c={c} onOpen={() => openChecklistById(c.id)} />)}
+            ) : (() => {
+              const q = clSearch.trim().toLowerCase();
+              const filtered = checklists.filter((c) => {
+                const st = c.status === "done" ? "done" : "open";
+                if (clStatus && st !== clStatus) return false;
+                if (q) {
+                  const hay = [c.title, c.location, c.inspectionCode, c.createdByName].filter(Boolean).join(" ").toLowerCase();
+                  if (!hay.includes(q)) return false;
+                }
+                return true;
+              });
+              return (
+                <>
+                  <div className="iz-filters">
+                    <input className="iz-search" placeholder="Search checks…" value={clSearch} onChange={(e) => setClSearch(e.target.value)} />
+                    <select className="iz-sel" value={clStatus} onChange={(e) => setClStatus(e.target.value)}>
+                      <option value="">All checks</option>
+                      <option value="open">Open</option>
+                      <option value="done">Done</option>
+                    </select>
+                  </div>
+                  {filtered.length === 0 ? (
+                    <div className="iz-none">No checks match{q || clStatus ? " those filters" : ""}.</div>
+                  ) : (
+                    <div>{filtered.map((c) => <ChecklistRow key={c.id} c={c} onOpen={() => openChecklistById(c.id)} />)}</div>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* ── Section 2: the filed council + consultant inspection reports ── */}
+            <input ref={reportFileRef} type="file" accept="application/pdf" multiple style={HIDDEN_INPUT}
+              onChange={(e) => { const fs = filesFrom(e.target); if (reportFileRef.current) reportFileRef.current.value = ""; if (fs.length) onReportFiles(fs); }} />
+            <div className="sub-k" style={{ marginTop: 26 }}>Inspection reports<span>{insights?.inspections.length ?? 0}</span></div>
+            {!insightsLoaded ? (
+              <div className="page-sub" style={{ marginTop: 4 }}>Loading…</div>
+            ) : (insights?.inspections.length ?? 0) === 0 ? (
+              <div
+                className="drop"
+                style={{ marginTop: 4, cursor: repCurrent ? "default" : "pointer", outline: repDragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
+                onClick={() => { if (!repCurrent) reportFileRef.current?.click(); }}
+                {...reportDropProps}
+              >
+                <div className="ic">📋</div>
+                <b>{repCurrent ? `${repCurrent.phase}…` : "Add your inspection reports"}</b>
+                <p>{repCurrent ? repCurrent.name : "Drop in the council and consultant reports you've already had — Soterra reads each one, keeps what failed, and Insights learns what your crew keeps getting pulled up on."}</p>
+                {repCurrent ? <div className="upbar"><div className="upbar-fill" style={{ width: `${Math.max(repCurrent.pct, 4)}%` }} /></div> : <span className="soon">Choose reports</span>}
+              </div>
+            ) : (() => {
+              const all = insights!.inspections;
+              const discOpts = groupInspections(all).map((g) => ({ key: g.key, label: g.label, count: g.rows.length }));
+              const q = izSearch.trim().toLowerCase();
+              const filtered = all.filter((r) => {
+                if (izDisc && inspDisc(r).key !== izDisc) return false;
+                if (izOutcome && r.outcome !== izOutcome) return false;
+                if (q) {
+                  const hay = [r.inspectionType, r.doc, r.inspectionCode, r.projectName, r.inspectedOn, inspDisc(r).label]
+                    .filter(Boolean).join(" ").toLowerCase();
+                  if (!hay.includes(q)) return false;
+                }
+                return true;
+              });
+              const groups = groupInspections(filtered);
+              return (
+                <>
+                  <div className="iz-filters">
+                    <input className="iz-search" placeholder="Search reports…" value={izSearch} onChange={(e) => setIzSearch(e.target.value)} />
+                    <select className="iz-sel" value={izDisc} onChange={(e) => setIzDisc(e.target.value)}>
+                      <option value="">All trades</option>
+                      {discOpts.map((o) => <option key={o.key} value={o.key}>{o.label} ({o.count})</option>)}
+                    </select>
+                    <select className="iz-sel" value={izOutcome} onChange={(e) => setIzOutcome(e.target.value)}>
+                      <option value="">All outcomes</option>
+                      <option value="pass">Passed</option>
+                      <option value="partial">Partial</option>
+                      <option value="fail">Failed</option>
+                    </select>
+                  </div>
+                  {groups.length === 0 ? (
+                    <div className="iz-none">No reports match{q || izDisc || izOutcome ? " those filters" : ""}.</div>
+                  ) : groups.map((g) => (
+                    <div key={g.key}>
+                      <div className="sub-k">{g.label}<span>{g.rows.length}</span></div>
+                      {g.rows.map((r) => (
+                        <div className="iz-insp" key={r.id} onClick={async () => {
+                          const res = await apiFetch(`/api/inspections?id=${encodeURIComponent(r.id)}`);
+                          const data = await res.json();
+                          if (res.ok) setOpenInspection({ inspection: r, items: data.items || [] });
+                        }}>
+                          <span className="iz-badge" style={{ background: r.outcome === "pass" ? "var(--green)" : r.outcome === "fail" ? "var(--red)" : undefined }}>
+                            {r.inspectionCode || (r.source === "council" ? "BCA" : "CON")}
+                          </span>
+                          <span className="iz-title">{r.inspectionType || r.doc}</span>
+                          <span className="iz-sub">{[r.inspectedOn, r.projectName, `${r.itemCount} to fix`].filter(Boolean).join(" · ")}</span>
+                          <span className={"pill " + (OUTCOME_PILL[r.outcome] ?? "na")}>{OUTCOME_LABEL[r.outcome] ?? "—"}</span>
+                          <span className="iz-arr">›</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  <div
+                    className="drop"
+                    style={{ marginTop: 12, padding: "18px 20px", cursor: repCurrent ? "default" : "pointer", outline: repDragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
+                    onClick={() => { if (!repCurrent) reportFileRef.current?.click(); }}
+                    {...reportDropProps}
+                  >
+                    <b>{repCurrent ? `${repCurrent.phase}…` : "Add another inspection report"}</b>
+                    <p>{repCurrent ? repCurrent.name : "Council checklists or a consultant's site observation report — PDF with real text, not a scan."}</p>
+                    {repCurrent && <div className="upbar"><div className="upbar-fill" style={{ width: `${Math.max(repCurrent.pct, 4)}%` }} /></div>}
+                  </div>
+                </>
+              );
+            })()}
+            {repItems.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                {repItems.map((it, i) => (
+                  <div key={i} className={"up-row" + (it.ok ? " done" : " error")} style={{ marginBottom: 8 }}>
+                    <span>{it.ok ? "✅" : "⚠️"}</span>
+                    <b style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</b>
+                    <small style={{ marginLeft: "auto", flex: "0 0 auto", color: it.ok ? "var(--green)" : "var(--red)" }}>{it.note}</small>
+                  </div>
+                ))}
               </div>
             )}
           </div></div>
@@ -3606,30 +3732,13 @@ export default function Page() {
               </div>
             </div>
 
-            <input ref={reportFileRef} type="file" accept="application/pdf" multiple style={HIDDEN_INPUT}
-              onChange={(e) => { const fs = filesFrom(e.target); if (reportFileRef.current) reportFileRef.current.value = ""; if (fs.length) onReportFiles(fs); }} />
-
             {!insightsLoaded ? (
               <div className="page-sub" style={{ marginTop: 18 }}>Loading…</div>
             ) : (insights?.summary.inspections ?? 0) === 0 ? (
-              <div
-                className="drop"
-                style={{ marginTop: 18, cursor: repCurrent ? "default" : "pointer", outline: repDragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
-                onClick={() => { if (!repCurrent) reportFileRef.current?.click(); }}
-                {...reportDropProps}
-              >
-                <div className="ic">📋</div>
-                <b>{repCurrent ? `${repCurrent.phase}…` : "Add your inspection reports"}</b>
-                <p>
-                  {repCurrent
-                    ? repCurrent.name
-                    : "Drop in the council and consultant reports you've already had — Soterra reads each one, keeps only what failed, and tags it. After a handful you can see what your crew actually gets pulled up on, and the assistant can build a check from it."}
-                </p>
-                {repCurrent ? (
-                  <div className="upbar"><div className="upbar-fill" style={{ width: `${Math.max(repCurrent.pct, 4)}%` }} /></div>
-                ) : (
-                  <span className="soon">Choose reports</span>
-                )}
+              <div className="cal-card" style={{ marginTop: 18 }}>
+                <b style={{ color: "var(--navy)" }}>Nothing to learn from yet.</b>
+                <p className="page-sub" style={{ margin: "6px 0 12px" }}>Add your council and consultant reports on the Inspections tab. Once a handful are in, this shows what your crew keeps getting pulled up on across every report.</p>
+                <button className="lg-btn primary" style={{ height: 42, margin: 0, width: "auto", padding: "0 18px" }} onClick={() => setTab("inspections")}>Go to Inspections</button>
               </div>
             ) : (
               <>
@@ -3733,92 +3842,7 @@ export default function Page() {
                 </>
                 )}
 
-                <IzToggle label="Past inspections" count={insights!.inspections.length} open={!izClosed.past} onClick={() => izToggle("past")} />
-                {/* A compact, filterable list: search + trade + outcome, then the
-                    rows grouped by trade the way they arrive (council together,
-                    each consultant discipline under its own heading). */}
-                {!izClosed.past && (() => {
-                  const all = insights!.inspections;
-                  const discOpts = groupInspections(all).map((g) => ({ key: g.key, label: g.label, count: g.rows.length }));
-                  const q = izSearch.trim().toLowerCase();
-                  const filtered = all.filter((r) => {
-                    if (izDisc && inspDisc(r).key !== izDisc) return false;
-                    if (izOutcome && r.outcome !== izOutcome) return false;
-                    if (q) {
-                      const hay = [r.inspectionType, r.doc, r.inspectionCode, r.projectName, r.inspectedOn, inspDisc(r).label]
-                        .filter(Boolean).join(" ").toLowerCase();
-                      if (!hay.includes(q)) return false;
-                    }
-                    return true;
-                  });
-                  const groups = groupInspections(filtered);
-                  return (
-                    <>
-                      <div className="iz-filters">
-                        <input className="iz-search" placeholder="Search inspections…" value={izSearch} onChange={(e) => setIzSearch(e.target.value)} />
-                        <select className="iz-sel" value={izDisc} onChange={(e) => setIzDisc(e.target.value)}>
-                          <option value="">All trades</option>
-                          {discOpts.map((o) => <option key={o.key} value={o.key}>{o.label} ({o.count})</option>)}
-                        </select>
-                        <select className="iz-sel" value={izOutcome} onChange={(e) => setIzOutcome(e.target.value)}>
-                          <option value="">All outcomes</option>
-                          <option value="pass">Passed</option>
-                          <option value="partial">Partial</option>
-                          <option value="fail">Failed</option>
-                        </select>
-                      </div>
-                      {groups.length === 0 ? (
-                        <div className="iz-none">No inspections match{q || izDisc || izOutcome ? " those filters" : ""}.</div>
-                      ) : groups.map((g) => (
-                        <div key={g.key}>
-                          <div className="sub-k">{g.label}<span>{g.rows.length}</span></div>
-                          {g.rows.map((r) => (
-                            <div className="iz-insp" key={r.id} onClick={async () => {
-                              const res = await apiFetch(`/api/inspections?id=${encodeURIComponent(r.id)}`);
-                              const data = await res.json();
-                              if (res.ok) setOpenInspection({ inspection: r, items: data.items || [] });
-                            }}>
-                              <span className="iz-badge" style={{ background: r.outcome === "pass" ? "var(--green)" : r.outcome === "fail" ? "var(--red)" : undefined }}>
-                                {r.inspectionCode || (r.source === "council" ? "BCA" : "CON")}
-                              </span>
-                              <span className="iz-title">{r.inspectionType || r.doc}</span>
-                              <span className="iz-sub">{[r.inspectedOn, r.projectName, `${r.itemCount} to fix`].filter(Boolean).join(" · ")}</span>
-                              <span className={"pill " + (OUTCOME_PILL[r.outcome] ?? "na")}>{OUTCOME_LABEL[r.outcome] ?? "—"}</span>
-                              <span className="iz-arr">›</span>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </>
-                  );
-                })()}
-
-                <IzToggle label="Add more reports" open={!izClosed.addmore} onClick={() => izToggle("addmore")} />
-                {!izClosed.addmore && (
-                <div
-                  className="drop"
-                  style={{ padding: "26px 20px", cursor: repCurrent ? "default" : "pointer", outline: repDragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
-                  onClick={() => { if (!repCurrent) reportFileRef.current?.click(); }}
-                  {...reportDropProps}
-                >
-                  <b>{repCurrent ? `${repCurrent.phase}…` : "Drop in another inspection report"}</b>
-                  <p>{repCurrent ? repCurrent.name : "Council checklists or a consultant's site observation report — PDF with real text, not a scan."}</p>
-                  {repCurrent && <div className="upbar"><div className="upbar-fill" style={{ width: `${Math.max(repCurrent.pct, 4)}%` }} /></div>}
-                </div>
-                )}
               </>
-            )}
-
-            {repItems.length > 0 && (
-              <div style={{ marginTop: 14 }}>
-                {repItems.map((it, i) => (
-                  <div key={i} className={"up-row" + (it.ok ? " done" : " error")} style={{ marginBottom: 8 }}>
-                    <span>{it.ok ? "✅" : "⚠️"}</span>
-                    <b style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</b>
-                    <small style={{ marginLeft: "auto", flex: "0 0 auto", color: it.ok ? "var(--green)" : "var(--red)" }}>{it.note}</small>
-                  </div>
-                ))}
-              </div>
             )}
           </div></div>
         )}
