@@ -3941,7 +3941,10 @@ export default function Page() {
 
       {/* ─── send failed inspection items to subs (Feature 6) ─── */}
       {insSendOpen && openInspection && (
-        <div className="scrim" onClick={() => { if (!insBusy) setInsSendOpen(false); }}>
+        <div className="scrim" style={{ zIndex: 130 }} onClick={() => { if (!insBusy) setInsSendOpen(false); }}>
+          {/* zIndex 130: this modal sits in the DOM before the inspection dialog
+              it opens FROM, so at the shared .scrim level it painted underneath
+              and the button looked dead. Matches the flag modals' layer. */}
           <div className="sheet" style={{ maxWidth: 530, maxHeight: "88vh" }} onClick={(e) => e.stopPropagation()}>
             <div className="sh-top">
               <div className="ti"><b>Send failed items to subs</b><small>{openInspection.inspection.inspectionType || openInspection.inspection.doc}</small></div>
@@ -4092,7 +4095,8 @@ export default function Page() {
 
       {/* ─── send the Needs-fixing items to subs (Feature 4 finish) ─── */}
       {sendOpen && openChecklist && (
-        <div className="scrim" onClick={() => { if (!sendBusy) setSendOpen(false); }}>
+        <div className="scrim" style={{ zIndex: 130 }} onClick={() => { if (!sendBusy) setSendOpen(false); }}>
+          {/* zIndex 130: same stacking fix as the inspection send modal. */}
           <div className="sheet" style={{ maxWidth: 530, maxHeight: "88vh" }} onClick={(e) => e.stopPropagation()}>
             <div className="sh-top">
               <div className="ti"><b>Send fixes to subs</b><small>{openChecklist.checklist.title}</small></div>
