@@ -202,12 +202,28 @@ const DISCIPLINE: Record<string, string> = {
 // Past inspections, grouped the way they arrive: all the council ones together
 // (they're one statutory series), then a heading per consultant discipline.
 // The trade a row belongs to: council together (one statutory series), each
-// consultant discipline on its own. Shared by the grouping and the filter so
-// the dropdown and the headings always agree.
+// consultant discipline on its OWN (Fire, Electrical, Hydraulic…). Shared by
+// the grouping and the filter so the dropdown and the headings always agree.
+// A consultant report carries its discipline either as a code (FIRE, ELEC — the
+// extractor's form) or only in its type text ("Fire observation report" — the
+// demo seed leaves the code null), so read both rather than dumping the
+// code-less ones into a single "Other consultant" bucket.
+const TYPE_DISC: [RegExp, string, string][] = [
+  [/fire/i, "FIRE", "Fire"],
+  [/elect/i, "ELEC", "Electrical"],
+  [/mechan/i, "MECH", "Mechanical"],
+  [/hydraul|plumb|drainage/i, "HYD", "Hydraulic / plumbing"],
+  [/structur/i, "STRU", "Structural"],
+  [/architect/i, "ARCH", "Architectural"],
+  [/acoustic/i, "ACOU", "Acoustic"],
+  [/seismic/i, "SEIS", "Seismic"],
+];
 function inspDisc(r: InspectionRow): { key: string; label: string } {
-  const isCouncil = r.source === "council";
-  const key = isCouncil ? "council" : r.inspectionCode && DISCIPLINE[r.inspectionCode] ? r.inspectionCode : "other";
-  return { key, label: isCouncil ? "Council" : DISCIPLINE[key] ?? "Other consultant" };
+  if (r.source === "council") return { key: "council", label: "Council" };
+  if (r.inspectionCode && DISCIPLINE[r.inspectionCode]) return { key: r.inspectionCode, label: DISCIPLINE[r.inspectionCode] };
+  const t = `${r.inspectionType ?? ""} ${r.doc}`;
+  for (const [re, key, label] of TYPE_DISC) if (re.test(t)) return { key, label };
+  return { key: "other", label: "Other consultant" };
 }
 function groupInspections(rows: InspectionRow[]): { key: string; label: string; rows: InspectionRow[] }[] {
   const groups = new Map<string, { key: string; label: string; rows: InspectionRow[] }>();
