@@ -201,12 +201,18 @@ const DISCIPLINE: Record<string, string> = {
 
 // Past inspections, grouped the way they arrive: all the council ones together
 // (they're one statutory series), then a heading per consultant discipline.
+// The trade a row belongs to: council together (one statutory series), each
+// consultant discipline on its own. Shared by the grouping and the filter so
+// the dropdown and the headings always agree.
+function inspDisc(r: InspectionRow): { key: string; label: string } {
+  const isCouncil = r.source === "council";
+  const key = isCouncil ? "council" : r.inspectionCode && DISCIPLINE[r.inspectionCode] ? r.inspectionCode : "other";
+  return { key, label: isCouncil ? "Council" : DISCIPLINE[key] ?? "Other consultant" };
+}
 function groupInspections(rows: InspectionRow[]): { key: string; label: string; rows: InspectionRow[] }[] {
   const groups = new Map<string, { key: string; label: string; rows: InspectionRow[] }>();
   for (const r of rows) {
-    const isCouncil = r.source === "council";
-    const key = isCouncil ? "council" : r.inspectionCode && DISCIPLINE[r.inspectionCode] ? r.inspectionCode : "other";
-    const label = isCouncil ? "Council" : DISCIPLINE[key] ?? "Other consultant";
+    const { key, label } = inspDisc(r);
     const g = groups.get(key) ?? { key, label, rows: [] };
     g.rows.push(r);
     groups.set(key, g);
@@ -746,6 +752,10 @@ export default function Page() {
   // closed when its key is true. Lets a manager fold away the long lists.
   const [izClosed, setIzClosed] = useState<Record<string, boolean>>({});
   const izToggle = (k: string) => setIzClosed((s) => ({ ...s, [k]: !s[k] }));
+  // Past-inspections list filters: free-text search, trade (discipline), outcome.
+  const [izSearch, setIzSearch] = useState("");
+  const [izDisc, setIzDisc] = useState(""); // "" = all trades
+  const [izOutcome, setIzOutcome] = useState(""); // "" = all outcomes
   const [openInspection, setOpenInspection] = useState<{ inspection: InspectionRow; items: { id: string; category: string; title: string; detail: string | null; location: string | null; workStatus?: string; sentTo?: string | null; sentAt?: string | null; sentStatus?: string | null }[] } | null>(null);
   const reportFileRef = useRef<HTMLInputElement>(null);
   const [repCurrent, setRepCurrent] = useState<{ name: string; phase: string; pct: number } | null>(null);
@@ -3708,30 +3718,64 @@ export default function Page() {
                 )}
 
                 <IzToggle label="Past inspections" count={insights!.inspections.length} open={!izClosed.past} onClick={() => izToggle("past")} />
-                {/* Grouped the way they arrive: the council's statutory checks,
-                    then each consultant discipline under its own heading. */}
-                {!izClosed.past && groupInspections(insights!.inspections).map((g) => (
-                  <div key={g.key}>
-                    <div className="sub-k">{g.label}<span>{g.rows.length}</span></div>
-                    {g.rows.map((r) => (
-                  <div className="doc" key={r.id} onClick={async () => {
-                    const res = await apiFetch(`/api/inspections?id=${encodeURIComponent(r.id)}`);
-                    const data = await res.json();
-                    if (res.ok) setOpenInspection({ inspection: r, items: data.items || [] });
-                  }}>
-                    <div className="ic spc" style={{ background: r.outcome === "pass" ? "var(--green)" : r.outcome === "fail" ? "var(--red)" : undefined }}>
-                      {r.inspectionCode || (r.source === "council" ? "BCA" : "CON")}
-                    </div>
-                    <div className="dt">
-                      <b>{r.inspectionType || r.doc}</b>
-                      <small>{[r.inspectedOn, r.projectName, `${r.itemCount} item${r.itemCount === 1 ? "" : "s"} to fix`].filter(Boolean).join(" · ")}</small>
-                    </div>
-                    <span className={"pill " + (OUTCOME_PILL[r.outcome] ?? "na")}>{OUTCOME_LABEL[r.outcome] ?? "—"}</span>
-                    <div className="arr">›</div>
-                  </div>
-                    ))}
-                  </div>
-                ))}
+                {/* A compact, filterable list: search + trade + outcome, then the
+                    rows grouped by trade the way they arrive (council together,
+                    each consultant discipline under its own heading). */}
+                {!izClosed.past && (() => {
+                  const all = insights!.inspections;
+                  const discOpts = groupInspections(all).map((g) => ({ key: g.key, label: g.label, count: g.rows.length }));
+                  const q = izSearch.trim().toLowerCase();
+                  const filtered = all.filter((r) => {
+                    if (izDisc && inspDisc(r).key !== izDisc) return false;
+                    if (izOutcome && r.outcome !== izOutcome) return false;
+                    if (q) {
+                      const hay = [r.inspectionType, r.doc, r.inspectionCode, r.projectName, r.inspectedOn, inspDisc(r).label]
+                        .filter(Boolean).join(" ").toLowerCase();
+                      if (!hay.includes(q)) return false;
+                    }
+                    return true;
+                  });
+                  const groups = groupInspections(filtered);
+                  return (
+                    <>
+                      <div className="iz-filters">
+                        <input className="iz-search" placeholder="Search inspections…" value={izSearch} onChange={(e) => setIzSearch(e.target.value)} />
+                        <select className="iz-sel" value={izDisc} onChange={(e) => setIzDisc(e.target.value)}>
+                          <option value="">All trades</option>
+                          {discOpts.map((o) => <option key={o.key} value={o.key}>{o.label} ({o.count})</option>)}
+                        </select>
+                        <select className="iz-sel" value={izOutcome} onChange={(e) => setIzOutcome(e.target.value)}>
+                          <option value="">All outcomes</option>
+                          <option value="pass">Passed</option>
+                          <option value="partial">Partial</option>
+                          <option value="fail">Failed</option>
+                        </select>
+                      </div>
+                      {groups.length === 0 ? (
+                        <div className="iz-none">No inspections match{q || izDisc || izOutcome ? " those filters" : ""}.</div>
+                      ) : groups.map((g) => (
+                        <div key={g.key}>
+                          <div className="sub-k">{g.label}<span>{g.rows.length}</span></div>
+                          {g.rows.map((r) => (
+                            <div className="iz-insp" key={r.id} onClick={async () => {
+                              const res = await apiFetch(`/api/inspections?id=${encodeURIComponent(r.id)}`);
+                              const data = await res.json();
+                              if (res.ok) setOpenInspection({ inspection: r, items: data.items || [] });
+                            }}>
+                              <span className="iz-badge" style={{ background: r.outcome === "pass" ? "var(--green)" : r.outcome === "fail" ? "var(--red)" : undefined }}>
+                                {r.inspectionCode || (r.source === "council" ? "BCA" : "CON")}
+                              </span>
+                              <span className="iz-title">{r.inspectionType || r.doc}</span>
+                              <span className="iz-sub">{[r.inspectedOn, r.projectName, `${r.itemCount} to fix`].filter(Boolean).join(" · ")}</span>
+                              <span className={"pill " + (OUTCOME_PILL[r.outcome] ?? "na")}>{OUTCOME_LABEL[r.outcome] ?? "—"}</span>
+                              <span className="iz-arr">›</span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </>
+                  );
+                })()}
 
                 <IzToggle label="Add more reports" open={!izClosed.addmore} onClick={() => izToggle("addmore")} />
                 {!izClosed.addmore && (
