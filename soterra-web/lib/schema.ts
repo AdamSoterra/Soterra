@@ -150,6 +150,30 @@ export const usageCounters = pgTable(
   (t) => ({ byProjectDay: uniqueIndex("usage_counters_project_day_idx").on(t.projectId, t.day) })
 );
 
+// ─── Free look-around trial: a per-user LIFETIME question counter (no company,
+//     no project — these users have neither), and the leads the wall collects.
+//     Kept deliberately outside the company boundary: a trial user has no
+//     Scope, and nothing here ever joins onto company data. ───
+export const trialUsage = pgTable("trial_usage", {
+  userId: text("user_id").primaryKey(),
+  count: integer("count").default(0).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const leads = pgTable(
+  "leads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id"),
+    email: text("email").notNull(),
+    name: text("name"),
+    company: text("company"),
+    source: text("source").default("trial_wall").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({ byUser: uniqueIndex("leads_user_idx").on(t.userId) })
+);
+
 // ─── Extracted plan/spec pages — the per-project searchable index built from
 //     uploaded PDFs (files live in Vercel Blob; only text + metadata land here). ───
 export const planPages = pgTable(

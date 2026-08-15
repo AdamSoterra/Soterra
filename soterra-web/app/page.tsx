@@ -646,6 +646,10 @@ export default function Page() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
+  // Free look-around mode: a signed-in user with NO site trying the assistant
+  // (5 questions on base knowledge). Client-side door only — the trial route
+  // re-checks membership and meters server-side.
+  const [freeMode, setFreeMode] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [siteCode, setSiteCode] = useState<string | null>(null);
   const projRef = useRef<string | null>(null); // always-current site id for fetch headers
@@ -2609,6 +2613,9 @@ export default function Page() {
   // Also stay open while `createdCode` is set — that's the "here's your invite
   // code" screen shown right after creating (projectId is already set by then).
   const mustSetUp = !projectId;
+  if (mustSetUp && freeMode && !setupOpen && !createdCode) {
+    return <FreeTrial onSetUp={() => setFreeMode(false)} onSignOut={() => clerk.signOut()} />;
+  }
   if (mustSetUp || setupOpen || createdCode) {
     return (
       <SiteSetup
@@ -2640,6 +2647,7 @@ export default function Page() {
         onCopy={() => copyCode(createdCode || "")}
         copied={copied}
         onSignOut={() => clerk.signOut()}
+        onTryFree={mustSetUp && projects.length === 0 ? () => setFreeMode(true) : undefined}
       />
     );
   }
@@ -4775,6 +4783,9 @@ function SiteSetup(props: {
   onClose?: () => void; onEnter: () => void; onUploadPlans: () => void;
   onCopy: () => void; copied: boolean;
   onSignOut: () => void;
+  /** The free look-around door — only offered to a brand-new user (mandatory
+   *  setup, no company yet). */
+  onTryFree?: () => void;
 }) {
   const p = props;
   // Your name + job title — collected on BOTH create and join so assigning by
@@ -4876,6 +4887,13 @@ function SiteSetup(props: {
                 </>
               )}
 
+              {p.onTryFree && (
+                <button type="button" className="ft-door" onClick={p.onTryFree}>
+                  <b>Just looking? Try the assistant free</b>
+                  <small>5 questions on the Building Code, NZ Standards and manufacturer specs - no setup, nothing to enter.</small>
+                </button>
+              )}
+
               {p.mandatory && (
                 <div style={{ textAlign: "center", marginTop: 16 }}>
                   <button onClick={p.onSignOut} style={{ background: "none", border: "none", color: "var(--slate)", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>Sign out</button>
@@ -4885,6 +4903,145 @@ function SiteSetup(props: {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Free look-around mode: the 5-question trial screen ──────────────────
+// Deliberately its own tiny surface, not the main app: a trial user has no
+// project, and every screen below the SiteSetup gate assumes one. The client
+// carries the short conversation itself (no threads); the server meters.
+function FreeTrial(p: { onSetUp: () => void; onSignOut: () => void }) {
+  const [msgs, setMsgs] = useState<{ role: "user" | "assistant"; text: string; cards?: { ref: string; title: string; sub: string; url: string }[] }[]>([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [used, setUsed] = useState(0);
+  const [walled, setWalled] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [leadEmail, setLeadEmail] = useState("");
+  const [leadName, setLeadName] = useState("");
+  const [leadCompany, setLeadCompany] = useState("");
+  const [leadBusy, setLeadBusy] = useState(false);
+  const [leadDone, setLeadDone] = useState(false);
+  const [leadErr, setLeadErr] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [msgs, busy, walled]);
+
+  const ask = async () => {
+    const q = input.trim();
+    if (!q || busy || walled) return;
+    setInput(""); setErr(null); setBusy(true);
+    const history = msgs.map((m) => ({ role: m.role, text: m.text }));
+    setMsgs((m) => [...m, { role: "user", text: q }]);
+    try {
+      const r = await fetch("/api/trial-ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, history }) });
+      const d = await r.json();
+      if (d.walled) { setWalled(true); setUsed(Number(d.limit) || 5); return; }
+      if (!r.ok) throw new Error(d.error || "Couldn't reach the assistant just now - that question wasn't counted. Try again.");
+      const cards = (Array.isArray(d.cards) ? d.cards : [])
+        .filter((c: Record<string, unknown>) => c && typeof c === "object" && (c as { std?: unknown }).std)
+        .map((c: { std: { ref?: string; title?: string; holds?: string; url?: string } }) => ({
+          ref: String(c.std.ref || ""), title: String(c.std.title || ""), sub: String(c.std.holds || ""), url: String(c.std.url || ""),
+        }));
+      setMsgs((m) => [...m, { role: "assistant", text: String(d.answer || ""), cards }]);
+      const u = Number(d.used) || 0;
+      setUsed(u);
+      if (u >= (Number(d.limit) || 5)) setWalled(true);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't reach the assistant just now - that question wasn't counted.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendLead = async () => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail.trim())) { setLeadErr("Enter the email address you want us to reach you on."); return; }
+    setLeadBusy(true); setLeadErr(null);
+    try {
+      const r = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: leadEmail.trim(), name: leadName.trim() || undefined, company: leadCompany.trim() || undefined }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Couldn't save that just now.");
+      setLeadDone(true);
+    } catch (e) {
+      setLeadErr(e instanceof Error ? e.message : "Couldn't save that just now - email adam@soterra.co.nz instead.");
+    } finally {
+      setLeadBusy(false);
+    }
+  };
+
+  return (
+    <div className="ft-wrap">
+      <div className="ft-top">
+        <b className="ft-brand">Soterra</b>
+        <span className="ft-mode">Free look-around</span>
+        <span className="ft-count">{Math.min(used, 5)} of 5 free questions</span>
+        <button className="ft-setup" onClick={p.onSetUp}>Set up your site</button>
+        <button className="ft-out" onClick={p.onSignOut}>Sign out</button>
+      </div>
+      <div className="ft-scroll" ref={scrollRef}>
+        <div className="ft-inner">
+          {msgs.length === 0 && !walled && (
+            <div className="ft-hello">
+              <b>Ask me anything a NZ site throws up.</b>
+              <p>I answer from the Building Code, MBIE determinations, NZ Standards handling and the manufacturers&apos; own manuals - GIB, James Hardie, Resene, Thermakraft and more. Five questions on the house.</p>
+              <div className="ft-eg">
+                {["What clearance does cladding need to finished ground level?", "GIB Aqualine fixing centres in a wet area?", "Can the council refuse a CCC over a missing producer statement?"].map((q) => (
+                  <button key={q} onClick={() => { setInput(q); }}>{q}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {msgs.map((m, i) => (
+            <div key={i} className={"ft-msg " + m.role}>
+              <div className="ft-bubble" dangerouslySetInnerHTML={{ __html: fmt(m.text) }} />
+              {m.cards?.map((c) => (
+                <a key={c.ref} className="ft-std" href={c.url} target="_blank" rel="noreferrer">
+                  <b>{c.ref}</b>
+                  <small>{c.title}{c.sub ? ` - holds ${c.sub}` : ""} · free download ›</small>
+                </a>
+              ))}
+            </div>
+          ))}
+          {busy && <div className="ft-msg assistant"><div className="ft-bubble ft-thinking">Looking that up…</div></div>}
+          {err && <div className="ev-err" style={{ marginTop: 10 }}>{err}</div>}
+          {walled && (
+            <div className="ft-wall">
+              <b>That&apos;s your 5 free questions.</b>
+              <p>Like what you saw? With your site set up, Soterra reads your own drawings and specs, answers with the sheet it found, builds pre-inspection checklists and tracks your RFIs. We set new companies up personally.</p>
+              {leadDone ? (
+                <p className="ft-lead-done">Got it - we&apos;ll be in touch shortly. You can also email <a href="mailto:adam@soterra.co.nz">adam@soterra.co.nz</a> directly.</p>
+              ) : (
+                <>
+                  <div className="ft-lead">
+                    <input className="ev-in" type="email" placeholder="Your work email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} />
+                    <input className="ev-in" placeholder="Name (optional)" value={leadName} onChange={(e) => setLeadName(e.target.value)} />
+                    <input className="ev-in" placeholder="Company (optional)" value={leadCompany} onChange={(e) => setLeadCompany(e.target.value)} />
+                    <button className="lg-btn primary" style={{ height: 44, margin: 0 }} disabled={leadBusy} onClick={() => void sendLead()}>{leadBusy ? "Sending…" : "Set me up"}</button>
+                  </div>
+                  {leadErr && <div className="ev-err">{leadErr}</div>}
+                  <p className="ft-alt">Or email <a href="mailto:adam@soterra.co.nz">adam@soterra.co.nz</a> - same result, human included.</p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      {!walled && (
+        <div className="ft-compose">
+          <div className="ft-cbox">
+            <textarea
+              rows={1}
+              value={input}
+              placeholder="Ask about the Building Code, a product spec, an inspection call…"
+              onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"; }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(); } }}
+            />
+            <button className="send" disabled={busy || !input.trim()} onClick={() => void ask()} aria-label="Send">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

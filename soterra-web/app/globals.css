@@ -760,6 +760,47 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .sf-row .sf-txt small{font-size:11.5px;color:var(--mut)}
 .sf-sel{width:190px;flex:0 0 190px}
 .sf-add{display:flex;flex-direction:column;gap:8px;margin-top:10px;padding:12px;border:1.5px dashed var(--line);border-radius:12px}
+/* ─── Free look-around trial ─── */
+.ft-door{display:block;width:100%;margin-top:18px;padding:14px 16px;border:1.5px dashed var(--brand);border-radius:14px;background:rgba(31,111,235,.05);cursor:pointer;text-align:left;font:inherit}
+.ft-door b{display:block;font-size:14px;color:var(--brand)}
+.ft-door small{display:block;margin-top:3px;font-size:12.5px;color:var(--slate);line-height:1.4}
+.ft-wrap{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg,#F4F7FB)}
+.ft-top{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:12px 18px;background:#fff;border-bottom:1px solid var(--line2)}
+.ft-brand{font-size:17px;font-weight:800;color:var(--navy)}
+.ft-mode{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--brand);background:rgba(31,111,235,.1);padding:4px 10px;border-radius:99px}
+.ft-count{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--slate)}
+.ft-setup{height:36px;padding:0 14px;border:none;border-radius:10px;background:var(--brand);color:#fff;font-size:13px;font-weight:700;cursor:pointer}
+.ft-out{background:none;border:none;color:var(--slate);font-size:13px;cursor:pointer;text-decoration:underline}
+.ft-scroll{flex:1;overflow-y:auto}
+.ft-inner{max-width:760px;margin:0 auto;padding:24px 16px 40px}
+.ft-hello{background:#fff;border:1px solid var(--line2);border-radius:16px;padding:20px}
+.ft-hello b{font-size:16px;color:var(--navy)}
+.ft-hello p{margin:8px 0 14px;font-size:14px;color:var(--slate);line-height:1.5}
+.ft-eg{display:flex;flex-direction:column;gap:8px}
+.ft-eg button{text-align:left;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg);font-size:13.5px;color:var(--navy);cursor:pointer}
+.ft-msg{margin-top:14px;display:flex;flex-direction:column}
+.ft-msg.user{align-items:flex-end}
+.ft-msg .ft-bubble{max-width:92%;padding:12px 16px;border-radius:16px;font-size:14.5px;line-height:1.55;background:#fff;border:1px solid var(--line2);color:var(--ink,#16324A)}
+.ft-msg.user .ft-bubble{background:var(--brand);border:none;color:#fff}
+.ft-thinking{color:var(--slate);font-style:italic}
+.ft-std{display:block;margin-top:8px;max-width:92%;padding:10px 14px;border:1.5px solid var(--line);border-left:4px solid var(--brand);border-radius:12px;background:#fff;text-decoration:none}
+.ft-std b{display:block;font-size:13.5px;color:var(--navy)}
+.ft-std small{display:block;margin-top:2px;font-size:12px;color:var(--slate)}
+.ft-wall{margin-top:20px;background:#fff;border:1.5px solid var(--brand);border-radius:16px;padding:20px}
+.ft-wall b{font-size:16px;color:var(--navy)}
+.ft-wall p{margin:8px 0 0;font-size:14px;color:var(--slate);line-height:1.55}
+.ft-lead{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.ft-lead .ev-in{margin:0}
+.ft-alt{font-size:13px}
+.ft-alt a,.ft-lead-done a{color:var(--brand);font-weight:600}
+.ft-lead-done{font-weight:600}
+.ft-compose{flex:0 0 auto;padding:12px 16px 18px;background:linear-gradient(transparent,var(--bg,#F4F7FB) 40%)}
+.ft-cbox{max-width:760px;margin:0 auto;display:flex;align-items:flex-end;gap:10px;background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:10px 12px}
+.ft-cbox textarea{flex:1;border:none;outline:none;resize:none;font:inherit;font-size:14.5px;line-height:1.4;max-height:140px;background:transparent}
+.ft-cbox .send{width:38px;height:38px;border:none;border-radius:12px;background:var(--brand);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ft-cbox .send:disabled{opacity:.4;cursor:default}
+@media (max-width:640px){.ft-count{display:none}}
+
 /* Recipients picker on the send modals: chips box + checkbox panel */
 .rp-box{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:8px 12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;text-align:left;font:inherit}
 .rp-box .rp-empty{color:var(--mut);font-size:13.5px}
