@@ -412,9 +412,9 @@ const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "assistant", label: "Assistant", icon: I.chat },
   { id: "inspections", label: "Inspections", icon: I.tasks },
   { id: "plans", label: "Plans", icon: I.plans },
-  { id: "upload", label: "Upload", icon: I.up },
   { id: "rfis", label: "RFIs", icon: I.rfi },
   { id: "insights", label: "Insights", icon: I.insights },
+  { id: "upload", label: "Upload", icon: I.up },
 ];
 
 // Login-first screen shown when the app runs in app-mode (installed PWA / ?app=1),
@@ -3121,10 +3121,17 @@ export default function Page() {
                 </div>
               )}
               {!upCurrent && (
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-                  <button type="button" className="soon" onClick={(e) => { e.stopPropagation(); planFolderRef.current?.click(); }}>📁 Choose folder</button>
-                  <button type="button" className="soon" onClick={(e) => { e.stopPropagation(); planFileRef.current?.click(); }}>Choose files</button>
-                </div>
+                <>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+                    <button type="button" className="soon" onClick={(e) => { e.stopPropagation(); planFileRef.current?.click(); }}>Choose PDFs</button>
+                    <button type="button" className="soon" onClick={(e) => { e.stopPropagation(); planFolderRef.current?.click(); }}>📁 Whole folder</button>
+                  </div>
+                  {/* The OS folder dialog hides the files inside — people read that
+                      as "empty" and bail. Say so before they open it. */}
+                  <p style={{ fontSize: 12.5, color: "var(--mut)", marginTop: 8 }}>
+                    Picking a whole folder? The window will look empty — that&apos;s Windows hiding the files. Select the folder itself and hit Upload; every PDF inside (subfolders too) comes with it.
+                  </p>
+                </>
               )}
             </div>
 
