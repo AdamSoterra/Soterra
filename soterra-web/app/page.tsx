@@ -270,6 +270,14 @@ const catColor = (c: string) => CAT_COLOR[c] ?? "#94A6BE";
 
 const OUTCOME_PILL: Record<string, string> = { pass: "pass", partial: "open", fail: "fail", unknown: "na" };
 const OUTCOME_LABEL: Record<string, string> = { pass: "Passed", partial: "Partial", fail: "Failed", unknown: "—" };
+// A consultant report carries NO Pass/Partial/Fail — only the council (BCA)
+// issues a statutory outcome, and a "Partial Pass" is a real council result.
+// So a council row shows exactly what the report said; a consultant row never
+// shows a verdict it didn't give — just a neutral "Report" chip.
+function outcomeChip(source: string, outcome: string): { cls: string; label: string } {
+  if (source === "consultant") return { cls: "na", label: "Report" };
+  return { cls: OUTCOME_PILL[outcome] ?? "na", label: OUTCOME_LABEL[outcome] ?? "—" };
+}
 
 // Where a checklist item came from. An item with no source is a guess, so the
 // badge is deliberately loud about which of the three sources backed it.
@@ -1863,7 +1871,7 @@ export default function Page() {
           // came back with 2 is not a clean report, it's a bad read.
           ? `only read ${data.items} of about ${data.expectedItems} — check this one`
           : data.items === 0
-            ? `${OUTCOME_LABEL[data.outcome] ?? "Filed"} — nothing outstanding`
+            ? `${data.outcome && data.outcome !== "unknown" ? OUTCOME_LABEL[data.outcome] ?? "Filed" : "Filed"} — nothing outstanding`
             : `${data.items} item${data.items === 1 ? "" : "s"} · ${data.categories.slice(0, 2).join(", ")}${data.categories.length > 2 ? "…" : ""}`;
         setRepItems((prev) => [{ name: f.name, ok: !data.underRead, note }, ...prev]);
       } catch (e) {
@@ -3351,7 +3359,7 @@ export default function Page() {
                           </span>
                           <span className="iz-title">{r.inspectionType || r.doc}</span>
                           <span className="iz-sub">{[r.inspectedOn, r.projectName, `${r.itemCount} to fix`].filter(Boolean).join(" · ")}</span>
-                          <span className={"pill " + (OUTCOME_PILL[r.outcome] ?? "na")}>{OUTCOME_LABEL[r.outcome] ?? "—"}</span>
+                          {(() => { const oc = outcomeChip(r.source, r.outcome); return <span className={"pill " + oc.cls}>{oc.label}</span>; })()}
                           <span className="iz-arr">›</span>
                         </div>
                       ))}
@@ -4752,7 +4760,7 @@ export default function Page() {
             <div className="sh-top">
               <div className="ti">
                 <b>{openInspection.inspection.inspectionType || openInspection.inspection.doc}</b>
-                <small>{[openInspection.inspection.inspectedOn, openInspection.inspection.projectName, OUTCOME_LABEL[openInspection.inspection.outcome]].filter(Boolean).join(" · ")}</small>
+                <small>{[openInspection.inspection.inspectedOn, openInspection.inspection.projectName, outcomeChip(openInspection.inspection.source, openInspection.inspection.outcome).label].filter(Boolean).join(" · ")}</small>
               </div>
               <button className="sh-x" onClick={() => setOpenInspection(null)}>✕</button>
             </div>

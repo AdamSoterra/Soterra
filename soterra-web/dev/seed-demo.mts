@@ -290,7 +290,11 @@ async function seedInspections() {
     const [row] = await db.insert(inspections).values({
       companyId: CID, projectId: PID, doc: insp.doc, source: insp.source,
       inspectionCode: insp.code ?? null, inspectionType: insp.type, inspector: insp.inspector,
-      outcome: insp.outcome, inspectedOn: on, itemCount: insp.items.length,
+      // Consultants never issue a Pass/Partial/Fail — only the council (BCA)
+      // does — so a consultant report is filed with no verdict ("unknown"),
+      // matching how the extractor reads a real one. The data file's outcome
+      // is only ever used for council rows.
+      outcome: insp.source === "consultant" ? "unknown" : insp.outcome, inspectedOn: on, itemCount: insp.items.length,
       createdBy: UID, createdAt: daysAgo(insp.daysAgo),
     }).returning();
     for (const it of insp.items) {
