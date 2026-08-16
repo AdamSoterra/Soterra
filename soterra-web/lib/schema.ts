@@ -182,6 +182,10 @@ export const planPages = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     projectId: text("project_id").notNull(),
     doc: text("doc").notNull(), // document display name (e.g. the filename)
+    // Document class (lib/docType.ts: drawings / specs / reports / scopes /
+    // other). Same value on every page of a doc. NULL = legacy/untyped, which
+    // every reader treats as "drawings" — the exact pre-types behaviour.
+    docType: text("doc_type"),
     file: text("file"), // Blob URL of the source PDF
     page: integer("page").notNull(),
     npages: integer("npages").notNull(),

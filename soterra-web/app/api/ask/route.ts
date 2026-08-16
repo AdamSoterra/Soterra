@@ -2,7 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { and, asc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { events, tasks, chatThreads, chatMessages, usageCounters, planPages, codePages, projects } from "@/lib/schema";
+import { events, tasks, chatThreads, chatMessages, usageCounters, planPages, codePages, projects, rfis, rfiMessages, contractInstructions } from "@/lib/schema";
+import { DOC_TYPE_NOTE } from "@/lib/docType";
 import {
   PROJECT_TZ,
   zonedWallClockToUtc,
@@ -122,7 +123,7 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
   {
     name: "search_plans",
     description:
-      "Search THIS SITE's uploaded drawings & specifications and read the matching pages. You MUST call this for ANY question about this project's building, drawings, specs, materials, dimensions, fire ratings, schedules, finishes — you have NO other knowledge of the plans. After it returns, answer ONLY from the page text it gives you, and finish with a line 'Source: <the exact page label>'. If the pages don't contain the answer, say what's missing — never invent codes, ratings, products or numbers.",
+      "Search THIS SITE's uploaded project documents — drawings, the specification, consultant reports and producer statements, subcontractor scopes — and read the matching pages. You MUST call this for ANY question about this project's building, drawings, specs, materials, dimensions, fire ratings, schedules, finishes — you have NO other knowledge of the plans. Each returned page carries a 'type' saying what kind of document it is; weigh it accordingly (spec and drawings are equal authority; a scope is what a trade was contracted to do, not a design document). After it returns, answer ONLY from the page text it gives you, and finish with a line 'Source: <the exact page label>'. If the pages don't contain the answer, say what's missing — never invent codes, ratings, products or numbers.",
     input_schema: {
       type: "object",
       properties: { query: { type: "string", description: "What to look up, in plain English." } },
@@ -141,6 +142,16 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
           description: "Optional topic to narrow the review to the relevant documents (e.g. 'doors and door hardware', 'wet area lining', 'windows and glazing', 'fire rating'). Omit to read the ENTIRE set — do that for an open 'any clashes anywhere?' question.",
         },
       },
+    },
+  },
+  {
+    name: "search_directives",
+    description:
+      "Search THIS project's formal directives register: CONTRACT INSTRUCTIONS (CIs) and ANSWERED RFIs. These sit at the TOP of the order of precedence — a CI or an official RFI answer GOVERNS over the drawings and the specification on the point it addresses, and the latest instruction wins. Call this BEFORE committing to an answer read off a drawing or spec whenever the matter could plausibly have been queried or formally changed (a detail under dispute, a substitution, 'we asked the engineer about this', anything amended) — and ALWAYS when the user mentions an instruction, variation, change, CI, CAN or RFI. Returns each directive's label (CI-003, RFI-014), what it directs, and which drawings it amends. Reference a directive by its label in your answer TEXT ('CI-003 directs …'); do NOT write a 'Source:' line for a directive — it is a register entry, not a page — and if it amends a drawing, cite that drawing normally as well. If it returns nothing relevant, the drawings and specification stand unamended.",
+    input_schema: {
+      type: "object",
+      properties: { query: { type: "string", description: "What the question touches, in plain terms (e.g. 'lintel grid C3', 'wall thickness 190 series', 'drainage invert level')." } },
+      required: ["query"],
     },
   },
   {
@@ -624,7 +635,96 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         // surface — the model then answers from the latest (label carries the date).
         const top = retrieve(pages, df, q, 8);
         if (top.length === 0) return { content: JSON.stringify({ pages: [], note: "Nothing matched in this site's uploaded plans." }), cards: [] };
-        return { content: JSON.stringify({ note: "If the same detail differs between pages, the one with the LATEST 'uploaded' date is the current revision — use it.", pages: top.map((p) => ({ label: pageLabel(p), text: excerpt(p.text, q, 2800) })) }), cards: [] };
+        return {
+          content: JSON.stringify({
+            note: "If the same detail differs between pages, the one with the LATEST 'uploaded' date is the current revision — use it. Each page's 'type' says what kind of document it is: the specification and the drawings carry EQUAL authority (if they conflict and nothing resolves it, say so and suggest an RFI); a consultant report or producer statement governs its own discipline; a subcontractor scope is what a trade was contracted to do, never a design document. A contract instruction or answered RFI outranks all of these — check search_directives when the matter could have been formally changed.",
+            pages: top.map((p) => ({ label: pageLabel(p), type: DOC_TYPE_NOTE[p.docType], text: excerpt(p.text, q, 2800) })),
+          }),
+          cards: [],
+        };
+      }
+
+      case "search_directives": {
+        const q = s(input.query) ?? "";
+        // Project-scoped registers, both small (tens of rows, not thousands) —
+        // load them and match in process rather than inventing SQL search.
+        const [cis, answeredRfis] = await Promise.all([
+          db.select().from(contractInstructions).where(eq(contractInstructions.projectId, projectId)),
+          db.select().from(rfis).where(and(eq(rfis.projectId, projectId), inArray(rfis.status, ["answered", "closed"]))),
+        ]);
+        if (cis.length === 0 && answeredRfis.length === 0) {
+          return { content: JSON.stringify({ directives: [], note: "This project has no contract instructions and no answered RFIs on its register. The drawings and specification stand unamended." }), cards: [] };
+        }
+        // The substance of a CI lives in its source RFI's official answer, so
+        // pull the answer bodies for both lists in one query. A bounced RFI can
+        // carry more than one official_answer — the LATEST is the governing one.
+        const answerFor = new Map<string, { body: string; at: number }>();
+        const rfiIds = [...new Set([...answeredRfis.map((r) => r.id), ...cis.map((c) => c.sourceRfiId).filter((v): v is string => !!v)])];
+        if (rfiIds.length) {
+          const msgs = await db
+            .select()
+            .from(rfiMessages)
+            .where(and(eq(rfiMessages.projectId, projectId), inArray(rfiMessages.rfiId, rfiIds), eq(rfiMessages.type, "official_answer")));
+          for (const m of msgs) {
+            const at = m.createdAt?.getTime() ?? 0;
+            const prev = answerFor.get(m.rfiId);
+            if (!prev || at > prev.at) answerFor.set(m.rfiId, { body: m.body, at });
+          }
+        }
+        type Directive = {
+          label: string; kind: string; title: string; question?: string; directs: string | null;
+          amends?: unknown; location?: string | null; issued: string | null; hay: string;
+        };
+        const all: Directive[] = [
+          ...cis.map((c): Directive => {
+            let amends: unknown = null;
+            try { amends = c.amendsDrawings ? JSON.parse(c.amendsDrawings) : null; } catch { /* keep null */ }
+            const directs = c.sourceRfiId ? answerFor.get(c.sourceRfiId)?.body ?? null : null;
+            return {
+              label: `CI-${String(c.number).padStart(3, "0")}`,
+              kind: "contract_instruction",
+              title: c.title,
+              directs,
+              amends,
+              issued: c.createdAt?.toISOString().slice(0, 10) ?? null,
+              hay: `${c.title} ${directs ?? ""} ${c.amendsDrawings ?? ""}`.toLowerCase(),
+            };
+          }),
+          ...answeredRfis.map((r): Directive => {
+            const directs = answerFor.get(r.id)?.body ?? null;
+            return {
+              label: r.number != null ? `RFI-${String(r.number).padStart(3, "0")}` : "RFI (draft)",
+              kind: "answered_rfi",
+              title: r.subject,
+              // The question the answer resolves — without it, an answer like
+              // "confirmed, proceed as proposed" has no referent.
+              question: r.question.slice(0, 600),
+              directs,
+              location: r.location,
+              issued: (r.dateAnswered ?? r.dateClosed)?.toISOString().slice(0, 10) ?? null,
+              hay: `${r.subject} ${r.question} ${directs ?? ""} ${r.location ?? ""} ${r.discipline ?? ""}`.toLowerCase(),
+            };
+          }),
+        ];
+        // Keyword match with the retrieval synonyms; empty/no-hit query returns
+        // the full (small) register rather than a silent miss — the model can
+        // judge relevance itself, and "nothing formally changed this" is only a
+        // safe claim when it has actually seen the register.
+        const terms = expand(q).filter((t) => t.length >= 3);
+        const scored = all
+          .map((d) => ({ d, score: terms.reduce((n, t) => n + (d.hay.includes(t) ? 1 : 0), 0) }))
+          .sort((a, b) => b.score - a.score || (b.d.issued ?? "").localeCompare(a.d.issued ?? ""));
+        const hits = (scored.some((x) => x.score > 0) ? scored.filter((x) => x.score > 0) : scored).slice(0, 6).map((x) => {
+          const { hay: _hay, ...rest } = x.d;
+          return { ...rest, directs: rest.directs ? rest.directs.slice(0, 1500) : null };
+        });
+        return {
+          content: JSON.stringify({
+            note: `${cis.length} contract instruction${cis.length === 1 ? "" : "s"} and ${answeredRfis.length} answered RFI${answeredRfis.length === 1 ? "" : "s"} on this project's register; the most relevant are below. A CI or an official RFI answer GOVERNS over the drawings and specification on the point it addresses — the LATEST instruction wins. Reference a directive by its label in your answer text (e.g. "CI-003 directs …"); do NOT write a "Source:" line for it. If it amends a drawing, cite that drawing normally as well.`,
+            directives: hits,
+          }),
+          cards: [],
+        };
       }
 
       case "review_plans": {
@@ -654,13 +754,13 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         // single very dense sheet is capped so it can't crowd out the rest.
         const CHAR_BUDGET = 420_000; // ~105k tokens of page text
         const PER_PAGE_CAP = 9_000;
-        const out: { label: string; text: string }[] = [];
+        const out: { label: string; type: string; text: string }[] = [];
         let used = 0;
         let dropped = 0;
         for (const p of selected) {
           const t = p.text.length > PER_PAGE_CAP ? p.text.slice(0, PER_PAGE_CAP) + " …[page truncated]" : p.text;
           if (used + t.length > CHAR_BUDGET) { dropped++; continue; }
-          out.push({ label: pageLabel(p), text: t });
+          out.push({ label: pageLabel(p), type: DOC_TYPE_NOTE[p.docType], text: t });
           used += t.length;
         }
 
@@ -1072,7 +1172,7 @@ ${tkList}`;
 }
 
 const STATIC_PROMPT = `You are Soterra's site assistant — a sharp, experienced construction professional helping the crew on a specific construction SITE. You help five ways:
-1) PLAN-READER — answer questions about THIS site's uploaded drawings & specifications. For any question about this project's plans/specs (materials, dimensions, fire ratings, schedules, finishes, "what does our spec say…") you MUST call search_plans, then answer ONLY from the page text it returns, finishing with a line: "Source: <the exact page label>". Never invent codes, ratings, products or numbers. If the answer isn't in the pages, say what's missing and which drawing set might have it. REVISIONS — the plans may hold more than one revision of the same sheet; each page label carries an "uploaded" date. The most recently uploaded page is the CURRENT revision. If two pages give different values for the same thing (e.g. a fire rating that was 30 min in an older upload and 60 min in a newer one), ALWAYS use the value from the latest-uploaded page, cite that page as the Source, and note that it supersedes the older figure. Never present a superseded value as current, and never average them. AMENDMENTS (CIs, CANs, client changes) — a Contract Instruction, CAN, Architect's or Engineer's Instruction, or a client change order OUTRANKS the drawing or specification detail it amends, exactly as a newer sheet revision outranks an older one. When such a document is among the returned pages and it conflicts with a drawing or spec on the same item, follow the instruction, cite IT as the Source, and note that it supersedes the earlier detail; where the instruction doesn't address something, the drawings and specification still govern the rest. Never present a detail the crew has since been instructed to change as if it were current. MULTIPLE SOURCES — when your answer draws on more than one document or sheet (common for a clash review, or when a schedule and a detail both matter), give a SEPARATE "Source:" line for EACH document, one per line, each with that document's exact label. Do not combine several documents on one line with slashes. The app turns every "Source:" line into its own openable card, so one line per document means the user can open every drawing behind the answer. CHOOSING THE RIGHT TOOL BY BREADTH — this matters for both accuracy and cost. For a SPECIFIC lookup (one fact, one detail: "door handle height?", "beam over grid 3?", "what's the wall type to the bathroom?") use search_plans — it's targeted and cheap, and you can call it a few times with different wording. For a WHOLE-SET question that needs completeness — "any clashes or discrepancies worth an RFI?", "is anything missing or contradictory?", "do the schedules agree with the details?", "review the drawings before we order/line/fabricate" — you MUST use review_plans instead, because search_plans only returns the pages matching a keyword and will MISS a clash sitting in two documents it didn't happen to rank. review_plans reads every page so you can cross-compare. Judge the breadth of the question yourself and pick accordingly; do not run a whole-set audit through keyword searches, and do not read the entire set for a single fact. If review_plans says it couldn't fit the whole set in one pass, tell the user which part you covered and offer to continue with a narrower focus — never imply a complete audit you didn't do.
+1) PLAN-READER — answer questions about THIS site's uploaded drawings & specifications. For any question about this project's plans/specs (materials, dimensions, fire ratings, schedules, finishes, "what does our spec say…") you MUST call search_plans, then answer ONLY from the page text it returns, finishing with a line: "Source: <the exact page label>". Never invent codes, ratings, products or numbers. If the answer isn't in the pages, say what's missing and which drawing set might have it. REVISIONS — the plans may hold more than one revision of the same sheet; each page label carries an "uploaded" date. The most recently uploaded page is the CURRENT revision. If two pages give different values for the same thing (e.g. a fire rating that was 30 min in an older upload and 60 min in a newer one), ALWAYS use the value from the latest-uploaded page, cite that page as the Source, and note that it supersedes the older figure. Never present a superseded value as current, and never average them. AMENDMENTS (CIs, CANs, client changes) — a Contract Instruction, CAN, Architect's or Engineer's Instruction, or a client change order OUTRANKS the drawing or specification detail it amends, exactly as a newer sheet revision outranks an older one. When such a document is among the returned pages and it conflicts with a drawing or spec on the same item, follow the instruction, cite IT as the Source, and note that it supersedes the earlier detail; where the instruction doesn't address something, the drawings and specification still govern the rest. Never present a detail the crew has since been instructed to change as if it were current. THE DIRECTIVES REGISTER (search_directives) — the project also keeps a formal register of Contract Instructions and answered RFIs, and an official RFI answer governs the point it settles exactly as a CI does. Before you commit to an answer read off a drawing or the spec on a matter that could plausibly have been queried or formally changed (a detail under dispute, a substitution, a dimension the crew says they asked about), call search_directives to check nothing outranks the sheet you are reading; ALWAYS call it when the user mentions an instruction, a variation, a change, a CI, a CAN or an RFI. Reference a directive by its label in your answer text ("CI-003 directs…", "the RFI-014 answer settles this…") — never as a "Source:" line (it is a register entry, not a page); where it amends a drawing, cite the amended drawing normally too. MULTIPLE SOURCES — when your answer draws on more than one document or sheet (common for a clash review, or when a schedule and a detail both matter), give a SEPARATE "Source:" line for EACH document, one per line, each with that document's exact label. Do not combine several documents on one line with slashes. The app turns every "Source:" line into its own openable card, so one line per document means the user can open every drawing behind the answer. CHOOSING THE RIGHT TOOL BY BREADTH — this matters for both accuracy and cost. For a SPECIFIC lookup (one fact, one detail: "door handle height?", "beam over grid 3?", "what's the wall type to the bathroom?") use search_plans — it's targeted and cheap, and you can call it a few times with different wording. For a WHOLE-SET question that needs completeness — "any clashes or discrepancies worth an RFI?", "is anything missing or contradictory?", "do the schedules agree with the details?", "review the drawings before we order/line/fabricate" — you MUST use review_plans instead, because search_plans only returns the pages matching a keyword and will MISS a clash sitting in two documents it didn't happen to rank. review_plans reads every page so you can cross-compare. Judge the breadth of the question yourself and pick accordingly; do not run a whole-set audit through keyword searches, and do not read the entire set for a single fact. If review_plans says it couldn't fit the whole set in one pass, tell the user which part you covered and offer to continue with a narrower focus — never imply a complete audit you didn't do.
 2) BUILDING-CODE — answer what the NZ Building Code REQUIRES by calling search_code (the free MBIE Acceptable Solutions, Verification Methods, Handbook, guidance). Use this for "what does the code require for…", clause requirements, acceptable solutions, minimum figures, weathertightness, egress, etc. Answer from the returned pages, make clear it's general Building-Code guidance (not this project's plans), finish with "Source: <page label>", and remind them to confirm against the current official document / their designer for anything safety-critical. Never invent a clause or number. (search_plans = THIS project's drawings; search_code = the universal Code. Pick the right one; for "does our design meet the code?" you may use both.)
 
 2a) NEW ZEALAND STANDARDS (NZS / AS/NZS) — ANSWER THESE AS CLEANLY AND DIRECTLY AS YOU ANSWER A GIB OR BOSS FIRE QUESTION, then point to the standard for the precise figure. The Building Code constantly routes to a Standard ("comply with NZS 3604"), and the Standard holds the precise number. We are not licensed to REPRODUCE a standard's text, but that restriction is NARROW: it only stops you copying out a PRECISE VALUE that sits in an NZS table — an exact size in mm (a 190x70 lintel), an exact grade designation (e.g. "Type 304"), an exact cover in mm (e.g. 75 mm), an exact coating weight, an exact zone-boundary distance, an exact clause figure. It does NOT stop you answering the question. GIVE THE REAL, DIRECT ANSWER FIRST from your own construction expertise and the Building Code — the yes/no, the material, the direction, the principle a competent builder or engineer already knows (e.g. "near the sea you use stainless, not galvanised") — and withhold ONLY the precise table value. An answer that is just "look in the standard" is a BROKEN answer. Never guess or invent a precise value: a wrong lintel size or cover is a structural failure.
@@ -1103,7 +1203,7 @@ WHEN WE DON'T HAVE THE ANSWER — this is where a lot of value is won or lost, s
    4. Offer what we CAN cover with certainty: the surrounding system — the Building Code's relevant clause (e.g. E3 internal moisture), the licensed makers' membrane/substrate specs, and this site's own plans.
 Never invent a proprietary figure, and never present a general or web figure as if it were the maker's certified spec. The tone is "here's the answer, and here's exactly where to confirm it", never "we can't help".
 4) CONSTRUCTION EXPERT — general construction knowledge (methods, sequencing, materials, detailing, terminology, H&S, best practice) from your own expertise — no "Source:" line. This is for GENERIC know-how only. You may NOT use it to state any manufacturer's product figure, spec, material, rating or system requirement — those MUST go through search_manufacturer (section 3), and a Building-Code requirement MUST go through search_code (section 2). Use web_search only for genuinely general external context, never to source a GIB product spec.
-PRIORITY — for anything about THIS project, search_plans comes first: it's the crew's own building, and their drawings govern. If the plans don't cover it, then the Code (search_code) or the maker's manual (search_manufacturer) as the question needs. When a question is purely about a GIB product or system (not tied to this project's drawings), go straight to search_manufacturer.
+PRIORITY — THE ORDER OF PRECEDENCE. For anything about THIS project, the project's own record governs, in this order, higher beating lower wherever they disagree: (1) CONTRACT INSTRUCTIONS and site instructions, latest first, and (2) ANSWERED RFIs — both live in search_directives; (3) the LATEST REVISION of any document; (4) the project SPECIFICATION and the DRAWINGS, which sit at the SAME level — search_plans/review_plans read both, and a spec page carries the same authority as a drawing sheet. If the spec and a drawing conflict on the same item and no CI, RFI answer or newer revision resolves it, give BOTH figures, say plainly that the project documents disagree, and recommend raising an RFI — never quietly pick one; (5) CONSULTANT REPORTS and PRODUCER STATEMENTS, which govern within their own discipline; (6) the BUILDING CODE (search_code) — a FLOOR, never a ceiling: the job may exceed it and never go below it, so a stricter project or manufacturer requirement governs over the Code minimum, and no project document can relax a Code requirement; (7) the NZ STANDARDS the Code cites; (8) the MANUFACTURER'S manual for the SPECIFIED product (search_manufacturer); (9) company inspection HISTORY (search_history) — context on what keeps going wrong, never authority for what to build. Cross-cutting rules: the latest document beats the earlier one (judged by the uploaded date, per the REVISIONS rule above); a specific detail beats a general note; figured dimensions beat scaled. So for a project question, search_plans comes first (plus search_directives when something may have changed); if the project documents don't cover it, then the Code or the maker's manual as the question needs. When a question is purely about a GIB product or system (not tied to this project's drawings), go straight to search_manufacturer.
 5) INSPECTION HISTORY — answer "what have we been pulled up on before?" by calling search_history. It searches THIS COMPANY's own filed inspection reports (all their sites, council and consultant). Use it for "what failed on the last cavity wrap?", "do we keep failing passive fire?", "what did the inspector pick up at pre-line last time?", and whenever someone is preparing for an inspection. Answer from the rows it returns — say how many times a thing has come up and when it last did, because the repeat count is the point. It is this builder's own data, so be direct about it. Never present it as a code requirement; it's what happened.
 6) CHECKS & SAFETY PLANS — these are interactive TOOLS, not prose. When the user asks you to make/generate/prep a QA or inspection checklist, call create_checklist. When they ask for a safety plan, SWMS, JSA, task/site risk assessment or "the H&S for <task>", call create_safety_plan (grounded in HSWA 2015 + WorkSafe good practice). Don't write either out as text yourself — the tool builds the tickable version and returns a card. A plain H&S question they just want answered ("do I need edge protection here?") is your own expertise (section 4), not a plan to build. Soterra is NOT a calendar or scheduler: you do not book events, set reminders or manage to-dos. If asked to schedule something, say that lives in their own calendar, and offer what you DO own — get them ready for that inspection and build the check.
 

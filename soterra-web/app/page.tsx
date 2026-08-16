@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
 import { upload } from "@vercel/blob/client";
+import { DOC_TYPES, DOC_TYPE_LABEL, docTypeOf, type DocType } from "@/lib/docType";
 import Landing from "./landing";
 
 type Tab = "assistant" | "calendar" | "tasks" | "inspections" | "plans" | "upload" | "rfis" | "insights";
@@ -53,7 +54,7 @@ type Attachment = { kind: "image" | "pdf"; mediaType: string; data: string; name
 // ─── Sites (projects) + crew ───
 type Project = { id: string; name: string; code: string; role: string; timezone?: string };
 type Member = { userId: string; name: string; title: string | null; role: string; colorIndex: number; isMe: boolean };
-type PlanDoc = { doc: string; npages: number; indexed: number; file: string | null; uploadedAt: string };
+type PlanDoc = { doc: string; npages: number; indexed: number; file: string | null; uploadedAt: string; docType?: string | null };
 
 // ─── Inspection history + checklists ───
 type CategoryCount = { category: string; count: number };
@@ -442,7 +443,7 @@ const I = {
 const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "assistant", label: "Assistant", icon: I.chat },
   { id: "inspections", label: "Inspections", icon: I.tasks },
-  { id: "plans", label: "Plans", icon: I.plans },
+  { id: "plans", label: "Documents", icon: I.plans },
   { id: "rfis", label: "RFIs", icon: I.rfi },
   { id: "insights", label: "Insights", icon: I.insights },
   { id: "upload", label: "Upload", icon: I.up },
@@ -542,17 +543,24 @@ function DocsList({ docs, onDelete, onOpen, defaultOpen }: { docs: { doc: string
 
 // Procore-style preview grid of a project's drawings (Plans tab). Each card
 // shows a cached thumbnail (rendered once, then instant) and opens the sheet.
-function PlanGrid({ docs, projectId, onOpen, onDelete }: { docs: { doc: string; indexed: number }[]; projectId: string; onOpen: (doc: string, npages: number) => void; onDelete: (doc: string) => void }) {
+function PlanGrid({ docs, projectId, onOpen, onDelete, onSetType }: {
+  docs: { doc: string; indexed: number; docType?: string | null }[];
+  projectId: string;
+  onOpen: (doc: string, npages: number) => void;
+  onDelete: (doc: string) => void;
+  /** Reclassify a document when auto-detection guessed wrong. */
+  onSetType?: (doc: string, docType: DocType) => void;
+}) {
   const [q, setQ] = useState("");
   const shown = q.trim() ? docs.filter((d) => d.doc.toLowerCase().includes(q.trim().toLowerCase())) : docs;
   return (
     <>
       {docs.length > 8 && (
-        <input className="docs-find" style={{ marginTop: 0, marginBottom: 12 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a sheet…" />
+        <input className="docs-find" style={{ marginTop: 0, marginBottom: 12 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a document…" />
       )}
       <div className="plan-grid">
         {shown.map((d) => (
-          <div className="plan-card" key={d.doc} onClick={() => onOpen(d.doc, d.indexed)} title="Open this drawing">
+          <div className="plan-card" key={d.doc} onClick={() => onOpen(d.doc, d.indexed)} title="Open this document">
             <div className="plan-thumb">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -566,6 +574,17 @@ function PlanGrid({ docs, projectId, onOpen, onDelete }: { docs: { doc: string; 
             <div className="plan-meta">
               <b title={d.doc}>{d.doc}</b>
               <small>{d.indexed} page{d.indexed === 1 ? "" : "s"}</small>
+              {onSetType && (
+                <select
+                  className="plan-type"
+                  value={docTypeOf(d.docType)}
+                  title="Document type - change it if the auto-detect got it wrong"
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => onSetType(d.doc, e.target.value as DocType)}
+                >
+                  {DOC_TYPES.map((t) => <option key={t} value={t}>{DOC_TYPE_LABEL[t]}</option>)}
+                </select>
+              )}
             </div>
             <button className="plan-del" title="Remove from index" onClick={(e) => { e.stopPropagation(); onDelete(d.doc); }}>✕</button>
           </div>
@@ -738,6 +757,8 @@ export default function Page() {
   // ─── plan upload (Upload tab) + indexed docs (Plans tab) ───
   const [docs, setDocs] = useState<PlanDoc[]>([]);
   const [docsLoaded, setDocsLoaded] = useState(false);
+  // Which document type the Documents tab is showing. Drawings = the daily one.
+  const [docView, setDocView] = useState<DocType>("drawings");
   // Bulk upload: a live "current file" progress + a log of finished ones, so a PM
   // can drop the whole plan set (many PDFs) at once.
   const [upCurrent, setUpCurrent] = useState<{ name: string; phase: string; pct: number } | null>(null);
@@ -2489,6 +2510,21 @@ export default function Page() {
       loadPlans(); // resync on failure
     }
   };
+  // Reclassify a document (the Documents tab's per-card override). Optimistic;
+  // resyncs on failure. Locations only re-derive when the drawings set changed.
+  const setDocTypeFor = async (doc: string, docType: DocType) => {
+    const wasDrawing = docTypeOf(docs.find((d) => d.doc === doc)?.docType) === "drawings";
+    setDocs((ds) => ds.map((d) => (d.doc === doc ? { ...d, docType } : d)));
+    try {
+      const r = await apiFetch("/api/plans", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ doc, docType }) });
+      if (!r.ok) throw new Error();
+      if (wasDrawing !== (docType === "drawings")) {
+        apiFetch("/api/locations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "refresh" }) }).catch(() => {});
+      }
+    } catch {
+      loadPlans(); // resync on failure
+    }
+  };
 
   // Crew filter applied once, here — the grid, agenda and day modal all read
   // from these, so filtering stays consistent across every view.
@@ -3127,7 +3163,7 @@ export default function Page() {
         {tab === "plans" && (
           isDemo ? (
             <div className="page"><div className="page-inner">
-              <div className="page-h">Plans &amp; specs</div>
+              <div className="page-h">Documents</div>
               <div className="page-sub">{projName}</div>
               <div className="idx">
                 <div><div className="big">571</div><small>pages indexed</small></div>
@@ -3151,15 +3187,15 @@ export default function Page() {
             </div></div>
           ) : (
             <div className="page"><div className="page-inner">
-              <div className="page-h">Plans &amp; specs</div>
+              <div className="page-h">Documents</div>
               <div className="page-sub">{projName}</div>
               {!docsLoaded ? (
                 <div className="page-sub">Loading…</div>
               ) : docs.length === 0 ? (
                 <div className="drop" onClick={() => setTab("upload")} style={{ cursor: "pointer" }}>
                   <div className="ic">📄</div>
-                  <b>No plans yet</b>
-                  <p>Upload your drawing set and specs — Soterra reads every page so you can ask the assistant anything about this site.</p>
+                  <b>No documents yet</b>
+                  <p>Upload your drawings, specs, consultant reports and scopes — Soterra reads every page so you can ask the assistant anything about this site.</p>
                   <span className="soon">Go to Upload →</span>
                 </div>
               ) : (
@@ -3168,10 +3204,36 @@ export default function Page() {
                     <div><div className="big">{docs.reduce((n, d) => n + d.indexed, 0)}</div><small>pages indexed</small></div>
                     <div style={{ flex: 1 }}><small>{docs.length} document{docs.length > 1 ? "s" : ""} read and searchable by the assistant.</small><span className="grn">● Ready</span></div>
                   </div>
-                  <div className="pg-k" style={{ marginTop: 18 }}>Your drawings <span style={{ fontWeight: 500, color: "var(--mut)", textTransform: "none", letterSpacing: 0 }}>· tap any one to open it full screen, zoom, pan and pin issues</span></div>
-                  <div style={{ marginTop: 10 }}>
-                    {projectId && <PlanGrid docs={docs} projectId={projectId} onOpen={(doc, npages) => setPinStage({ doc, page: 1, npages })} onDelete={deletePlan} />}
+                  {/* One picker, no folder tree: every document has a type
+                      (auto-detected at upload, correctable on its card). */}
+                  <div className="dt-tabs">
+                    {DOC_TYPES.map((t) => {
+                      const n = docs.filter((d) => docTypeOf(d.docType) === t).length;
+                      return (
+                        <button key={t} type="button" className={"dt-tab" + (docView === t ? " act" : "")} onClick={() => setDocView(t)}>
+                          {DOC_TYPE_LABEL[t]}{n > 0 && <span>{n}</span>}
+                        </button>
+                      );
+                    })}
                   </div>
+                  {(() => {
+                    const inView = docs.filter((d) => docTypeOf(d.docType) === docView);
+                    if (inView.length === 0) {
+                      return (
+                        <div className="page-sub" style={{ marginTop: 14 }}>
+                          Nothing filed under {DOC_TYPE_LABEL[docView]} on {projName} yet — drop documents on the Upload tab and they land here automatically.
+                        </div>
+                      );
+                    }
+                    return (
+                      <>
+                        <div className="pg-k" style={{ marginTop: 16 }}>{DOC_TYPE_LABEL[docView]} <span style={{ fontWeight: 500, color: "var(--mut)", textTransform: "none", letterSpacing: 0 }}>· tap any one to open it full screen, zoom, pan and pin issues</span></div>
+                        <div style={{ marginTop: 10 }}>
+                          {projectId && <PlanGrid docs={inView} projectId={projectId} onOpen={(doc, npages) => setPinStage({ doc, page: 1, npages })} onDelete={deletePlan} onSetType={setDocTypeFor} />}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </>
               )}
             </div></div>
@@ -3181,11 +3243,11 @@ export default function Page() {
         {/* ─── UPLOAD ─── */}
         {tab === "upload" && (
           <div className="page"><div className="page-inner">
-            <div className="page-h">{hasPlans ? "Update plans" : "Upload plans"}</div>
+            <div className="page-h">{hasPlans ? "Update documents" : "Upload documents"}</div>
             <div className="page-sub">
               {hasPlans
-                ? `Add or update a sheet on ${projName} — drop the revised version and the assistant answers from the latest, treating the old one as superseded.`
-                : `Load ${projName}'s plans — drop the whole set at once. Soterra reads & indexes every page (private to your site).`}
+                ? `Add or update a document on ${projName} — drawings, specs, consultant reports, scopes. Drop a revised version and the assistant answers from the latest, treating the old one as superseded.`
+                : `Load ${projName}'s documents — drawings, specs, consultant reports, scopes — the whole set at once. Soterra reads & indexes every page (private to your site) and files each one by type automatically.`}
             </div>
             <input ref={planFileRef} type="file" accept="application/pdf" multiple style={HIDDEN_INPUT}
               onChange={(e) => { const fs = filesFrom(e.target); if (planFileRef.current) planFileRef.current.value = ""; if (fs.length) onPlanFiles(fs); }} />

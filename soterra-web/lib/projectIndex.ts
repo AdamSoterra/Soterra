@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { planPages } from "@/lib/schema";
 import { computeDf } from "@/lib/retrieve";
 import { currentRevisionsOnly } from "@/lib/sheetRev";
+import { docTypeOf, type DocType } from "@/lib/docType";
 import indexData from "@/data/arthur-road-index.json";
 
 export const DEMO_ID = "1-arthur-road"; // the seeded demo site keeps its bundled plan index
@@ -10,8 +11,12 @@ export const DEMO_ID = "1-arthur-road"; // the seeded demo site keeps its bundle
 export type Page = {
   doc: string; disc: string; file: string; page: number; npages: number;
   code: string; title: string; text: string; uploadedAt?: number;
+  /** Document class — untyped legacy rows (and the bundled demo set, which is
+   *  all drawings) read as "drawings". */
+  docType: DocType;
 };
-const INDEX = indexData as unknown as Page[];
+// The bundled JSON predates doc types; every sheet in it is a drawing.
+const INDEX = (indexData as unknown as Omit<Page, "docType">[]).map((p) => ({ ...p, docType: "drawings" as DocType }));
 
 export type ProjectIndex = { pages: Page[]; df: Map<string, number> };
 
@@ -32,10 +37,17 @@ const CACHE = new Map<string, { fingerprint: string; index: ProjectIndex }>();
 
 async function fingerprint(projectId: string): Promise<string> {
   const [row] = await db
-    .select({ n: raw<number>`count(*)::int`, latest: raw<string | null>`max(${planPages.createdAt})` })
+    .select({
+      n: raw<number>`count(*)::int`,
+      latest: raw<string | null>`max(${planPages.createdAt})`,
+      // Type changes move neither count nor created_at, and the PATCH-side
+      // invalidate only reaches ITS OWN serverless instance — hash the types
+      // into the fingerprint so a retype self-invalidates everywhere.
+      types: raw<string | null>`md5(string_agg(coalesce(${planPages.docType}, '-'), ',' order by ${planPages.id}))`,
+    })
     .from(planPages)
     .where(eq(planPages.projectId, projectId));
-  return `${row?.n ?? 0}:${row?.latest ?? "-"}`;
+  return `${row?.n ?? 0}:${row?.latest ?? "-"}:${row?.types ?? "-"}`;
 }
 
 /** Drop a project's cached index. Not required for correctness (the fingerprint
@@ -65,7 +77,7 @@ export async function getProjectIndex(projectId: string): Promise<ProjectIndex> 
     .select({
       doc: planPages.doc, file: planPages.file, page: planPages.page, npages: planPages.npages,
       code: planPages.code, title: planPages.title, disc: planPages.disc, text: planPages.text,
-      createdAt: planPages.createdAt,
+      docType: planPages.docType, createdAt: planPages.createdAt,
     })
     .from(planPages)
     .where(eq(planPages.projectId, projectId));
@@ -73,6 +85,7 @@ export async function getProjectIndex(projectId: string): Promise<ProjectIndex> 
   let pages: Page[] = rows.map((r) => ({
     doc: r.doc, disc: r.disc ?? "", file: r.file ?? "", page: r.page, npages: r.npages,
     code: r.code ?? "", title: r.title ?? "", text: r.text, uploadedAt: r.createdAt?.getTime() ?? 0,
+    docType: docTypeOf(r.docType),
   }));
   if (projectId === DEMO_ID) pages = [...INDEX.map((p) => ({ ...p, uploadedAt: 0 })), ...pages];
 

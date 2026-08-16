@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { planPages, projectLocations } from "./schema";
+import { docTypeOf } from "./docType";
 
 // Derive the physical LOCATIONS a QA check can be scoped to (Unit 1, Level 12,
 // Tower A, Basement Car Park, Site-wide…) from a project's own drawing titles.
@@ -180,8 +181,13 @@ export function mergeZones(extracted: QaLocation[], userZones: QaLocation[]): Qa
  *  refresh:true forces re-extraction (the ingest-time warm). On a model
  *  failure this serves the last good extraction rather than nothing. */
 export async function getProjectLocations(projectId: string, opts?: { refresh?: boolean }): Promise<QaLocation[]> {
-  const rows = await db.select({ doc: planPages.doc }).from(planPages).where(eq(planPages.projectId, projectId));
-  const titles = [...new Set(rows.map((r) => r.doc))];
+  // Locations come from DRAWING titles only — a specification or a fire report
+  // names systems, not walk-to places, and feeding those titles to the
+  // extractor just adds noise. Untyped legacy rows read as drawings, so a
+  // project from before doc types sees the identical title set (and keeps its
+  // cached fingerprint).
+  const rows = await db.select({ doc: planPages.doc, docType: planPages.docType }).from(planPages).where(eq(planPages.projectId, projectId));
+  const titles = [...new Set(rows.filter((r) => docTypeOf(r.docType) === "drawings").map((r) => r.doc))];
   const fp = titleFingerprint(titles);
 
   const [cached] = await db.select().from(projectLocations).where(eq(projectLocations.projectId, projectId)).limit(1);
