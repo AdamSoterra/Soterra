@@ -22,12 +22,19 @@ import type { Scope } from "./company";
 const SEND_DOMAIN = process.env.EMAIL_SEND_DOMAIN || "send.soterra.co.nz";
 const RESEND_URL = "https://api.resend.com/emails";
 
+/** True when EMAIL_TRANSMIT is on. TRIMMED, deliberately: a value set from a
+ *  Windows shell arrives as "1\r", which an exact === "1" silently rejects —
+ *  that bug kept the whole app in record-only mode with the switch "on". */
+export function emailTransmitOn(): boolean {
+  return process.env.EMAIL_TRANSMIT?.trim() === "1";
+}
+
 export function emailEnabled(): boolean {
   // Two-part switch: the key must exist AND transmission must be explicitly
   // turned on. EMAIL_TRANSMIT stays unset until send.soterra.co.nz verifies —
   // otherwise every send would reach Resend just to be rejected ("domain not
   // verified") and the log would fill with failures that aren't ours.
-  return !!process.env.RESEND_API_KEY && process.env.EMAIL_TRANSMIT === "1";
+  return !!process.env.RESEND_API_KEY && emailTransmitOn();
 }
 
 /** "Kauri Tower" + its project id → kauri-tower-7b6663@send.soterra.co.nz.

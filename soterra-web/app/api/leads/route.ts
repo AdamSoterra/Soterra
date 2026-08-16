@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
   // Best-effort instant heads-up. A notification failure must never lose the
   // lead — the row above is already committed.
-  if (shouldNotify && process.env.RESEND_API_KEY && process.env.EMAIL_TRANSMIT === "1") {
+  if (shouldNotify && process.env.RESEND_API_KEY && process.env.EMAIL_TRANSMIT?.trim() === "1") {
     try {
       const [u] = await db.select({ count: trialUsage.count }).from(trialUsage).where(sql`${trialUsage.userId} = ${userId}`).limit(1);
       const user = await currentUser().catch(() => null);
