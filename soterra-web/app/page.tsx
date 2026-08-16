@@ -272,13 +272,19 @@ const catColor = (c: string) => CAT_COLOR[c] ?? "#94A6BE";
 
 const OUTCOME_PILL: Record<string, string> = { pass: "pass", partial: "open", fail: "fail", unknown: "na" };
 const OUTCOME_LABEL: Record<string, string> = { pass: "Passed", partial: "Partial", fail: "Failed", unknown: "—" };
-// A consultant report carries NO Pass/Partial/Fail — only the council (BCA)
-// issues a statutory outcome, and a "Partial Pass" is a real council result.
-// So a council row shows exactly what the report said; a consultant row never
-// shows a verdict it didn't give — just a neutral "Report" chip.
-function outcomeChip(source: string, outcome: string): { cls: string; label: string } {
-  if (source === "consultant") return { cls: "na", label: "Report" };
-  return { cls: OUTCOME_PILL[outcome] ?? "na", label: OUTCOME_LABEL[outcome] ?? "—" };
+// The verdict shown on a report. A council issues a real Pass/Partial/Fail, so
+// use exactly what it said. A consultant issues no grade — but on site, items
+// to fix ARE a fail you have to deal with, and a clean report is a pass, so
+// derive it from the item count. One function so the pill, the outcome filter,
+// the sort and the badge colour can never disagree.
+function effectiveOutcome(source: string, outcome: string, itemCount: number): "pass" | "partial" | "fail" | "unknown" {
+  if (source === "consultant") return itemCount > 0 ? "fail" : "pass";
+  if (outcome === "pass" || outcome === "partial" || outcome === "fail") return outcome;
+  return "unknown";
+}
+function outcomeChip(source: string, outcome: string, itemCount: number): { cls: string; label: string } {
+  const eff = effectiveOutcome(source, outcome, itemCount);
+  return { cls: OUTCOME_PILL[eff], label: OUTCOME_LABEL[eff] };
 }
 
 // Where a checklist item came from. An item with no source is a guess, so the
@@ -3384,7 +3390,7 @@ export default function Page() {
               const q = izSearch.trim().toLowerCase();
               const filtered = all.filter((r) => {
                 if (izDisc && inspDisc(r).key !== izDisc) return false;
-                if (izOutcome && r.outcome !== izOutcome) return false;
+                if (izOutcome && effectiveOutcome(r.source, r.outcome, r.itemCount) !== izOutcome) return false;
                 if (q) {
                   const hay = [r.inspectionType, r.doc, r.inspectionCode, r.projectName, r.inspectedOn, inspDisc(r).label]
                     .filter(Boolean).join(" ").toLowerCase();
@@ -3395,7 +3401,7 @@ export default function Page() {
               // Newest inspected first by default; click a header to re-sort.
               // Council severity ranks fail > partial > pass; a consultant
               // "Report" has no verdict so it sits at the bottom of a result sort.
-              const resultRank = (r: InspectionRow) => (r.source === "consultant" ? -1 : r.outcome === "fail" ? 3 : r.outcome === "partial" ? 2 : r.outcome === "pass" ? 1 : 0);
+              const resultRank = (r: InspectionRow) => { const e = effectiveOutcome(r.source, r.outcome, r.itemCount); return e === "fail" ? 3 : e === "partial" ? 2 : e === "pass" ? 1 : 0; };
               const cmp = (a: InspectionRow, b: InspectionRow) => {
                 let v = 0;
                 if (repSort.key === "items") v = a.itemCount - b.itemCount;
@@ -3442,7 +3448,7 @@ export default function Page() {
                         </thead>
                         <tbody>
                           {rows.map((r) => {
-                            const oc = outcomeChip(r.source, r.outcome);
+                            const oc = outcomeChip(r.source, r.outcome, r.itemCount);
                             return (
                               <tr className="rt-row" key={r.id} onClick={async () => {
                                 const res = await apiFetch(`/api/inspections?id=${encodeURIComponent(r.id)}`);
@@ -3450,7 +3456,7 @@ export default function Page() {
                                 if (res.ok) setOpenInspection({ inspection: r, items: data.items || [] });
                               }}>
                                 <td className="rt-name">
-                                  <span className="rt-badge" style={{ background: r.outcome === "pass" ? "var(--green)" : r.outcome === "fail" ? "var(--red)" : undefined }}>
+                                  <span className="rt-badge" style={{ background: oc.cls === "pass" ? "var(--green)" : oc.cls === "fail" ? "var(--red)" : undefined }}>
                                     {r.inspectionCode || (r.source === "council" ? "BCA" : "CON")}
                                   </span>
                                   <span className="rt-type">{r.inspectionType || r.doc}</span>
@@ -4861,7 +4867,7 @@ export default function Page() {
             <div className="sh-top">
               <div className="ti">
                 <b>{openInspection.inspection.inspectionType || openInspection.inspection.doc}</b>
-                <small>{[openInspection.inspection.inspectedOn, openInspection.inspection.projectName, outcomeChip(openInspection.inspection.source, openInspection.inspection.outcome).label].filter(Boolean).join(" · ")}</small>
+                <small>{[openInspection.inspection.inspectedOn, openInspection.inspection.projectName, outcomeChip(openInspection.inspection.source, openInspection.inspection.outcome, openInspection.inspection.itemCount).label].filter(Boolean).join(" · ")}</small>
               </div>
               <button className="sh-x" onClick={() => setOpenInspection(null)}>✕</button>
             </div>
