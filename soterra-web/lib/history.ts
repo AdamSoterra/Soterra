@@ -169,6 +169,7 @@ export async function listInspections(scope: Scope, opts: { projectOnly?: boolea
       source: inspections.source,
       inspectionCode: inspections.inspectionCode,
       inspectionType: inspections.inspectionType,
+      inspector: inspections.inspector,
       outcome: inspections.outcome,
       inspectedOn: inspections.inspectedOn,
       itemCount: inspections.itemCount,

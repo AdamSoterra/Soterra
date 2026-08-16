@@ -64,6 +64,7 @@ type TopItem = { title: string; category: string; count: number; firstSeen: stri
 type InspectionRow = {
   id: string; doc: string; projectId: string; projectName: string | null;
   source: string; inspectionCode: string | null; inspectionType: string | null;
+  inspector: string | null;
   outcome: string; inspectedOn: string | null; itemCount: number; createdAt: string;
 };
 type Insights = {
@@ -791,6 +792,8 @@ export default function Page() {
   // Inspections-tab QA-check filters: free-text + status (open/done).
   const [clSearch, setClSearch] = useState("");
   const [clStatus, setClStatus] = useState(""); // "" = all
+  // Inspection-reports table sort. Newest inspected first by default.
+  const [repSort, setRepSort] = useState<{ key: "type" | "inspector" | "date" | "items" | "result"; dir: "asc" | "desc" }>({ key: "date", dir: "desc" });
   // Inspection types you can build a check for, grouped the way they actually
   // arrive: the council's statutory ones, then the consultants' disciplines.
   const [clTypes, setClTypes] = useState<{ council: { code: string; name: string }[]; consultant: { code: string; name: string }[] }>({ council: [], consultant: [] });
@@ -3327,7 +3330,24 @@ export default function Page() {
                 }
                 return true;
               });
-              const groups = groupInspections(filtered);
+              // Newest inspected first by default; click a header to re-sort.
+              // Council severity ranks fail > partial > pass; a consultant
+              // "Report" has no verdict so it sits at the bottom of a result sort.
+              const resultRank = (r: InspectionRow) => (r.source === "consultant" ? -1 : r.outcome === "fail" ? 3 : r.outcome === "partial" ? 2 : r.outcome === "pass" ? 1 : 0);
+              const cmp = (a: InspectionRow, b: InspectionRow) => {
+                let v = 0;
+                if (repSort.key === "items") v = a.itemCount - b.itemCount;
+                else if (repSort.key === "result") v = resultRank(a) - resultRank(b);
+                else if (repSort.key === "type") v = (a.inspectionType || a.doc).localeCompare(b.inspectionType || b.doc);
+                else if (repSort.key === "inspector") v = (a.inspector || "").localeCompare(b.inspector || "");
+                else v = (a.inspectedOn || "").localeCompare(b.inspectedOn || "");
+                if (v === 0) v = (a.inspectedOn || "").localeCompare(b.inspectedOn || ""); // tiebreak by date
+                return repSort.dir === "asc" ? v : -v;
+              };
+              const rows = [...filtered].sort(cmp);
+              const clickSort = (key: typeof repSort.key) =>
+                setRepSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "type" || key === "inspector" ? "asc" : "desc" }));
+              const caret = (key: typeof repSort.key) => (repSort.key === key ? (repSort.dir === "asc" ? " ↑" : " ↓") : "");
               return (
                 <>
                   <div className="iz-filters">
@@ -3343,28 +3363,47 @@ export default function Page() {
                       <option value="fail">Failed</option>
                     </select>
                   </div>
-                  {groups.length === 0 ? (
+                  {rows.length === 0 ? (
                     <div className="iz-none">No reports match{q || izDisc || izOutcome ? " those filters" : ""}.</div>
-                  ) : groups.map((g) => (
-                    <div key={g.key}>
-                      <div className="sub-k">{g.label}<span>{g.rows.length}</span></div>
-                      {g.rows.map((r) => (
-                        <div className="iz-insp" key={r.id} onClick={async () => {
-                          const res = await apiFetch(`/api/inspections?id=${encodeURIComponent(r.id)}`);
-                          const data = await res.json();
-                          if (res.ok) setOpenInspection({ inspection: r, items: data.items || [] });
-                        }}>
-                          <span className="iz-badge" style={{ background: r.outcome === "pass" ? "var(--green)" : r.outcome === "fail" ? "var(--red)" : undefined }}>
-                            {r.inspectionCode || (r.source === "council" ? "BCA" : "CON")}
-                          </span>
-                          <span className="iz-title">{r.inspectionType || r.doc}</span>
-                          <span className="iz-sub">{[r.inspectedOn, r.projectName, `${r.itemCount} to fix`].filter(Boolean).join(" · ")}</span>
-                          {(() => { const oc = outcomeChip(r.source, r.outcome); return <span className={"pill " + oc.cls}>{oc.label}</span>; })()}
-                          <span className="iz-arr">›</span>
-                        </div>
-                      ))}
+                  ) : (
+                    <div className="rt-wrap">
+                      <table className="rt">
+                        <colgroup><col style={{ width: "33%" }} /><col style={{ width: "27%" }} /><col style={{ width: "16%" }} /><col style={{ width: "10%" }} /><col style={{ width: "14%" }} /></colgroup>
+                        <thead>
+                          <tr>
+                            <th className="rt-th" onClick={() => clickSort("type")}>Report{caret("type")}</th>
+                            <th className="rt-th" onClick={() => clickSort("inspector")}>Inspector{caret("inspector")}</th>
+                            <th className="rt-th" onClick={() => clickSort("date")}>Inspected{caret("date")}</th>
+                            <th className="rt-th r" onClick={() => clickSort("items")}>To fix{caret("items")}</th>
+                            <th className="rt-th r" onClick={() => clickSort("result")}>Result{caret("result")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((r) => {
+                            const oc = outcomeChip(r.source, r.outcome);
+                            return (
+                              <tr className="rt-row" key={r.id} onClick={async () => {
+                                const res = await apiFetch(`/api/inspections?id=${encodeURIComponent(r.id)}`);
+                                const data = await res.json();
+                                if (res.ok) setOpenInspection({ inspection: r, items: data.items || [] });
+                              }}>
+                                <td className="rt-name">
+                                  <span className="rt-badge" style={{ background: r.outcome === "pass" ? "var(--green)" : r.outcome === "fail" ? "var(--red)" : undefined }}>
+                                    {r.inspectionCode || (r.source === "council" ? "BCA" : "CON")}
+                                  </span>
+                                  <span className="rt-type">{r.inspectionType || r.doc}</span>
+                                </td>
+                                <td className="rt-mut">{r.inspector || "—"}</td>
+                                <td className="rt-mut">{r.inspectedOn || "—"}</td>
+                                <td className="rt-r">{r.itemCount ? r.itemCount : "—"}</td>
+                                <td className="rt-r"><span className={"pill " + oc.cls}>{oc.label}</span></td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                  ))}
+                  )}
                   <div
                     className="drop"
                     style={{ marginTop: 12, padding: "18px 20px", cursor: repCurrent ? "default" : "pointer", outline: repDragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
