@@ -16,15 +16,19 @@
 // NOT excluded in v1 — the register says "working days" and stays consistent;
 // a holiday calendar is a fast-follow refinement, not a correctness bug.
 
-import { and, desc, eq } from "drizzle-orm";
+import { randomBytes } from "node:crypto";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { contractInstructions, planPins, projects, rfiMessages, rfis, rfiTransitions } from "./schema";
+import { contractInstructions, emailLog, planPins, projects, rfiMessages, rfis, rfiTransitions } from "./schema";
 import type { Rfi } from "./schema";
 import type { Scope } from "./company";
 import { companyName } from "./company";
 import { emailEnabled, projectSenderAddress, sendEmail, type EmailAttachment } from "./email";
-import { renderRfiEmail } from "./emailTemplates";
+import { renderRfiAnswerNotice, renderRfiEmail } from "./emailTemplates";
 import { renderSheetWithPins } from "./pinSnapshot";
+
+/** Where the consultant answer link points. One env override for previews. */
+const APP_URL = (process.env.APP_BASE_URL ?? "https://soterra.co.nz").replace(/\/+$/, "");
 
 export const RFI_SLA_WORKING_DAYS = 7;
 
@@ -238,9 +242,12 @@ export async function sendRfi(
 
   const now = new Date();
   const requiredBy = rfi.dateRequiredBy ?? addWorkingDays(now, RFI_SLA_WORKING_DAYS);
+  // The answer-link secret rides out with the email; 24 random bytes, minted
+  // once per RFI (a resend after reopen reuses the same thread link).
+  const answerToken = rfi.answerToken ?? randomBytes(24).toString("base64url");
   await db
     .update(rfis)
-    .set({ number, dateRaised: now, dateRequiredBy: requiredBy, updatedAt: now })
+    .set({ number, dateRaised: now, dateRequiredBy: requiredBy, answerToken, updatedAt: now })
     .where(eq(rfis.id, rfi.id));
   const opened = await transition(scope, { ...rfi, number }, "open", by, "sent to " + (rfi.consultantCompany ?? rfi.consultantEmail));
 
@@ -298,6 +305,7 @@ export async function sendRfi(
     attachments: attachments.map((a) => a.filename),
     replyName: by.name ?? "the sender",
     refLabel: `${label} · Rev ${opened.revision}`,
+    answerUrl: `${APP_URL}/answer/${answerToken}`,
   });
 
   const result = await sendEmail({
@@ -341,7 +349,32 @@ export async function logAnswer(
 ): Promise<Rfi> {
   const rfi = await ourRfi(scope, rfiId);
   if (!rfi) throw new Error("RFI not found");
-  const next = await transition(scope, rfi, "answered", by, "answer logged");
+  // Atomic claim, NOT the generic transition(): the public answer link means
+  // two devices genuinely can submit at once (or race the PM logging it
+  // manually). neon-http has no transactions, so the conditional UPDATE is
+  // the lock — WHERE status='open' lets exactly one writer win; the loser
+  // sees zero rows and throws instead of double-answering, double-emailing,
+  // and double-writing the audit trail.
+  const now = new Date();
+  const [claimed] = await db
+    .update(rfis)
+    .set({ status: "answered", ballParty: "us", dateAnswered: now, updatedAt: now })
+    .where(and(eq(rfis.id, rfiId), eq(rfis.projectId, scope.projectId), eq(rfis.status, "open")))
+    .returning();
+  if (!claimed) throw new Error(`An RFI can't go ${rfi.status} → answered`);
+  // Audit row after the claim so it is written exactly once, by the winner.
+  await db.insert(rfiTransitions).values({
+    companyId: scope.companyId,
+    projectId: scope.projectId,
+    rfiId,
+    fromStatus: "open",
+    toStatus: "answered",
+    ballFrom: rfi.ballParty,
+    ballTo: "us",
+    byUser: by.userId ?? null,
+    byName: by.name ?? null,
+    comment: "answer logged",
+  });
   await db.insert(rfiMessages).values({
     companyId: scope.companyId,
     projectId: scope.projectId,
@@ -351,7 +384,7 @@ export async function logAnswer(
     authorName: by.consultantName ?? rfi.consultantName ?? rfi.consultantCompany ?? null,
     body: body.trim(),
   });
-  return next;
+  return claimed;
 }
 
 export async function addFollowup(
@@ -463,6 +496,15 @@ export async function createCi(
 
 // ─── reads ───────────────────────────────────────────────────────────────
 
+/** The answer-link secret stays server-side: the register and thread payloads
+ *  go to the browser, and a harvested token would let anyone write into the
+ *  thread. Exported so the route can strip the rows the lifecycle actions
+ *  return too. */
+export function publicRfi(r: Rfi): Omit<Rfi, "answerToken"> {
+  const { answerToken: _secret, ...pub } = r;
+  return pub;
+}
+
 export async function listRfis(scope: Scope) {
   const rows = await db
     .select()
@@ -474,7 +516,7 @@ export async function listRfis(scope: Scope) {
     const daysOpen = r.dateRaised ? workingDaysBetween(r.dateRaised, r.status === "closed" && r.dateClosed ? r.dateClosed : now) : 0;
     const overdue = r.status === "open" && !!r.dateRequiredBy && now > r.dateRequiredBy;
     const lateWd = overdue && r.dateRequiredBy ? workingDaysBetween(r.dateRequiredBy, now) : 0;
-    return { ...r, label: rfiLabel(r), daysOpen, overdue, lateWd };
+    return { ...publicRfi(r), label: rfiLabel(r), daysOpen, overdue, lateWd };
   });
 }
 
@@ -493,7 +535,7 @@ export async function getRfi(scope: Scope, rfiId: string) {
   const now = new Date();
   return {
     rfi: {
-      ...rfi,
+      ...publicRfi(rfi),
       label: rfiLabel(rfi),
       daysOpen: rfi.dateRaised ? workingDaysBetween(rfi.dateRaised, now) : 0,
       overdue: rfi.status === "open" && !!rfi.dateRequiredBy && now > rfi.dateRequiredBy,
@@ -503,6 +545,207 @@ export async function getRfi(scope: Scope, rfiId: string) {
     pins,
     ci,
   };
+}
+
+// ─── the consultant answer link (token-authorised, no login) ─────────────
+//
+// The consultant's email carries /answer/<token>. Holding the token proves
+// the holder was SENT this exact RFI — that is the whole authorisation. The
+// scope is rebuilt from the RFI ROW's own company/project ids (never from the
+// client), so the blast radius of a leaked link is one RFI's thread, nothing
+// else. Void RFIs answer to nobody; a closed thread is read-only.
+
+async function rfiByToken(token: string): Promise<Rfi | null> {
+  const clean = token.trim();
+  // base64url of 24 bytes is 32 chars; reject junk before it reaches the db.
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(clean)) return null;
+  const [row] = await db.select().from(rfis).where(eq(rfis.answerToken, clean)).limit(1);
+  return row ?? null;
+}
+
+/** See the header note: token IS the authorisation, ids come from the row. */
+function tokenScope(rfi: Rfi): Scope {
+  return {
+    projectId: rfi.projectId,
+    companyId: rfi.companyId as Scope["companyId"],
+    userId: "",
+    role: "consultant-link",
+  };
+}
+
+const PUBLIC_MESSAGE_TYPES = ["question", "official_answer", "followup"];
+
+/** Everything the public answer page shows. Null = bad token / void RFI. */
+export async function getRfiThreadByToken(token: string) {
+  const rfi = await rfiByToken(token);
+  // number==null is the draft guard; status "draft" is also checked directly
+  // because a crash inside sendRfi can leave number+token set with the status
+  // flip unapplied — that half-sent state must stay invisible too.
+  if (!rfi || rfi.status === "void" || rfi.status === "draft" || rfi.number == null) return null;
+  const scope = tokenScope(rfi);
+  const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
+  const company = (await companyName(scope.companyId)) ?? "The builder";
+  const messages = await db
+    .select({
+      type: rfiMessages.type,
+      authorSide: rfiMessages.authorSide,
+      authorName: rfiMessages.authorName,
+      body: rfiMessages.body,
+      createdAt: rfiMessages.createdAt,
+    })
+    .from(rfiMessages)
+    .where(and(eq(rfiMessages.rfiId, rfi.id), inArray(rfiMessages.type, PUBLIC_MESSAGE_TYPES)))
+    .orderBy(rfiMessages.createdAt);
+  // The sheets this RFI pinned — rendered by the sheet route, one per doc+page.
+  const pins = await db
+    .select({ doc: planPins.doc, page: planPins.page })
+    .from(planPins)
+    .where(and(eq(planPins.projectId, scope.projectId), eq(planPins.recordType, "rfi"), eq(planPins.recordId, rfi.id)));
+  const sheets = [...new Map(pins.map((p) => [`${p.doc}::${p.page}`, p])).values()];
+
+  return {
+    company,
+    project: proj?.name ?? "The project",
+    rfi: {
+      label: rfiLabel(rfi),
+      revision: rfi.revision,
+      subject: rfi.subject,
+      status: rfi.status,
+      discipline: rfi.discipline,
+      priority: rfi.priority,
+      location: rfi.location,
+      question: rfi.question,
+      proposedSolution: rfi.proposedSolution,
+      codeRefs: rfi.codeRefs ? (JSON.parse(rfi.codeRefs) as string[]) : [],
+      costImpact: rfi.costImpact,
+      costEstimate: rfi.costEstimate,
+      programmeImpact: rfi.programmeImpact,
+      programmeDays: rfi.programmeDays,
+      consultantName: rfi.consultantName,
+      consultantCompany: rfi.consultantCompany,
+      dateRaised: rfi.dateRaised,
+      dateRequiredBy: rfi.dateRequiredBy,
+      dateAnswered: rfi.dateAnswered,
+    },
+    messages,
+    sheets,
+    canAnswer: rfi.status === "open",
+    canComment: rfi.status === "open" || rfi.status === "answered",
+  };
+}
+
+/** The consultant's official answer: open → answered, clock stops, thread
+ *  gains the answer, and whoever pressed Send hears about it. */
+export async function answerByToken(
+  token: string,
+  body: string,
+  authorName?: string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const rfi = await rfiByToken(token);
+  if (!rfi || rfi.status === "void" || rfi.number == null) return { ok: false, error: "not-found" };
+  if (rfi.status === "closed") return { ok: false, error: "closed" };
+  if (rfi.status !== "open") return { ok: false, error: "not-open" };
+  const scope = tokenScope(rfi);
+  const name = authorName?.trim().slice(0, 120) || rfi.consultantName || rfi.consultantCompany || "The consultant";
+  try {
+    await logAnswer(scope, rfi.id, body, { userId: null, name, consultantName: name });
+  } catch {
+    // Lost the atomic claim: someone answered (or closed it) a moment ago.
+    return { ok: false, error: "not-open" };
+  }
+  // Best-effort: the answer is logged whatever happens to the notice email.
+  try {
+    await notifyAnswer(scope, rfi, body, name);
+  } catch (e) {
+    console.error("rfi answer notice failed:", e);
+  }
+  return { ok: true };
+}
+
+/** A consultant comment that is NOT the official answer (a clarifying
+ *  question, a partial note). Ball and clock do not move — the scorecard
+ *  stays honest: they have not answered yet. */
+export async function commentByToken(
+  token: string,
+  body: string,
+  authorName?: string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const rfi = await rfiByToken(token);
+  if (!rfi || rfi.status === "void" || rfi.number == null) return { ok: false, error: "not-found" };
+  if (rfi.status !== "open" && rfi.status !== "answered") return { ok: false, error: "closed" };
+  const name = authorName?.trim().slice(0, 120) || rfi.consultantName || rfi.consultantCompany || "The consultant";
+  await db.insert(rfiMessages).values({
+    companyId: rfi.companyId,
+    projectId: rfi.projectId,
+    rfiId: rfi.id,
+    type: "followup",
+    authorSide: "consultant",
+    authorName: name,
+    body: body.trim(),
+  });
+  return { ok: true };
+}
+
+/** Sheet render for the public page — only sheets this RFI actually pinned. */
+export async function tokenSheetPng(token: string, doc: string, page: number): Promise<Buffer | null> {
+  const rfi = await rfiByToken(token);
+  if (!rfi || rfi.status === "void" || rfi.status === "draft" || rfi.number == null) return null;
+  const pins = await db
+    .select()
+    .from(planPins)
+    .where(
+      and(
+        eq(planPins.projectId, rfi.projectId),
+        eq(planPins.recordType, "rfi"),
+        eq(planPins.recordId, rfi.id),
+        eq(planPins.doc, doc),
+        eq(planPins.page, page)
+      )
+    );
+  if (!pins.length) return null; // token cannot render arbitrary sheets
+  return renderSheetWithPins(
+    rfi.projectId,
+    doc,
+    page,
+    pins.map((p) => ({ x: p.x, y: p.y, label: String(rfi.number ?? "") }))
+  );
+}
+
+/** Tell whoever pressed Send that the answer is in. Their address is the
+ *  Reply-To we stamped on the outbound send — read back from the email log. */
+async function notifyAnswer(scope: Scope, rfi: Rfi, answer: string, consultantLine: string) {
+  if (!rfi.emailLogId) return;
+  const [logRow] = await db.select({ replyTo: emailLog.replyTo }).from(emailLog).where(eq(emailLog.id, rfi.emailLogId)).limit(1);
+  const to = logRow?.replyTo?.trim();
+  if (!to) return;
+  const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
+  const projectName = proj?.name ?? "Your project";
+  const company = (await companyName(scope.companyId)) ?? "Your company";
+  const label = rfiLabel(rfi);
+  const rendered = renderRfiAnswerNotice({
+    companyName: company,
+    projectName,
+    rfiNumber: label,
+    rfiSubject: rfi.subject,
+    consultantLine,
+    answer,
+    appUrl: APP_URL,
+  });
+  await sendEmail({
+    scope,
+    kind: "rfi",
+    recordType: "rfi",
+    recordIds: [rfi.id],
+    to: { email: to },
+    // Replying to the notice goes straight back to the consultant.
+    replyTo: rfi.consultantEmail ?? null,
+    fromName: "Soterra",
+    fromEmail: projectSenderAddress(projectName, scope.projectId),
+    subject: `${label} answered · ${projectName} · ${rfi.subject}`,
+    html: rendered.html,
+    text: rendered.text,
+    sentByName: consultantLine,
+  });
 }
 
 // ─── analytics (the scorecard) ───────────────────────────────────────────

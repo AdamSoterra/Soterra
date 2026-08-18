@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Soterra",
     short_name: "Soterra",
-    description: "Your AI site manager — ask your plans, run your schedule, keep the crew in sync.",
+    description: "Your AI site manager. Ask your plans, check the Code, run pre-inspection checks.",
     start_url: "/?app=1",
     scope: "/",
     display: "standalone",

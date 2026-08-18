@@ -16,7 +16,7 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "Soterra, AI project assistant for construction",
   description:
-    "Soterra reads your drawings, specs and schedules so your team can find answers, book inspections and keep the project moving. Every answer cited to the source sheet.",
+    "Soterra reads your drawings, specs and reports so your team can find cited answers, check the Building Code, and pass inspections first time.",
   // ⚠️ "default", not "black-translucent". black-translucent runs the web view
   // edge-to-edge UNDER the status bar and Dynamic Island, which put the 64px
   // white .topnav at physical y=0 — the wordmark behind the clock, the menu
@@ -42,8 +42,8 @@ export const viewport: Viewport = {
   themeColor: "#0E8FE6",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Pinch zoom is deliberately allowed (fine print on drawings, accessibility).
+  // Double-tap zoom is handled in CSS instead: body{touch-action:manipulation}.
   viewportFit: "cover",
 };
 

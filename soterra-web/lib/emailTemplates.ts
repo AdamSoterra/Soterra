@@ -197,6 +197,9 @@ export type RfiEmailOptions = {
   attachments?: string[]; // filenames listed in the body
   replyName: string;
   refLabel: string; // "RFI-014 · Rev 0"
+  /** The tokenized public answer page. When set, the email leads with an
+   *  "Answer online" button; a plain reply stays as the fallback. */
+  answerUrl?: string | null;
 };
 
 export function renderRfiEmail(opts: RfiEmailOptions): { html: string; text: string } {
@@ -259,9 +262,21 @@ ${section("Question")}
 ${propHtml}
 ${refsHtml}
 ${attachHtml}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0;"><tr>
+${
+  opts.answerUrl
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0 8px;"><tr>
+    <td bgcolor="${BRAND}" style="background:${BRAND};border-radius:9px;padding:13px 28px;">
+      <a href="${esc(opts.answerUrl)}" style="display:inline-block;font-family:${FONT};font-size:14.5px;font-weight:bold;color:#ffffff;text-decoration:none;">Answer this RFI online &#8594;</a>
+    </td>
+  </tr></table>
+<div style="font-family:${FONT};font-size:12px;color:${MUT};margin:0 0 14px;">No account needed. Your answer lands in the RFI thread, is logged against ${esc(opts.rfiNumber)}, and stops the response clock.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;"><tr>
+    <td style="background:#F8FAFC;border:1px dashed #D6DEE8;border-radius:8px;padding:11px 14px;font-family:${FONT};font-size:12.5px;color:#43586E;line-height:1.5;">&#8617; Or simply reply to this email - ${esc(opts.companyName)} logs your reply against ${esc(opts.rfiNumber)}.</td>
+  </tr></table>`
+    : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0;"><tr>
     <td style="background:#F8FAFC;border:1px dashed #D6DEE8;border-radius:8px;padding:11px 14px;font-family:${FONT};font-size:13px;color:#43586E;line-height:1.5;">&#8617; <b>Reply to this email with your response.</b> ${esc(opts.companyName)} logs it against ${esc(opts.rfiNumber)}; the register, thread and response times are tracked in Soterra.</td>
-  </tr></table>`;
+  </tr></table>`
+}`;
 
   const headerHtml = `<tr><td bgcolor="${NAVY}" style="background:${NAVY};padding:14px 28px;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
@@ -295,10 +310,62 @@ ${header(opts.companyName, opts.contextLine)}`;
       : []),
     ...(opts.attachments?.length ? ["", "ATTACHMENTS", opts.attachments.join(" · ")] : []),
     "",
-    `Reply to this email with your response. ${opts.companyName} logs it against ${opts.rfiNumber}; the register, thread and response times are tracked in Soterra.`,
+    ...(opts.answerUrl
+      ? [
+          `ANSWER ONLINE (no account needed): ${opts.answerUrl}`,
+          "",
+          `Or simply reply to this email - ${opts.companyName} logs your reply against ${opts.rfiNumber}.`,
+        ]
+      : [
+          `Reply to this email with your response. ${opts.companyName} logs it against ${opts.rfiNumber}; the register, thread and response times are tracked in Soterra.`,
+        ]),
     "",
     `Sent with Soterra · soterra.co.nz · ${opts.refLabel}`,
   ].join("\n");
 
+  return { html, text };
+}
+
+// ─── RFI answered — the note back to whoever raised it ───────────────────
+// Sent when a consultant submits through the answer page. Deliberately small:
+// the news, the answer itself, and where to accept or bounce it.
+
+export function renderRfiAnswerNotice(opts: {
+  companyName: string;
+  projectName: string;
+  rfiNumber: string; // "RFI-014"
+  rfiSubject: string;
+  consultantLine: string; // "Jane Smith · Holmes Structural"
+  answer: string;
+  appUrl: string; // where Accept + close lives
+}): { html: string; text: string } {
+  const headerHtml = `<tr><td bgcolor="${NAVY}" style="background:${NAVY};padding:14px 28px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+    <td nowrap style="font-family:${FONT};font-size:16px;font-weight:bold;color:#ffffff;white-space:nowrap;">${esc(opts.rfiNumber)} answered</td>
+    <td style="font-family:${FONT};font-size:13px;color:#B8CCE0;padding-left:12px;">${esc(opts.rfiSubject)}</td>
+  </tr></table>
+</td></tr>
+${header(opts.companyName, `${opts.projectName} · answered by ${opts.consultantLine}`)}`;
+
+  const bodyHtml = `<div style="font-family:${FONT};font-size:14px;color:${INK};line-height:1.55;margin-bottom:6px;"><b>${esc(opts.consultantLine)}</b> has answered ${esc(opts.rfiNumber)}. The response clock has stopped; the ball is back with you.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:12px 0;"><tr>
+  <td style="background:#F0FAF4;border:1px solid #BFE8CE;border-radius:9px;padding:13px 15px;font-family:${FONT};font-size:13.5px;color:${INK};line-height:1.55;">${esc(opts.answer).replace(/\n/g, "<br/>")}</td>
+</tr></table>
+<div style="font-family:${FONT};font-size:12.5px;color:${SLATE};line-height:1.5;">Open Soterra to accept and close it, raise a CI from it, or bounce it back with a follow-up: <a href="${esc(opts.appUrl)}" style="color:${BRAND};font-weight:bold;text-decoration:none;">${esc(opts.appUrl.replace(/^https?:\/\//, ""))}</a></div>`;
+
+  const html = shell({
+    headerHtml,
+    bodyHtml,
+    footerNote: "Logged in the RFI thread · the register and scorecard are updated",
+    refLabel: opts.rfiNumber,
+  });
+  const text = [
+    `${opts.rfiNumber} answered · ${opts.rfiSubject}`,
+    `${opts.projectName} · answered by ${opts.consultantLine}`,
+    "",
+    opts.answer,
+    "",
+    `The response clock has stopped. Accept + close, raise a CI, or bounce it back in Soterra: ${opts.appUrl}`,
+  ].join("\n");
   return { html, text };
 }

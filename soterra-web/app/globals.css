@@ -13,6 +13,9 @@ body{font-family:var(--font);color:var(--navy);background:var(--bg);
   background-image:radial-gradient(1000px 520px at 50% -10%, rgba(65,195,255,.14), transparent 60%),
                    radial-gradient(800px 500px at 100% 0%, rgba(10,141,237,.06), transparent 55%)}
 button,input,textarea{font-family:var(--font)}
+/* Pinch zoom stays available (the viewport no longer pins the scale); manipulation
+   only drops the double-tap-to-zoom gesture, so fast repeated taps stay taps. */
+body{touch-action:manipulation}
 .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .boot{min-height:100vh}
 
@@ -515,6 +518,16 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .inst-foot a{font-size:13.5px;color:var(--slate);text-decoration:none;font-weight:500}
 .inst-foot a:hover{color:var(--brand)}
 
+/* ─── A2HS hint banner (signed-in app, iPhone/iPad Safari only) ─── */
+/* Slim strip directly under .topnav pointing at /install; the ✕ hides it for
+   14 days (install-hint.tsx). Deliberately quieter than the app's cards. */
+.a2hs-hint{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#EAF4FF;border-bottom:1px solid #CBE3F8}
+.a2hs-txt{flex:1;min-width:0;line-height:1.4}
+.a2hs-txt b{display:block;font-size:13px;font-weight:500;color:#0C447C}
+.a2hs-txt span{display:block;font-size:12px;color:#185FA5}
+.a2hs-go{flex-shrink:0;font-size:12.5px;font-weight:600;color:#fff;background:#0E8FE6;border-radius:9px;padding:8px 13px;text-decoration:none;white-space:nowrap}
+.a2hs-x{flex-shrink:0;border:none;background:none;color:#6B87A6;font-size:14px;line-height:1;cursor:pointer;padding:6px 4px}
+
 /* ═══ Insights + pre-inspection checks ═══════════════════════════════════
    Follows the existing ladder exactly: 12-14px radius on rows, 16-18px on
    panels, the 0 2px 12px resting shadow, rgba(65,195,255,.14) for selected. */
@@ -998,3 +1011,60 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .plan-card:hover .plan-del{opacity:1}
 .plan-del:hover{color:var(--red)}
 @media(max-width:520px){.plan-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}}
+
+/* ─── /answer/<token> — the consultant's RFI answer page ─────────────────
+   Public, no login, phone-first (they open it from an email in a carpark).
+   Same light/blue palette as the app; .ans- prefix keeps it self-contained. */
+.ans{min-height:100vh;background:#F6FAFF;padding:14px 14px 40px;font-family:var(--font)}
+.ans-top{display:flex;align-items:center;gap:8px;max-width:680px;margin:0 auto 12px;padding:6px 2px}
+.ans-brand{font-size:13px;font-weight:800;letter-spacing:.14em;color:#0C2A47}
+.ans-proj{margin-left:auto;font-size:12.5px;color:#52698A;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ans-card{max-width:680px;margin:0 auto 14px;background:#fff;border:1px solid #E3EDF7;border-radius:16px;padding:18px 18px 16px;box-shadow:0 6px 24px rgba(12,42,71,.06)}
+.ans-center{text-align:center;padding:34px 22px}
+.ans-center h1{font-size:19px;color:#0C2A47;margin:14px 0 8px}
+.ans-center p{font-size:14px;color:#52698A;line-height:1.55;max-width:420px;margin:0 auto}
+.ans-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.ans-no{font-size:15px;font-weight:800;color:#0C2A47}
+.ans-pill{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:4px 9px;border-radius:20px;background:#EAF4FF;color:#0A78C8}
+.ans-pill.open{background:#FFF4E5;color:#B45309}
+.ans-pill.answered{background:#E8F8EE;color:#0F7B43}
+.ans-pill.closed{background:#EEF2F7;color:#52698A}
+.ans-pill.dim{background:#F1F5FA;color:#52698A}
+.ans-pill.warn{background:#FDECEC;color:#B3261E}
+.ans-subj{font-size:19px;line-height:1.3;color:#0C2A47;font-weight:700;margin:0 0 8px}
+.ans-meta{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:#52698A;margin-bottom:6px}
+.ans-due{font-weight:700;color:#B45309}
+.ans-due.late{color:#B3261E}
+.ans-klabel{font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#7A8CA3;margin:16px 0 7px}
+.ans-q{font-size:15px;line-height:1.6;color:#243B53;white-space:pre-wrap}
+.ans-prop{font-size:13.5px;line-height:1.55;color:#43586E;background:#F8FAFC;border:1px solid #E3EDF7;border-radius:10px;padding:11px 13px;white-space:pre-wrap}
+.ans-refs{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.ans-chip{font-size:11.5px;font-weight:700;color:#7C3AED;background:#F6F2FE;border:1px solid #E2D8FB;border-radius:7px;padding:4px 9px}
+.ans-sheet{margin-top:14px}
+.ans-sheet img{width:100%;border:1px solid #E3EDF7;border-radius:10px;display:block}
+.ans-sheet small{display:block;margin-top:5px;font-size:11.5px;color:#94A6BE}
+.ans-msg{border-left:3px solid #C9E4FA;padding:2px 0 2px 12px;margin-bottom:14px}
+.ans-msg.them{border-left-color:#9FE1CB}
+.ans-msg-k{font-size:11.5px;font-weight:700;color:#7A8CA3;margin-bottom:3px}
+.ans-msg-b{font-size:14px;line-height:1.55;color:#243B53;white-space:pre-wrap}
+.ans-done{max-width:680px;margin:0 auto 14px;background:#E8F8EE;border:1px solid #BFE8CE;border-radius:12px;padding:13px 16px;font-size:14px;font-weight:600;color:#0F7B43}
+.ans-note{font-size:13px;color:#52698A;line-height:1.5;margin:0 0 10px}
+/* 16px minimum on the inputs: below that iOS Safari auto-zooms on focus and
+   stays zoomed - and the consultant answering from a phone IS the use case. */
+.ans-in{width:100%;height:44px;border:1px solid #D6E4F2;border-radius:10px;padding:0 13px;font-size:16px;font-family:var(--font);color:#0C2A47;background:#FBFDFF;margin-bottom:9px}
+.ans-ta{width:100%;min-height:130px;border:1px solid #D6E4F2;border-radius:10px;padding:11px 13px;font-size:16px;line-height:1.55;font-family:var(--font);color:#0C2A47;background:#FBFDFF;resize:vertical}
+.ans-in:focus,.ans-ta:focus{outline:none;border-color:#0E8FE6;box-shadow:0 0 0 3px rgba(14,143,230,.12)}
+.ans-err{margin-top:9px;font-size:13px;font-weight:600;color:#B3261E;background:#FDECEC;border:1px solid #F5C6C4;border-radius:9px;padding:9px 12px}
+.ans-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:11px}
+.ans-btn{height:44px;padding:0 18px;border-radius:11px;border:1px solid #D6E4F2;background:#fff;color:#0C2A47;font-size:14px;font-weight:700;font-family:var(--font);cursor:pointer}
+.ans-btn.primary{background:#0E8FE6;border-color:#0E8FE6;color:#fff}
+.ans-btn:disabled{opacity:.45;cursor:default}
+.ans-fine{font-size:12px;color:#94A6BE;line-height:1.5;margin:10px 0 0}
+.ans-foot{max-width:680px;margin:6px auto 0;text-align:center;font-size:11.5px;color:#94A6BE;line-height:1.5}
+.ans-foot b{color:#0E8FE6}
+
+/* Copy button on assistant chat messages — the bridge from a drafted RFI (or
+   any answer) to wherever it needs to be pasted. */
+.msg-copy{display:inline-flex;align-items:center;gap:6px;margin-top:10px;height:32px;padding:0 12px;border-radius:9px;border:1px solid #D6E4F2;background:#FBFDFF;color:#0A78C8;font-size:12.5px;font-weight:700;font-family:var(--font);cursor:pointer}
+.msg-copy:hover{border-color:#0E8FE6}
+.msg-copy.ok{color:#0F7B43;border-color:#BFE8CE;background:#F0FAF4}

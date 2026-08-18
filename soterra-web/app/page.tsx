@@ -4,6 +4,7 @@ import { useUser, useClerk } from "@clerk/nextjs";
 import { upload } from "@vercel/blob/client";
 import { DOC_TYPES, DOC_TYPE_LABEL, docTypeOf, type DocType } from "@/lib/docType";
 import Landing from "./landing";
+import { InstallHint } from "./components/install-hint";
 
 type Tab = "assistant" | "calendar" | "tasks" | "inspections" | "plans" | "upload" | "rfis" | "insights";
 type Cite = {
@@ -737,6 +738,27 @@ export default function Page() {
 
   // ─── voice + file attach (chat composer) ───
   const [isRecording, setIsRecording] = useState(false);
+  // Which assistant message just got copied (index) — drives the ✓ flash.
+  const [copiedMsg, setCopiedMsg] = useState<number | null>(null);
+  /** Copy an assistant message: the bubble holds rendered HTML, but the
+   *  clipboard wants the text a form will accept. On a DETACHED div,
+   *  innerText degrades to textContent and fuses paragraphs into one run-on
+   *  line — so the block/break tags become newlines BEFORE the strip. */
+  const copyMsg = async (html: string, i: number) => {
+    try {
+      const el = document.createElement("div");
+      el.innerHTML = html
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/(p|div|li|ul|ol|h[1-6]|tr)>/gi, "$&\n");
+      const plain = (el.innerText || el.textContent || "").replace(/\n{3,}/g, "\n\n").trim();
+      if (!plain) return;
+      await navigator.clipboard.writeText(plain);
+      setCopiedMsg(i);
+      setTimeout(() => setCopiedMsg((c) => (c === i ? null : c)), 2200);
+    } catch {
+      /* clipboard blocked — nothing to break */
+    }
+  };
   const [sttBusy, setSttBusy] = useState(false);
   const [sttSupported, setSttSupported] = useState(false);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
@@ -2838,6 +2860,9 @@ export default function Page() {
         </div>
       </header>
 
+      {/* iPhone/iPad Safari only: nudge towards Add to Home Screen. */}
+      <InstallHint />
+
       <div className="content">
         {/* ─── ASSISTANT ─── */}
         {tab === "assistant" && (
@@ -3039,6 +3064,17 @@ export default function Page() {
                                     <div className="ec">{c.itemType === "task" ? "✅" : "🗓️"}</div>
                                   </div>
                                 )
+                              )}
+                              {/* The bridge from a drafted RFI (or any answer)
+                                  to wherever it needs to be pasted. */}
+                              {!m.pending && !!m.text && (
+                                <button
+                                  className={"msg-copy" + (copiedMsg === i ? " ok" : "")}
+                                  title="Copy this answer as plain text"
+                                  onClick={() => void copyMsg(m.text, i)}
+                                >
+                                  {copiedMsg === i ? "✓ Copied" : "⧉ Copy"}
+                                </button>
                               )}
                             </div>
                           </div>
@@ -3538,7 +3574,7 @@ export default function Page() {
                     <div style={{ padding: "26px 20px", textAlign: "center" }}>
                       <b style={{ fontSize: 15, color: "var(--navy)" }}>No RFIs yet on {projName}</b>
                       <p className="page-sub" style={{ margin: "8px auto 14px", maxWidth: 460 }}>
-                        Raise one and Soterra sends it, tracks who holds the ball, and builds the consultant scorecard from day one. Ask the assistant about a detail first and it pre-fills the RFI with the citation.
+                        Raise one and Soterra sends it, tracks who holds the ball, and builds the consultant scorecard from day one. The consultant answers from a link in the email - no account needed - and it lands back in this thread. Tip: ask the assistant about the detail first, then Copy its draft straight into the question.
                       </p>
                       <button className="rf-new" style={{ margin: 0 }} onClick={() => setNewRfiOpen(true)}>＋ Raise the first RFI</button>
                     </div>
@@ -3735,7 +3771,7 @@ export default function Page() {
                             </div>
                           ) : (
                             <div style={{ textAlign: "center", padding: "10px 0 4px" }}>
-                              <p className="page-sub" style={{ margin: "0 0 10px" }}>Awaiting {rfiOpen.rfi.consultantCompany || "the consultant"}. Their emailed reply gets logged here.</p>
+                              <p className="page-sub" style={{ margin: "0 0 10px" }}>Awaiting {rfiOpen.rfi.consultantCompany || "the consultant"}. They can answer from the link in the email - it lands in this thread and stops their clock. Got the answer another way? Log it below.</p>
                               {rfiOpen.rfi.status === "open" && <button className="lg-btn primary" style={{ height: 38, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} onClick={() => setAnsOpen(true)}>Log the answer</button>}
                             </div>
                           )

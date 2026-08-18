@@ -632,6 +632,14 @@ export const rfis = pgTable(
     dateClosed: timestamp("date_closed", { withTimezone: true }),
     resultingCiId: uuid("resulting_ci_id"),
     emailLogId: uuid("email_log_id"), // the outbound send record (Foundation 1)
+    // The secret in the consultant's "Answer this RFI online" link. Minted on
+    // send; holding it proves you were sent THIS RFI, which is what authorises
+    // the public answer page (no account, no login). NEVER send this field to
+    // the browser - lib/rfi.ts publicRfi() strips it from every payload.
+    // In prod it carries a PARTIAL unique index (rfis_answer_token_idx,
+    // WHERE answer_token IS NOT NULL) created by dev/migrate-rfi-answer-token
+    // - partial indexes aren't declarable here, so the migration is the truth.
+    answerToken: text("answer_token"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

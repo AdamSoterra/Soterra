@@ -77,7 +77,7 @@ export default function InstallPage() {
         <div className="lg-pill">Install on your phone</div>
         <h1 className="inst-h">Put Soterra <b>on your home screen</b></h1>
         <p className="inst-sub">
-          Ask your plans, check the code, and run the site schedule — straight from your phone,
+          Ask your plans, check the Code, and run your pre-inspection checks - straight from your phone,
           on site. No app store, no waiting.
         </p>
 

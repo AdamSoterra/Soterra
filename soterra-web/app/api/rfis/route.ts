@@ -2,6 +2,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { resolveScope } from "@/lib/company";
 import {
   DISCIPLINES,
+  publicRfi,
   addFollowup,
   createCi,
   createDraft,
@@ -94,7 +95,7 @@ export async function POST(req: Request) {
     requiredBy,
     raisedByName: displayName(user),
   });
-  return Response.json({ rfi }, { status: 201 });
+  return Response.json({ rfi: publicRfi(rfi) }, { status: 201 });
 }
 
 // PATCH /api/rfis — the lifecycle. { id, action, ... }
@@ -125,27 +126,27 @@ export async function PATCH(req: Request) {
   try {
     if (action === "send") {
       const { rfi, emailStatus } = await sendRfi(scope, id, by);
-      return Response.json({ rfi, emailStatus });
+      return Response.json({ rfi: publicRfi(rfi), emailStatus });
     }
     if (action === "log_answer") {
       const text = String(body.body ?? "").trim();
       if (!text) return Response.json({ error: "Paste the consultant's answer" }, { status: 400 });
       const rfi = await logAnswer(scope, id, text, { ...by, consultantName: String(body.consultantName ?? "").trim() || null });
-      return Response.json({ rfi });
+      return Response.json({ rfi: publicRfi(rfi) });
     }
     if (action === "followup") {
       const text = String(body.body ?? "").trim();
       if (!text) return Response.json({ error: "Write the follow-up" }, { status: 400 });
       const rfi = await addFollowup(scope, id, text, by, { bounce: body.bounce === true });
-      return Response.json({ rfi });
+      return Response.json({ rfi: publicRfi(rfi) });
     }
     if (action === "close" || action === "void") {
       const rfi = await setRfiStatus(scope, id, action === "close" ? "closed" : "void", by, String(body.comment ?? "").trim() || undefined);
-      return Response.json({ rfi });
+      return Response.json({ rfi: publicRfi(rfi) });
     }
     if (action === "reopen") {
       const rfi = await setRfiStatus(scope, id, "open", by, String(body.comment ?? "").trim() || "reopened");
-      return Response.json({ rfi });
+      return Response.json({ rfi: publicRfi(rfi) });
     }
     if (action === "update_impact") {
       const impact = (v: unknown): "none" | "unknown" | "yes" | undefined =>
@@ -162,7 +163,7 @@ export async function PATCH(req: Request) {
               ? Number(body.programmeDays)
               : null,
       });
-      return Response.json({ rfi });
+      return Response.json({ rfi: publicRfi(rfi) });
     }
     if (action === "create_ci") {
       const title = String(body.title ?? "").trim();
