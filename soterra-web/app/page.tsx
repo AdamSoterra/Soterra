@@ -5516,8 +5516,17 @@ function SiteSetup(props: {
 // Deliberately its own tiny surface, not the main app: a trial user has no
 // project, and every screen below the SiteSetup gate assumes one. The client
 // carries the short conversation itself (no threads); the server meters.
+// A trial turn: a plain user line, or an assistant turn carrying the same parsed
+// message the paid chat builds (via assistantMsg) plus the raw answer text kept
+// for the conversation history we send back to the API and for re-parsing once
+// the manufacturer-doc map arrives.
+type AsstMsg = Extract<Msg, { role: "a" }>;
+type TrialMsg =
+  | { role: "user"; text: string }
+  | { role: "assistant"; text: string; msg: AsstMsg };
+
 function FreeTrial(p: { onSetUp: () => void; onSignOut: () => void }) {
-  const [msgs, setMsgs] = useState<{ role: "user" | "assistant"; text: string; cards?: { ref: string; title: string; sub: string; url: string }[] }[]>([]);
+  const [msgs, setMsgs] = useState<TrialMsg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [used, setUsed] = useState(0);
@@ -5529,8 +5538,47 @@ function FreeTrial(p: { onSetUp: () => void; onSignOut: () => void }) {
   const [leadBusy, setLeadBusy] = useState(false);
   const [leadDone, setLeadDone] = useState(false);
   const [leadErr, setLeadErr] = useState<string | null>(null);
+  // The manufacturer documents we hold, fetched once. Passed into assistantMsg so
+  // a "Source: GIB · <doc> · page 14" line resolves to the real document, its
+  // page image and its verify link — exactly as the paid chat does it.
+  const [mfrDocs, setMfrDocs] = useState<MfrDoc[]>([]);
+  // Trial-local citation viewer, mirroring the paid app's sheet modal but for the
+  // four base-knowledge kinds only (no plans exist in the trial).
+  const [sheet, setSheet] = useState<Cite | null>(null);
+  const [docImg, setDocImg] = useState<"loading" | "ok" | "error">("loading");
+  useEffect(() => { setDocImg("loading"); }, [sheet]);
+  const [zoomImg, setZoomImg] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [msgs, busy, walled]);
+
+  // Load the manufacturer-doc map once (with a short retry, in case Clerk isn't
+  // ready on the first call). Same source of truth the paid chat uses.
+  useEffect(() => {
+    let live = true;
+    let attempts = 0;
+    const load = async () => {
+      while (live && attempts < 8) {
+        attempts++;
+        try {
+          const r = await fetch("/api/manufacturer-docs");
+          if (r.ok) {
+            const d = await r.json();
+            if (live && Array.isArray(d.docs) && d.docs.length) { setMfrDocs(d.docs); return; }
+          }
+        } catch { /* network blip — retry */ }
+        await new Promise((res) => setTimeout(res, 1500));
+      }
+    };
+    void load();
+    return () => { live = false; };
+  }, []);
+
+  // If any answers rendered before the doc map arrived, re-parse them so their
+  // manufacturer citation cards, page images and verify links fill in.
+  useEffect(() => {
+    if (!mfrDocs.length) return;
+    setMsgs((prev) => prev.map((m) => (m.role === "assistant" ? { ...m, msg: assistantMsg(m.text, m.msg.cards, mfrDocs) as AsstMsg } : m)));
+  }, [mfrDocs]);
 
   const ask = async () => {
     const q = input.trim();
@@ -5543,12 +5591,12 @@ function FreeTrial(p: { onSetUp: () => void; onSignOut: () => void }) {
       const d = await r.json();
       if (d.walled) { setWalled(true); setUsed(Number(d.limit) || 5); return; }
       if (!r.ok) throw new Error(d.error || "Couldn't reach the assistant just now - that question wasn't counted. Try again.");
-      const cards = (Array.isArray(d.cards) ? d.cards : [])
-        .filter((c: Record<string, unknown>) => c && typeof c === "object" && (c as { std?: unknown }).std)
-        .map((c: { std: { ref?: string; title?: string; holds?: string; url?: string } }) => ({
-          ref: String(c.std.ref || ""), title: String(c.std.title || ""), sub: String(c.std.holds || ""), url: String(c.std.url || ""),
-        }));
-      setMsgs((m) => [...m, { role: "assistant", text: String(d.answer || ""), cards }]);
+      const answer = String(d.answer || "");
+      const rawCards = Array.isArray(d.cards) ? (d.cards as AsstCard[]) : undefined;
+      // Build the turn exactly as the paid chat does: assistantMsg parses the
+      // "Source:" lines into tappable citations, cleans the prose, and carries
+      // the standards-handoff card. mfrDocs makes manufacturer cites resolve.
+      setMsgs((m) => [...m, { role: "assistant", text: answer, msg: assistantMsg(answer, rawCards, mfrDocs) as AsstMsg }]);
       const u = Number(d.used) || 0;
       setUsed(u);
       if (u >= (Number(d.limit) || 5)) setWalled(true);
@@ -5596,17 +5644,77 @@ function FreeTrial(p: { onSetUp: () => void; onSignOut: () => void }) {
               </div>
             </div>
           )}
-          {msgs.map((m, i) => (
-            <div key={i} className={"ft-msg " + m.role}>
-              <div className="ft-bubble" dangerouslySetInnerHTML={{ __html: fmt(m.text) }} />
-              {m.cards?.map((c) => (
-                <a key={c.ref} className="ft-std" href={c.url} target="_blank" rel="noreferrer">
-                  <b>{c.ref}</b>
-                  <small>{c.title}{c.sub ? ` - holds ${c.sub}` : ""} · free download ›</small>
-                </a>
-              ))}
-            </div>
-          ))}
+          {msgs.map((m, i) =>
+            m.role === "user" ? (
+              <div key={i} className="ft-msg user">
+                <div className="ft-bubble" dangerouslySetInnerHTML={{ __html: fmt(m.text) }} />
+              </div>
+            ) : (
+              // The assistant turn is built exactly like the paid chat: a source
+              // header, the cleaned HTML answer, then the same tappable citation
+              // cards and standards-handoff card — reusing the paid app's classes
+              // so it looks and behaves identically, just without any plans.
+              <div key={i} className="ft-msg assistant">
+                <div className="ft-bubble">
+                  {m.msg.src && <div className="src">{m.msg.src}</div>}
+                  <span dangerouslySetInnerHTML={{ __html: m.msg.text }} />
+                  {m.msg.cites && m.msg.cites.length > 1 && (
+                    <div className="cites-h">{m.msg.cites.length} sources, tap any to open</div>
+                  )}
+                  {m.msg.cites?.map((c, k) => (
+                    <div className="cite" key={k} onClick={() => setSheet(c)}>
+                      <div className="cic">{c.kind === "manufacturer" ? "📕" : c.kind === "determination" ? "⚖️" : c.kind === "standard" ? "📘" : c.kind === "code" ? "📖" : "📐"}</div>
+                      <div className="ct"><b>{c.code}{c.title ? ` · ${c.title}` : ""}</b><small>{c.sub}</small></div>
+                      <div className="ca">›</div>
+                    </div>
+                  ))}
+                  {m.msg.cards?.map((c, j) =>
+                    c.itemType === "standard" && c.std ? (
+                      <div className="stdcard" key={j}>
+                        <div className="stdh">
+                          <span className="stdtag">In the standard</span>
+                          <b>{c.std.ref}</b>
+                          <small>{c.std.title}</small>
+                        </div>
+                        <div className="stdbody">
+                          <div className="stdholds">
+                            {c.std.section ? <span className="stdsec">{c.std.section}</span> : null}
+                            {c.std.holds}
+                          </div>
+                          {c.std.demo ? (
+                            <div className="stdpages">
+                              <div className="stdpages-h">The exact table</div>
+                              {c.std.demo.pages.map((pg) => (
+                                <button
+                                  key={pg.page}
+                                  className="stdpage"
+                                  onClick={() => setSheet({
+                                    code: c.std!.ref, title: pg.label, sub: c.std!.title, ans: "", hlTag: c.std!.ref,
+                                    kind: "standard", stdSlug: c.std!.demo!.slug, page: pg.page, url: c.std!.url,
+                                  })}
+                                >
+                                  <span className="stdpage-ic">▤</span>
+                                  <span>{pg.label}</span>
+                                  <span className="stdpage-go">›</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="stdredact" aria-label="Open the standard to read the table">
+                              <span>open the standard to read the exact table</span>
+                            </div>
+                          )}
+                        </div>
+                        <a className="stdget" href={c.std.url} target="_blank" rel="noopener noreferrer">
+                          Free to download from Standards NZ ↗
+                        </a>
+                      </div>
+                    ) : null
+                  )}
+                </div>
+              </div>
+            )
+          )}
           {busy && <div className="ft-msg assistant"><div className="ft-bubble ft-thinking">Looking that up…</div></div>}
           {err && <div className="ev-err" style={{ marginTop: 10 }}>{err}</div>}
           {walled && (
@@ -5645,6 +5753,107 @@ function FreeTrial(p: { onSetUp: () => void; onSignOut: () => void }) {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ─── citation viewer ─── a lean version of the paid app's sheet modal,
+           for the four base-knowledge kinds only. Same universal page-image
+           endpoints, same fall-back-to-link behaviour; no plan-page (the trial
+           has no plans). ─── */}
+      {sheet && (
+        <div className="scrim" onClick={() => setSheet(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti"><b>{sheet.code}</b><small>{sheet.title}</small></div>
+              <button className="sh-x" onClick={() => setSheet(null)}>✕</button>
+            </div>
+            {(() => {
+              const docSrc =
+                sheet.kind === "manufacturer"
+                  ? sheet.mfr && sheet.doc && sheet.page
+                    ? `/api/doc-page?m=${encodeURIComponent(sheet.mfr)}&doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}&v=3`
+                    : null
+                  : sheet.kind === "determination"
+                    ? sheet.ref && sheet.page
+                      ? `/api/determination-page?ref=${encodeURIComponent(sheet.ref)}&p=${sheet.page}`
+                      : null
+                    : sheet.kind === "standard"
+                      ? sheet.stdSlug && sheet.page
+                        ? `/api/standard-page?ref=${encodeURIComponent(sheet.stdSlug)}&p=${sheet.page}`
+                        : null
+                      : sheet.kind === "code"
+                        ? sheet.doc && sheet.page
+                          ? `/api/code-page?doc=${encodeURIComponent(sheet.doc)}&p=${sheet.page}`
+                          : null
+                        : null;
+              return (
+                <>
+                  <div className="sh-canvas">
+                    {docSrc && docImg !== "error" && (
+                      <img
+                        className="sh-doc"
+                        style={{ opacity: docImg === "ok" ? 1 : 0 }}
+                        src={docSrc}
+                        alt={sheet.code}
+                        onLoad={() => setDocImg("ok")}
+                        onError={() => setDocImg("error")}
+                      />
+                    )}
+                    {docSrc && docImg === "ok" && (
+                      <button className="sh-expand" title="View full screen" onClick={() => setZoomImg(docSrc)}>⛶</button>
+                    )}
+                    {docSrc && docImg === "loading" && (
+                      <div className="sh-msg">Loading the page{sheet.mfr ? ` from ${sheet.mfr}` : ""}…</div>
+                    )}
+                    {docSrc && docImg === "error" && (
+                      <div className="sh-msg">
+                        {sheet.kind === "code"
+                          ? "This clause is published free by MBIE."
+                          : "Couldn't load the page preview."}
+                        {sheet.url && (
+                          <><br /><a href={sheet.url} target="_blank" rel="noopener noreferrer">{openLabel(sheet.kind)} ↗</a></>
+                        )}
+                      </div>
+                    )}
+                    {!docSrc && (
+                      <div className="sh-msg">
+                        {sheet.kind === "code"
+                          ? "This clause is published free by MBIE."
+                          : "No page preview for this source."}
+                        {sheet.url && (
+                          <><br /><a href={sheet.url} target="_blank" rel="noopener noreferrer">{openLabel(sheet.kind)} ↗</a></>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="sh-ans">
+                    <div className="src">
+                      {sheet.kind === "manufacturer"
+                        ? `📕 FROM ${(sheet.mfr || "THE MANUFACTURER").toUpperCase()}’S MANUAL`
+                        : sheet.kind === "determination"
+                          ? "⚖️ FROM AN MBIE DETERMINATION"
+                          : sheet.kind === "standard"
+                            ? `📘 FROM ${(sheet.code || "THE NZS STANDARD").toUpperCase()}`
+                            : "📖 FROM THE NZ BUILDING CODE"}
+                    </div>
+                    {sheet.ans && <p dangerouslySetInnerHTML={{ __html: sheet.ans }} />}
+                    {sheet.url && (
+                      <a className="sh-open" href={sheet.url} target="_blank" rel="noopener noreferrer">
+                        {openLabel(sheet.kind)}{sheet.kind === "code" ? "" : ` on ${hostOf(sheet.url)}`} ↗
+                      </a>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ─── full-screen page image (lean: tap anywhere to close) ─── */}
+      {zoomImg && (
+        <div className="zoomscrim" onClick={() => setZoomImg(null)}>
+          <img className="zoomimg" src={zoomImg} alt="Full page" style={{ maxWidth: "100%", maxHeight: "calc(100vh - 96px)", cursor: "zoom-out" }} />
         </div>
       )}
     </div>
