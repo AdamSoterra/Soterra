@@ -5587,8 +5587,8 @@ function FreeTrial(p: { onSetUp: () => void; onSignOut: () => void }) {
         <div className="ft-inner">
           {msgs.length === 0 && !walled && (
             <div className="ft-hello">
-              <b>Ask me anything a NZ site throws up.</b>
-              <p>I answer from the Building Code, MBIE determinations, NZ Standards handling and the manufacturers&apos; own manuals - GIB, James Hardie, Resene, Thermakraft and more. Five questions on the house.</p>
+              <b>Ask me anything about NZ construction.</b>
+              <p>I answer from the Building Code, MBIE determinations, NZ Standards handling and the manufacturers&apos; own manuals - GIB, Ryanfire, Resene, Thermakraft and more. Five questions on the house.</p>
               <div className="ft-eg">
                 {["What clearance does cladding need to finished ground level?", "GIB Aqualine fixing centres in a wet area?", "Can the council refuse a CCC over a missing producer statement?"].map((q) => (
                   <button key={q} onClick={() => { setInput(q); }}>{q}</button>
