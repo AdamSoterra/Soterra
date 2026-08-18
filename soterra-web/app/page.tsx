@@ -5439,6 +5439,16 @@ function SiteSetup(props: {
                 <button type="button" className={"ev-kind" + (p.mode === "join" ? " act" : "")} onClick={() => p.setMode("join")}>Join with a code</button>
               </div>
 
+              {/* The no-code path sits ABOVE the form on purpose: creating a site
+                  needs an access code, so a cold visitor who has neither a code
+                  nor a join code would otherwise find no way in and bounce. */}
+              {p.onTryFree && (
+                <button type="button" className="ft-door" style={{ marginBottom: 18 }} onClick={p.onTryFree}>
+                  <b>No code yet? Try the assistant free</b>
+                  <small>5 questions on the Building Code, NZ Standards and manufacturer specs - no setup, nothing to enter.</small>
+                </button>
+              )}
+
               {p.mode === "create" ? (
                 <>
                   {p.showCompany && (
@@ -5487,13 +5497,6 @@ function SiteSetup(props: {
                     <button className="lg-btn primary" style={{ height: 48, margin: 0, flex: 1 }} disabled={p.busy} onClick={p.onJoin}>{p.busy ? "Joining…" : "Join site"}</button>
                   </div>
                 </>
-              )}
-
-              {p.onTryFree && (
-                <button type="button" className="ft-door" onClick={p.onTryFree}>
-                  <b>Just looking? Try the assistant free</b>
-                  <small>5 questions on the Building Code, NZ Standards and manufacturer specs - no setup, nothing to enter.</small>
-                </button>
               )}
 
               {p.mandatory && (
