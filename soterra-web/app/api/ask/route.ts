@@ -1238,9 +1238,14 @@ export async function POST(req: Request) {
   let question = "";
   let reqThreadId: string | null = null;
   let attachment: { kind: "image" | "pdf"; mediaType: string; data: string } | null = null;
+  // Opt-in streaming: new clients send stream:true and read NDJSON events; an
+  // old bundle that posts without it gets the classic JSON body unchanged, so
+  // a deploy never breaks a tab that is already open.
+  let wantStream = false;
   try {
     const body = await req.json();
     question = String(body.question ?? "").trim();
+    wantStream = body.stream === true;
     if (typeof body.threadId === "string" && body.threadId) reqThreadId = body.threadId;
     if (body.attachment && typeof body.attachment === "object") {
       const a = body.attachment as Record<string, unknown>;
@@ -1337,12 +1342,34 @@ export async function POST(req: Request) {
     if (tail && typeof tail === "object") tail.cache_control = { type: "ephemeral" };
   };
 
-  try {
+  // What the user sees while a tool runs. Honest, specific, present tense —
+  // the searching IS the product, so name what is being searched.
+  const PHASE_LABELS: Record<string, string> = {
+    search_plans: "Reading your drawings…",
+    review_plans: "Reading the whole set…",
+    search_directives: "Checking CIs and answered RFIs…",
+    search_code: "Checking the Building Code…",
+    search_manufacturer: "Checking the manufacturer's manual…",
+    search_determinations: "Checking MBIE determinations…",
+    search_history: "Checking your inspection history…",
+    standards_handoff: "Finding the standard…",
+    create_checklist: "Building the check…",
+    create_safety_plan: "Building the safety plan…",
+    web_search: "Checking published guidance…",
+  };
+
+  // The answer loop, shared by both response modes. `emit` fires only in
+  // streaming mode: delta = final-answer text as it is generated; reset =
+  // "that text belonged to a searching round, clear it"; phase = a label for
+  // the tool now running. The FINAL answer text is identical either way — a
+  // streamed conversation and a classic one differ only in delivery.
+  const run = async (emit: { delta: (t: string) => void; reset: () => void; phase: (label: string) => void }) => {
     let answer = "";
     let ranOut = true; // cleared when the model stops of its own accord
     for (let round = 0; round < MAX_ROUNDS; round++) {
+      if (round > 0) emit.reset();
       cacheConversationTail(messages);
-      const resp = await anthropic.messages.create({
+      const s = anthropic.messages.stream({
         model: MODEL,
         max_tokens: 8192,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1357,6 +1384,8 @@ export async function POST(req: Request) {
         ] as any,
         messages,
       });
+      s.on("text", (d) => emit.delta(d));
+      const resp = await s.finalMessage();
 
       messages.push({ role: "assistant", content: resp.content });
 
@@ -1370,6 +1399,7 @@ export async function POST(req: Request) {
       const toolUses = (resp.content as any[]).filter((b) => b.type === "tool_use");
       const results = [];
       for (const tu of toolUses) {
+        emit.phase(PHASE_LABELS[tu.name] ?? "Searching…");
         const { content, cards } = await executeTool(tu.name, (tu.input ?? {}) as Record<string, unknown>, ctx);
         allCards.push(...cards);
         results.push({ type: "tool_result", tool_use_id: tu.id, content });
@@ -1384,12 +1414,13 @@ export async function POST(req: Request) {
     // has to actually answer from what it already found, or say it couldn't.
     if (ranOut) {
       try {
+        emit.reset();
         const wrapMessages = [
           ...messages,
           { role: "user", content: "You've run out of search attempts. Answer now using only what you already found above, with the same citation rules. If it isn't enough to answer safely, say plainly what you couldn't confirm and what to check — never guess a clause, figure or product." },
         ];
         cacheConversationTail(wrapMessages);
-        const wrap = await anthropic.messages.create({
+        const s = anthropic.messages.stream({
           model: MODEL,
           max_tokens: 8192,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1399,6 +1430,8 @@ export async function POST(req: Request) {
           ] as any,
           messages: wrapMessages,
         });
+        s.on("text", (d) => emit.delta(d));
+        const wrap = await s.finalMessage();
         const t = wrap.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("").trim();
         if (t) answer = t;
       } catch (e) {
@@ -1409,15 +1442,88 @@ export async function POST(req: Request) {
     const finalAnswer = answer || "I couldn't get to an answer on that one — try rephrasing it, or narrow it to a specific sheet or clause.";
     await db.insert(chatMessages).values({ threadId, role: "assistant", content: finalAnswer });
     await db.update(chatThreads).set({ updatedAt: new Date() }).where(eq(chatThreads.id, threadId));
-    return Response.json({ answer: finalAnswer, cards: allCards, threadId, threadNew });
-  } catch (e) {
-    console.error("assistant error:", e);
+    return finalAnswer;
+  };
+
+  const errorMessage = (e: unknown) => {
     const overloaded = e instanceof Anthropic.APIConnectionError || (e instanceof Anthropic.APIError && (e.status === 429 || e.status === 529 || (e.status ?? 0) >= 500));
-    const msg = overloaded ? "The assistant is busy — give it a moment and try again." : "Something went wrong on that one — give it another go.";
+    return overloaded ? "The assistant is busy — give it a moment and try again." : "Something went wrong on that one — give it another go.";
+  };
+  const recordFailure = async (msg: string) => {
     try {
       await db.insert(chatMessages).values({ threadId, role: "assistant", content: msg });
       await db.update(chatThreads).set({ updatedAt: new Date() }).where(eq(chatThreads.id, threadId));
     } catch { /* best-effort */ }
-    return Response.json({ error: msg }, { status: 503 });
+  };
+
+  if (!wantStream) {
+    // Classic mode: byte-for-byte the response shape old clients expect.
+    try {
+      const finalAnswer = await run({ delta: () => {}, reset: () => {}, phase: () => {} });
+      return Response.json({ answer: finalAnswer, cards: allCards, threadId, threadNew });
+    } catch (e) {
+      console.error("assistant error:", e);
+      const msg = errorMessage(e);
+      await recordFailure(msg);
+      return Response.json({ error: msg }, { status: 503 });
+    }
   }
+
+  // Streaming mode: NDJSON events over a 200. One JSON object per line:
+  //   {t:"phase",label}  {t:"delta",text}  {t:"reset"}
+  //   {t:"done",answer,cards,threadId,threadNew}  {t:"error",error}
+  // The client renders deltas as they land, clears on reset (that text was a
+  // searching round's preamble), and treats "done" as the authoritative final.
+  const enc = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      // A client disconnect (phone locked mid-question, Wi-Fi gone at the
+      // wall — routine on the iOS home-screen app) cancels this stream and
+      // makes every enqueue throw. The writer degrades to a no-op instead of
+      // throwing, so run() still finishes and writes the REAL answer exactly
+      // once — same as classic mode — and the thread shows it on next open.
+      let closed = false;
+      const send = (o: Record<string, unknown>) => {
+        if (closed) return;
+        try {
+          controller.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+        } catch {
+          closed = true;
+        }
+      };
+      try {
+        const finalAnswer = await run({
+          delta: (text) => send({ t: "delta", text }),
+          reset: () => send({ t: "reset" }),
+          phase: (label) => send({ t: "phase", label }),
+        });
+        send({ t: "done", answer: finalAnswer, cards: allCards, threadId, threadNew });
+      } catch (e) {
+        console.error("assistant error:", e);
+        // A disconnect is not a model failure — the client is gone, so do not
+        // file a failure row over whatever the thread already holds.
+        if (!req.signal.aborted && !closed) {
+          const msg = errorMessage(e);
+          await recordFailure(msg);
+          send({ t: "error", error: msg });
+        }
+      } finally {
+        if (!closed) {
+          try {
+            controller.close();
+          } catch {
+            /* raced a cancel — already closed */
+          }
+        }
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store",
+      // Defeats proxy buffering so deltas actually arrive as they are sent.
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

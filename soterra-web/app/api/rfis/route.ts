@@ -68,6 +68,13 @@ export async function POST(req: Request) {
   const asStrArray = (v: unknown): string[] =>
     Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean).slice(0, 10) : [];
   const user = await currentUser();
+  // A malformed consultant email would bounce the send AND poison the
+  // Directory (its API refuses the shape on edit) - reject it at the door.
+  // Empty stays fine: a draft can name its consultant later.
+  const consultantEmail = String(body.consultantEmail ?? "").trim();
+  if (consultantEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(consultantEmail)) {
+    return Response.json({ error: "That consultant email doesn't look right" }, { status: 400 });
+  }
   const discipline = String(body.discipline ?? "").trim();
   const priority = ["normal", "high", "critical"].includes(String(body.priority)) ? (String(body.priority) as "normal" | "high" | "critical") : "normal";
   const impact = (v: unknown): "none" | "unknown" | "yes" => (["none", "unknown", "yes"].includes(String(v)) ? (String(v) as "none" | "unknown" | "yes") : "unknown");
@@ -85,7 +92,7 @@ export async function POST(req: Request) {
     codeRefs: asStrArray(body.codeRefs),
     consultantName: String(body.consultantName ?? "").trim() || null,
     consultantCompany: String(body.consultantCompany ?? "").trim() || null,
-    consultantEmail: String(body.consultantEmail ?? "").trim() || null,
+    consultantEmail: consultantEmail || null,
     cc: asStrArray(body.cc),
     costImpact: impact(body.costImpact),
     costEstimate: String(body.costEstimate ?? "").trim() || null,

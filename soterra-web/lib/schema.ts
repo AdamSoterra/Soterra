@@ -512,6 +512,30 @@ export const subs = pgTable(
   (t) => ({ byCompany: index("subs_company_idx").on(t.companyId) })
 );
 
+// The consultant directory — the other half of the address book. Company-wide
+// like subs: an engineer answers RFIs across every site the builder runs.
+// Saved automatically on every RFI send (upsert by email) and editable in the
+// Directory screen, so details are typed once, ever.
+export const consultants = pgTable(
+  "consultants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    name: text("name"), // the person: "Jane Smith"
+    company: text("company"), // the firm: "Holmes Structural"
+    discipline: text("discipline"), // one of DISCIPLINES (nullable = general)
+    // Stored LOWERCASED by every writer - the unique index below is what makes
+    // the directory's "saved once, ever" true, and it needs case to never vary.
+    email: text("email").notNull(),
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byCompany: index("consultants_company_idx").on(t.companyId),
+    oncePerCompany: uniqueIndex("consultants_company_email_uq").on(t.companyId, t.email),
+  })
+);
+
 // ─── Location cache — Foundation 3. One row per project: the QA-scope
 //     locations extracted from its drawing titles, keyed on a fingerprint of
 //     those titles so the picker is a table read, never a model round-trip.

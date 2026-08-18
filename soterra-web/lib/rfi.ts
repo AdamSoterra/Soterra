@@ -17,9 +17,9 @@
 // a holiday calendar is a fast-follow refinement, not a correctness bug.
 
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
-import { contractInstructions, emailLog, planPins, projects, rfiMessages, rfis, rfiTransitions } from "./schema";
+import { consultants, contractInstructions, emailLog, planPins, projects, rfiMessages, rfis, rfiTransitions } from "./schema";
 import type { Rfi } from "./schema";
 import type { Scope } from "./company";
 import { companyName } from "./company";
@@ -337,6 +337,31 @@ export async function sendRfi(
       ? `Sent to ${rfi.consultantName ?? ""} ${rfi.consultantCompany ?? ""}`.trim() + (cc.length ? ` · cc ${cc.join(", ")}` : "")
       : `Recorded for ${rfi.consultantName ?? ""} ${rfi.consultantCompany ?? ""}`.trim() + " (email sending not yet live)",
   });
+  // Remember the consultant in the Directory (upsert on company + email, so
+  // details are typed once, ever). Best-effort: never fails a send.
+  // Emails are stored LOWERCASED here - that is what lets the unique index on
+  // (company_id, email) make this a true atomic upsert instead of a racy
+  // check-then-insert, and it matches the directory API which does the same.
+  try {
+    const email = rfi.consultantEmail.trim().toLowerCase();
+    // A garbage address must not become a directory row the edit screen then
+    // refuses to touch (its API validates shape) - same regex as the API.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("unsaveable email: " + email);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const details: Record<string, any> = {};
+    if (rfi.consultantName) details.name = rfi.consultantName;
+    if (rfi.consultantCompany) details.company = rfi.consultantCompany;
+    if (rfi.discipline && (DISCIPLINES as readonly string[]).includes(rfi.discipline)) details.discipline = rfi.discipline;
+    await db
+      .insert(consultants)
+      .values({ companyId: scope.companyId, email, ...details, createdBy: by.userId ?? null })
+      .onConflictDoUpdate({
+        target: [consultants.companyId, consultants.email],
+        set: Object.keys(details).length ? details : { email },
+      });
+  } catch (e) {
+    console.error("consultant directory upsert failed:", e);
+  }
   const fresh = await ourRfi(scope, rfi.id);
   return { rfi: fresh ?? opened, emailStatus: result.status };
 }

@@ -1012,6 +1012,21 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .plan-del:hover{color:var(--red)}
 @media(max-width:520px){.plan-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}}
 
+/* The Directory modal (address book: Consultants | Subs) + its openers. */
+.dir-link{font-family:var(--font);font-size:12px;font-weight:700;color:var(--brand-d);background:none;border:none;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.dir-add{border:1.5px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px;background:#FBFDFF}
+.dir-grid{display:flex;gap:8px;flex-wrap:wrap}
+.dir-grid .ev-in{flex:1 1 46%;min-width:150px}
+.dir-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line2)}
+.dir-row:last-child{border-bottom:none}
+.dir-row .dir-txt{flex:1;min-width:0}
+.dir-row .dir-txt b{display:block;font-size:13.5px;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dir-row .dir-txt small{display:block;font-size:11.5px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dir-act{font-family:var(--font);font-size:11.5px;font-weight:700;color:var(--slate);background:#fff;border:1.5px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer;flex:0 0 auto}
+.dir-act:hover{border-color:rgba(14,143,230,.45);color:var(--brand-d)}
+.dir-act.del:hover{border-color:rgba(239,68,68,.4);color:var(--red)}
+.dir-act:disabled{opacity:.5;cursor:default}
+
 /* ─── /answer/<token> — the consultant's RFI answer page ─────────────────
    Public, no login, phone-first (they open it from an email in a carpark).
    Same light/blue palette as the app; .ans- prefix keeps it self-contained. */

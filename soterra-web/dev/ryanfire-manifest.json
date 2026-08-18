@@ -1,16 +1,31 @@
 {
  "manufacturer": "Ryanfire",
- "licence": "demo",
+ "licence": "granted",
  "dir": "C:/Users/adam/Desktop/Soterra/Ryanfire",
  "docs": [
-  { "file": "Ryanfire SL Collar Technical Data Sheet.pdf", "title": "Ryanfire SL Collar Technical Data Sheet",
-    "url": "https://assets.locomotive.works/sites/61507e78168bb3007cf0d803/content_entry633bdb3cda08e900963c41bd/633bdbbc1e444d007eaee4c5/files/Ryanfire_SL_Collar_TDS_v1.7_09-08-2024.pdf?1763349859", "exclude": [] },
-  { "file": "Ryanfire Mastic Technical Data Sheet.pdf", "title": "Ryanfire Mastic Technical Data Sheet",
-    "url": "https://assets.locomotive.works/sites/61507e78168bb3007cf0d803/content_entry633bdb3cda08e900963c41bd/633bdbb21e444d0098aedd4d/files/Ryanfire_Mastic_TDS_v2.0_15-08-2024.pdf?1751942706", "exclude": [] },
-  { "file": "Ryanbatt 502 Technical Data Sheet.pdf", "title": "Ryanbatt 502 Technical Data Sheet",
-    "url": "https://assets.locomotive.works/sites/61507e78168bb3007cf0d803/content_entry633bdb3cda08e900963c41bd/633bdb9f1e444d00e6aecd88/files/Ryanbatt_502_TDS_v2.5_09-08-2024.pdf?1730083730", "exclude": [] },
-  { "file": "Ryanfire V21.35 SL Collar to PVC pipes 150mm concrete wall.pdf",
-    "title": "Ryanfire System V21.35 - SL Collar to PVC pipes, 150mm concrete wall",
-    "url": "https://cdn.locomotive.works/sites/61507e78168bb3007cf0d803/content_entry633bdb3dda08e900963c41c4/65406b8da7fd49007d3e815c/files/V21.35.pdf?1698720653=", "exclude": [] }
+  {
+   "file": "Ryanfire SL Collar Technical Data Sheet.pdf",
+   "title": "Ryanfire SL Collar Technical Data Sheet",
+   "url": "https://assets.locomotive.works/sites/61507e78168bb3007cf0d803/content_entry633bdb3cda08e900963c41bd/633bdbbc1e444d007eaee4c5/files/Ryanfire_SL_Collar_TDS_v1.7_09-08-2024.pdf?1763349859",
+   "exclude": []
+  },
+  {
+   "file": "Ryanfire Mastic Technical Data Sheet v2.1.pdf",
+   "title": "Ryanfire Mastic Technical Data Sheet",
+   "url": "https://assets.locomotive.works/sites/61507e78168bb3007cf0d803/content_entry633bdb3cda08e900963c41bd/633bdbb21e444d0098aedd4d/files/Ryanfire_Mastic_TDS_v2.1_04-08-2026_for_web.pdf?1785819433",
+   "exclude": []
+  },
+  {
+   "file": "Ryanbatt 502 Technical Data Sheet.pdf",
+   "title": "Ryanbatt 502 Technical Data Sheet",
+   "url": "https://assets.locomotive.works/sites/61507e78168bb3007cf0d803/content_entry633bdb3cda08e900963c41bd/633bdb9f1e444d00e6aecd88/files/Ryanbatt_502_TDS_v2.5_09-08-2024.pdf?1730083730",
+   "exclude": []
+  },
+  {
+   "file": "Ryanfire V21.35 SL Collar to PVC pipes 150mm concrete wall.pdf",
+   "title": "Ryanfire System V21.35 - SL Collar to PVC pipes, 150mm concrete wall",
+   "url": "https://cdn.locomotive.works/sites/61507e78168bb3007cf0d803/content_entry633bdb3dda08e900963c41c4/65406b8da7fd49007d3e815c/files/V21.35.pdf?1698720653=",
+   "exclude": []
+  }
  ]
 }

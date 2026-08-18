@@ -49,7 +49,9 @@ type AsstCard = {
 type MfrDoc = { manufacturer: string; doc: string; sourceUrl: string | null; npages: number };
 type Msg =
   | { role: "u"; text: string; att?: string }
-  | { role: "a"; src?: string; text: string; raw?: string; full?: string; cites?: Cite[]; cards?: AsstCard[]; pending?: boolean };
+  // streaming = words still arriving: text is a live partial, hold the copy
+  // button and the citation cards until "done" replaces it with the final.
+  | { role: "a"; src?: string; text: string; raw?: string; full?: string; cites?: Cite[]; cards?: AsstCard[]; pending?: boolean; streaming?: boolean };
 type Attachment = { kind: "image" | "pdf"; mediaType: string; data: string; name: string };
 
 // ─── Sites (projects) + crew ───
@@ -91,6 +93,8 @@ type ChecklistItem = {
 };
 // A subcontractor contact (Feature 4): company-scoped, trade = a category.
 type Sub = { id: string; name: string; email: string; trade: string | null };
+// A consultant contact (the Directory): company-scoped, discipline = an RFI discipline.
+type Consultant = { id: string; name: string | null; company: string | null; discipline: string | null; email: string };
 // A QA flag (Feature 7): a pinned mistake on a drawing.
 type FlagRow = { id: string; n: number; doc: string; page: number; title: string; trade: string | null; note: string | null; status: string; subName: string | null; sentAt: string | null; sentStatus: string | null; fixedAt: string | null };
 // ─── RFI types (Feature 5) ───
@@ -133,6 +137,10 @@ const TRADES = [
   "Structural", "Weathertightness / Cladding", "Fire", "Electrical", "Plumbing & Drainage",
   "Mechanical", "Interior / Linings", "Access & Barriers", "Site / External", "Acoustic",
   "Seismic", "Architect", "Other",
+];
+// Mirror of lib/rfi DISCIPLINES - the discipline options for a consultant.
+const DISCIPLINES = [
+  "Architectural", "Structural", "Civil", "Fire", "Mechanical", "Electrical", "Hydraulic", "Geotech", "Facade",
 ];
 type ChecklistHead = {
   id: string; eventId: string | null; kind: string; title: string; inspectionCode: string | null;
@@ -692,7 +700,9 @@ export default function Page() {
   useEffect(() => {
     if (!mfrDocs.length) return;
     setMessages((prev) =>
-      prev.map((m) => (m.role === "a" && m.full && !m.pending ? assistantMsg(m.full, m.cards, mfrDocs) : m)),
+      // A live streaming bubble is excluded: re-parsing it would strip the
+      // streaming flag and surface citation chips before the answer is done.
+      prev.map((m) => (m.role === "a" && m.full && !m.pending && !m.streaming ? assistantMsg(m.full, m.cards, mfrDocs) : m)),
     );
   }, [mfrDocs]);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -738,6 +748,13 @@ export default function Page() {
 
   // ─── voice + file attach (chat composer) ───
   const [isRecording, setIsRecording] = useState(false);
+  // Streaming guards. gen invalidates an in-flight stream the moment the user
+  // navigates away (new chat, thread switch, project switch) so late deltas
+  // can never clobber the conversation now on screen; pinned tracks whether
+  // the user sits at the bottom of the chat, so autoscroll follows the stream
+  // for a reader at the bottom and never fights one who scrolled up.
+  const sendGenRef = useRef(0);
+  const scrollPinnedRef = useRef(true);
   // Which assistant message just got copied (index) — drives the ✓ flash.
   const [copiedMsg, setCopiedMsg] = useState<number | null>(null);
   /** Copy an assistant message: the bubble holds rendered HTML, but the
@@ -908,6 +925,20 @@ export default function Page() {
   const [ciTitle, setCiTitle] = useState("");
   const [newRfiOpen, setNewRfiOpen] = useState(false);
   const [nr, setNr] = useState({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "", criticalPath: false, costImpact: "unknown", costEstimate: "", programmeImpact: "unknown", programmeDays: "" });
+  const [nrCon, setNrCon] = useState(""); // saved-consultant pick on the New RFI form (cosmetic; the fields hold the truth)
+  // ─── The Directory (address book): consultants + subs, company-wide ───
+  const [dirOpen, setDirOpen] = useState(false);
+  const [dirTab, setDirTab] = useState<"consultants" | "subs">("consultants");
+  const [conList, setConList] = useState<Consultant[]>([]);
+  const [dirForm, setDirForm] = useState({ name: "", company: "", discipline: "", trade: "", email: "" });
+  const [dirEdit, setDirEdit] = useState<{ id: string; name: string; company: string; discipline: string; trade: string; email: string } | null>(null);
+  const [dirBusy, setDirBusy] = useState(false);
+  const [dirErr, setDirErr] = useState<string | null>(null);
+  // Inline "+ New sub" on the flag card - the fallback when the sub list is empty.
+  const [flagNewSubOpen, setFlagNewSubOpen] = useState(false);
+  const [fns, setFns] = useState({ name: "", trade: "", email: "" });
+  const [fnsBusy, setFnsBusy] = useState(false);
+  const [fnsErr, setFnsErr] = useState<string | null>(null);
   const [noteFor, setNoteFor] = useState<string | null>(null); // item id whose note box is open
   const [noteText, setNoteText] = useState("");
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -1042,6 +1073,7 @@ export default function Page() {
 
   // Switch to a site: point the fetch header at it, reset per-site data, reload.
   const selectProject = (id: string) => {
+    sendGenRef.current += 1; // orphan any in-flight stream — see send()
     projRef.current = id;
     setProjectId(id);
     try { window.localStorage.setItem("soterra:project", id); } catch { /* ignore */ }
@@ -1078,6 +1110,7 @@ export default function Page() {
 
   // Start a fresh conversation (clears the chat; next send creates a new thread).
   const newChat = () => {
+    sendGenRef.current += 1; // orphan any in-flight stream — see send()
     setMessages([]);
     setThreadId(null);
     setRailOpen(false);
@@ -1086,6 +1119,7 @@ export default function Page() {
 
   // Open a saved conversation from the sidebar.
   const loadThread = async (id: string) => {
+    sendGenRef.current += 1; // orphan any in-flight stream — see send()
     setRailOpen(false);
     setTab("assistant");
     try {
@@ -1340,7 +1374,11 @@ export default function Page() {
   const clerk = useClerk();
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    // Follow the conversation only while the reader is at the bottom. During a
+    // streamed answer this effect fires ~10x/second — without the pin check it
+    // would snap the view back down every 90ms and make scrolling up
+    // impossible for the whole answer.
+    if (scrollPinnedRef.current && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
   // Load the user's sites once signed in.
@@ -1719,34 +1757,109 @@ export default function Page() {
     if (taRef.current) taRef.current.style.height = "auto";
     setBusy(true);
     setTab("assistant");
+    // This stream owns the conversation only while its generation is current —
+    // any navigation (new chat, thread switch, project switch) bumps the
+    // counter and every later write from this stream becomes a no-op, so late
+    // deltas can never overwrite whatever conversation is now on screen.
+    sendGenRef.current += 1;
+    const gen = sendGenRef.current;
+    const live = () => gen === sendGenRef.current;
+    scrollPinnedRef.current = true; // a fresh question always starts followed
     setMessages((m) => [...m, { role: "u", text: t, att: att?.name }, { role: "a", text: "…", pending: true }]);
     try {
       // Don't fire before the site id exists — see waitForProject.
       if (!(await waitForProject())) {
-        setMessages((prev) => [...prev.slice(0, -1), { role: "a", text: "Still connecting to your site — give that another go in a moment." }]);
+        if (live()) setMessages((prev) => [...prev.slice(0, -1), { role: "a", text: "Still connecting to your site — give that another go in a moment." }]);
         return;
       }
       const res = await apiFetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, threadId, attachment: att }),
+        body: JSON.stringify({ question, threadId, attachment: att, stream: true }),
       });
       if (res.status === 413) {
-        setMessages((prev) => [...prev.slice(0, -1), { role: "a", text: "That attachment's too big to send here — try a smaller file, or add full plan sets via the Upload tab." }]);
+        if (live()) setMessages((prev) => [...prev.slice(0, -1), { role: "a", text: "That attachment's too big to send here — try a smaller file, or add full plan sets via the Upload tab." }]);
         return;
       }
-      const data = await res.json();
-      const ans = String(data.answer || data.error || "Sorry, something went wrong.");
-      const cards: AsstCard[] = Array.isArray(data.cards) ? data.cards : [];
-      setMessages((prev) => [...prev.slice(0, -1), assistantMsg(ans, cards, mfrDocs)]);
-      if (data.threadId) setThreadId(data.threadId);
-      // Refresh the sidebar (new thread appears, or title/order updates).
-      loadThreads();
-      // If the assistant changed the calendar/tasks, refresh so the other tabs
-      // (and the agenda/day views) reflect it immediately.
-      if (cards.length) { loadEvents(); loadTasks(); }
+      const finish = (data: { answer?: unknown; error?: unknown; cards?: unknown; threadId?: string; threadNew?: boolean }) => {
+        if (!live()) return; // navigated away — the server has it saved; the thread shows it on open
+        const ans = String(data.answer || data.error || "Sorry, something went wrong.");
+        const cards: AsstCard[] = Array.isArray(data.cards) ? (data.cards as AsstCard[]) : [];
+        setMessages((prev) => [...prev.slice(0, -1), assistantMsg(ans, cards, mfrDocs)]);
+        if (data.threadId) setThreadId(data.threadId);
+        // Refresh the sidebar (new thread appears, or title/order updates).
+        loadThreads();
+        // If the assistant changed anything card-shaped, refresh dependent tabs.
+        if (cards.length) { loadEvents(); loadTasks(); }
+      };
+      const isStream = (res.headers.get("content-type") || "").includes("x-ndjson") && !!res.body;
+      if (!isStream) {
+        // Early errors (limits, bad request) and pre-streaming servers still
+        // answer as classic JSON — handle exactly as before.
+        finish(await res.json());
+        return;
+      }
+      // NDJSON events. delta grows the live bubble; reset clears a searching
+      // round's preamble; phase labels what is being searched; done carries
+      // the authoritative final answer (identical to the classic response).
+      const reader = res.body!.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      let raw = "";
+      let phase: string | undefined;
+      let lastPaint = 0;
+      const paint = (force = false) => {
+        if (!live()) return;
+        const now = Date.now();
+        if (!force && now - lastPaint < 90) return; // ~10fps: smooth, not stormy
+        lastPaint = now;
+        // Citations and the source header stay hidden until "done" — a
+        // half-streamed "Source:" line would render as a bogus chip. src is
+        // reused for the phase label on the pending bubble only.
+        const bubble: Msg = raw
+          ? { ...(assistantMsg(raw, undefined, mfrDocs) as Extract<Msg, { role: "a" }>), cites: undefined, src: undefined, streaming: true }
+          : { role: "a", text: "…", pending: true, src: phase };
+        setMessages((prev) => [...prev.slice(0, -1), bubble]);
+      };
+      let finished = false;
+      const handleLine = (line: string) => {
+        if (!line.trim() || finished) return;
+        let ev: { t?: string; text?: string; label?: string; answer?: unknown; cards?: unknown; threadId?: string; threadNew?: boolean; error?: unknown };
+        try { ev = JSON.parse(line); } catch { return; }
+        if (ev.t === "delta") { raw += ev.text || ""; paint(); }
+        else if (ev.t === "reset") { raw = ""; paint(true); }
+        else if (ev.t === "phase") { phase = ev.label; if (!raw) paint(true); }
+        else if (ev.t === "done") { finished = true; finish(ev); }
+        else if (ev.t === "error") {
+          finished = true;
+          if (live()) {
+            setMessages((prev) => [...prev.slice(0, -1), { role: "a", text: String(ev.error || "Sorry, something went wrong.") }]);
+            loadThreads(); // the server recorded the failure in the thread — keep the sidebar honest
+          }
+        }
+      };
+      try {
+        for (;;) {
+          if (!live()) { try { void reader.cancel(); } catch { /* already dead */ } return; }
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const l of lines) handleLine(l);
+        }
+        if (buf.trim()) handleLine(buf);
+      } catch {
+        // A hard drop mid-read (network reset, proxy timeout) rejects the
+        // read — fall through to the same keep-what-arrived path as clean EOF.
+      }
+      if (!finished && live()) {
+        // Connection died mid-answer: keep what arrived rather than losing it.
+        setMessages((prev) => [...prev.slice(0, -1),
+          raw ? assistantMsg(raw, undefined, mfrDocs) : { role: "a", text: "Sorry, the connection dropped mid-answer. Try again." }]);
+      }
     } catch {
-      setMessages((prev) => [...prev.slice(0, -1), { role: "a", text: "Sorry — couldn't reach the assistant just now. Try again." }]);
+      if (live()) setMessages((prev) => [...prev.slice(0, -1), { role: "a", text: "Sorry — couldn't reach the assistant just now. Try again." }]);
     } finally {
       setBusy(false);
     }
@@ -2214,13 +2327,20 @@ export default function Page() {
     }
   };
   // ─── QA flag actions (Feature 7) ───
+  const loadSubs = async () => {
+    try {
+      const r = await apiFetch("/api/subs");
+      const d = await r.json();
+      if (Array.isArray(d?.subs)) setSubsList(d.subs);
+    } catch { /* keep whatever we have */ }
+  };
   const loadSubsIfNeeded = async () => {
     if (subsList.length) return subsList;
     try {
       const r = await apiFetch("/api/subs");
       const d = await r.json();
       if (Array.isArray(d?.subs)) { setSubsList(d.subs); return d.subs as Sub[]; }
-    } catch { /* the modal offers + New sub */ }
+    } catch { /* empty list - the flag card's + New sub covers it */ }
     return subsList;
   };
   const dropFlag = async (at: { x: number; y: number; page: number }) => {
@@ -2240,6 +2360,7 @@ export default function Page() {
       if (!r.ok || !d.flag) throw new Error(d.error || "Couldn't save the flag.");
       setFlagAt(null);
       setPinRefresh((n) => n + 1);
+      setFlagNewSubOpen(false); setFnsErr(null);
       setFlagView(d.flag); // open the card so Send is one tap away
       setFlagSendSub(flSub);
     } catch (e) {
@@ -2247,13 +2368,32 @@ export default function Page() {
     } finally { setFlagBusy(false); }
   };
   const openFlagById = async (id: string) => {
-    setFlagErr(null); setFlagNotice(null);
+    setFlagErr(null); setFlagNotice(null); setFlagNewSubOpen(false); setFnsErr(null);
     await loadSubsIfNeeded();
     try {
       const r = await apiFetch(`/api/flags?id=${encodeURIComponent(id)}`);
       const d = await r.json();
       if (r.ok && d.flag) { setFlagView(d.flag); setFlagSendSub(""); }
     } catch { /* stays closed */ }
+  };
+  // The un-bricking move: a brand-new account has no subs, so the flag card's
+  // Send button had nothing to pick. Saves via /api/subs, then selects it.
+  const addFlagSub = async () => {
+    setFnsBusy(true); setFnsErr(null);
+    try {
+      const r = await apiFetch("/api/subs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fns.name.trim(), email: fns.email.trim(), trade: fns.trade || undefined }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.sub) throw new Error(d.error || "Couldn't save the sub.");
+      setSubsList((list) => [...list, d.sub as Sub].sort((a, b) => a.name.localeCompare(b.name)));
+      setFlagSendSub(d.sub.id);
+      setFlagNewSubOpen(false);
+      setFns({ name: "", trade: "", email: "" });
+    } catch (e) {
+      setFnsErr(e instanceof Error ? e.message : "Couldn't save the sub.");
+    } finally { setFnsBusy(false); }
   };
   const flagAction = async (id: string, action: string, extra: Record<string, unknown> = {}) => {
     setFlagBusy(true); setFlagErr(null);
@@ -2302,10 +2442,75 @@ export default function Page() {
       else setRfiErr(d.error || "Couldn't open that RFI.");
     } catch { setRfiErr("Couldn't open that RFI."); }
   };
+  const loadConsultants = async () => {
+    try {
+      const r = await apiFetch("/api/consultants");
+      const d = await r.json();
+      if (Array.isArray(d?.consultants)) setConList(d.consultants);
+    } catch { /* keep whatever we have */ }
+  };
   useEffect(() => {
-    if (tab === "rfis" && !rfiLoaded) { loadRfis(); loadRfiAna(); }
+    if (tab === "rfis" && !rfiLoaded) { loadRfis(); loadRfiAna(); loadConsultants(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+  // ─── Directory (address book) actions ───
+  const openDirectory = (tabName: "consultants" | "subs") => {
+    setDirTab(tabName); setDirErr(null); setDirEdit(null);
+    setDirForm({ name: "", company: "", discipline: "", trade: "", email: "" });
+    setDirOpen(true);
+    // Fresh lists every open - an add elsewhere shouldn't show stale here.
+    void loadConsultants(); void loadSubs();
+  };
+  const dirCreate = async () => {
+    setDirBusy(true); setDirErr(null);
+    try {
+      const isCon = dirTab === "consultants";
+      const body = isCon
+        ? { name: dirForm.name.trim(), company: dirForm.company.trim(), discipline: dirForm.discipline || undefined, email: dirForm.email.trim() }
+        : { name: dirForm.name.trim(), trade: dirForm.trade || undefined, email: dirForm.email.trim() };
+      const r = await apiFetch(isCon ? "/api/consultants" : "/api/subs", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Couldn't save that just now.");
+      setDirForm({ name: "", company: "", discipline: "", trade: "", email: "" });
+      if (isCon) await loadConsultants(); else await loadSubs();
+    } catch (e) {
+      setDirErr(e instanceof Error ? e.message : "Couldn't save that just now.");
+    } finally { setDirBusy(false); }
+  };
+  const dirSaveEdit = async () => {
+    if (!dirEdit) return;
+    setDirBusy(true); setDirErr(null);
+    try {
+      const isCon = dirTab === "consultants";
+      const body = isCon
+        ? { id: dirEdit.id, name: dirEdit.name.trim(), company: dirEdit.company.trim(), discipline: dirEdit.discipline || null, email: dirEdit.email.trim() }
+        : { id: dirEdit.id, name: dirEdit.name.trim(), trade: dirEdit.trade || null, email: dirEdit.email.trim() };
+      const r = await apiFetch(isCon ? "/api/consultants" : "/api/subs", {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Couldn't save that just now.");
+      setDirEdit(null);
+      if (isCon) await loadConsultants(); else await loadSubs();
+    } catch (e) {
+      setDirErr(e instanceof Error ? e.message : "Couldn't save that just now.");
+    } finally { setDirBusy(false); }
+  };
+  const dirDelete = async (id: string, label: string) => {
+    if (!window.confirm(`Remove ${label} from the directory?`)) return;
+    setDirBusy(true); setDirErr(null);
+    try {
+      const isCon = dirTab === "consultants";
+      const r = await apiFetch(`${isCon ? "/api/consultants" : "/api/subs"}?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Couldn't remove that just now.");
+      if (isCon) await loadConsultants(); else await loadSubs();
+    } catch (e) {
+      setDirErr(e instanceof Error ? e.message : "Couldn't remove that just now.");
+    } finally { setDirBusy(false); }
+  };
   const rfiAction = async (id: string, action: string, extra: Record<string, unknown> = {}) => {
     setRfiBusy(true); setRfiErr(null);
     try {
@@ -2345,6 +2550,7 @@ export default function Page() {
       }
       setNewRfiOpen(false);
       setNr({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "", criticalPath: false, costImpact: "unknown", costEstimate: "", programmeImpact: "unknown", programmeDays: "" });
+      setNrCon("");
     } catch (e) {
       setRfiErr(e instanceof Error ? e.message : "Couldn't save the RFI.");
     } finally { setRfiBusy(false); }
@@ -2957,7 +3163,14 @@ export default function Page() {
               </div>
             ) : (
               <>
-                <div className="asst-scroll" ref={scrollRef}>
+                <div
+                  className="asst-scroll"
+                  ref={scrollRef}
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    scrollPinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+                  }}
+                >
                   <div className="asst-inner">
                     <div className="thread">
                       {messages.map((m, i) =>
@@ -3067,7 +3280,7 @@ export default function Page() {
                               )}
                               {/* The bridge from a drafted RFI (or any answer)
                                   to wherever it needs to be pasted. */}
-                              {!m.pending && !!m.text && (
+                              {!m.pending && !m.streaming && !!m.text && (
                                 <button
                                   className={"msg-copy" + (copiedMsg === i ? " ok" : "")}
                                   title="Copy this answer as plain text"
@@ -3545,6 +3758,7 @@ export default function Page() {
                   <div className="rf-vs">
                     <button className={"rf-vsb" + (rfiView === "reg" ? " act" : "")} onClick={() => setRfiView("reg")}>Register</button>
                     <button className={"rf-vsb" + (rfiView === "ana" ? " act" : "")} onClick={() => { setRfiView("ana"); loadRfiAna(); }}>Analytics</button>
+                    <button className="rf-vsb" onClick={() => openDirectory("consultants")}>Directory</button>
                   </div>
                   <button className="rf-new" onClick={() => { setRfiErr(null); setNewRfiOpen(true); }}>＋ New RFI</button>
                 </div>
@@ -4196,6 +4410,27 @@ export default function Page() {
                     <option value="">Pick the sub…</option>
                     {subsList.map((s) => <option key={s.id} value={s.id}>{s.name}{s.trade ? ` (${s.trade})` : ""}</option>)}
                   </select>
+                  <div style={{ marginTop: 8 }}>
+                    {flagNewSubOpen ? (
+                      <div className="dir-add" style={{ marginBottom: 0 }}>
+                        <div className="dir-grid">
+                          <input className="ev-in" autoFocus value={fns.name} placeholder="Fire Protection Ltd" onChange={(e) => setFns((v) => ({ ...v, name: e.target.value }))} />
+                          <select className="ev-in" value={fns.trade} onChange={(e) => setFns((v) => ({ ...v, trade: e.target.value }))}>
+                            <option value="">Trade…</option>
+                            {TRADES.map((t) => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                          <input className="ev-in" type="email" value={fns.email} placeholder="office@fireprotection.co.nz" onChange={(e) => setFns((v) => ({ ...v, email: e.target.value }))} />
+                        </div>
+                        {fnsErr && <div className="ev-err">{fnsErr}</div>}
+                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                          <button className="dir-act" disabled={fnsBusy || !fns.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fns.email.trim())} onClick={() => void addFlagSub()}>{fnsBusy ? "Saving…" : "Save sub"}</button>
+                          <button className="dir-act" disabled={fnsBusy} onClick={() => setFlagNewSubOpen(false)}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" className="dir-link" onClick={() => { setFnsErr(null); setFns({ name: "", trade: flagView.trade ?? "", email: "" }); setFlagNewSubOpen(true); }}>+ New sub</button>
+                    )}
+                  </div>
                 </div>
               )}
               {flagErr && <div className="ev-err">{flagErr}</div>}
@@ -4286,7 +4521,7 @@ export default function Page() {
                   <label className="ev-lbl">Discipline</label>
                   <select className="ev-in" value={nr.discipline} onChange={(e) => setNr((v) => ({ ...v, discipline: e.target.value }))}>
                     <option value="">Pick one…</option>
-                    {["Architectural", "Structural", "Civil", "Fire", "Mechanical", "Electrical", "Hydraulic", "Geotech", "Facade"].map((d) => <option key={d} value={d}>{d}</option>)}
+                    {DISCIPLINES.map((d) => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
                 <div style={{ flex: 1 }}>
@@ -4302,6 +4537,23 @@ export default function Page() {
               </div>
               <label className="ev-lbl" style={{ marginTop: 14, fontSize: 12.5, color: "var(--navy)" }}>The question</label>
               <textarea className="ev-in" rows={7} style={{ fontSize: 15, lineHeight: 1.5 }} value={nr.question} placeholder="What needs answering? Put the drawing and any figures right in the text." onChange={(e) => setNr((v) => ({ ...v, question: e.target.value }))} />
+              {/* Saved-consultant picker (the Directory). Picking fills the free-text
+                  fields below; typing fresh details still works, and whoever the RFI
+                  is sent to is saved back into the Directory automatically. */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
+                <label className="ev-lbl" style={{ margin: 0 }}>Consultant</label>
+                <button type="button" className="dir-link" style={{ marginLeft: "auto" }} onClick={() => openDirectory("consultants")}>Manage directory</button>
+              </div>
+              {conList.length > 0 && (
+                <select className="ev-in" style={{ marginTop: 6 }} value={nrCon} onChange={(e) => {
+                  setNrCon(e.target.value);
+                  const c = conList.find((x) => x.id === e.target.value);
+                  if (c) setNr((v) => ({ ...v, consultantName: c.name ?? "", consultantCompany: c.company ?? "", consultantEmail: c.email, discipline: c.discipline ?? v.discipline }));
+                }}>
+                  <option value="">Pick a saved consultant - fills the fields below…</option>
+                  {conList.map((c) => <option key={c.id} value={c.id}>{[c.name, c.company, c.discipline].filter(Boolean).join(" - ") || c.email}</option>)}
+                </select>
+              )}
               <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
                 <div style={{ flex: 1 }}>
                   <label className="ev-lbl">Assign to</label>
@@ -4357,6 +4609,119 @@ export default function Page() {
                   {rfiBusy ? "Sending…" : "Send RFI"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── the Directory (address book): consultants + subs, edit in place ─── */}
+      {dirOpen && (
+        <div className="scrim" style={{ zIndex: 140 }} onClick={() => { if (!dirBusy) setDirOpen(false); }}>
+          {/* zIndex 140: opens on top of the New RFI form and the flag card. */}
+          <div className="sheet" style={{ maxWidth: 560, maxHeight: "88vh" }} onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti"><b>Directory</b><small>Company-wide - saved once, used on every site</small></div>
+              {!dirBusy && <button className="sh-x" onClick={() => setDirOpen(false)}>✕</button>}
+            </div>
+            <div className="form-body">
+              <div className="rf-vs" style={{ marginBottom: 14 }}>
+                <button className={"rf-vsb" + (dirTab === "consultants" ? " act" : "")} onClick={() => { setDirTab("consultants"); setDirEdit(null); setDirErr(null); }}>Consultants</button>
+                <button className={"rf-vsb" + (dirTab === "subs" ? " act" : "")} onClick={() => { setDirTab("subs"); setDirEdit(null); setDirErr(null); }}>Subs</button>
+              </div>
+
+              <div className="dir-add">
+                <div className="dir-grid">
+                  <input className="ev-in" value={dirForm.name} placeholder={dirTab === "consultants" ? "Jane Smith" : "Fire Protection Ltd"} onChange={(e) => setDirForm((v) => ({ ...v, name: e.target.value }))} />
+                  {dirTab === "consultants" && (
+                    <input className="ev-in" value={dirForm.company} placeholder="Holmes Structural" onChange={(e) => setDirForm((v) => ({ ...v, company: e.target.value }))} />
+                  )}
+                  {dirTab === "consultants" ? (
+                    <select className="ev-in" value={dirForm.discipline} onChange={(e) => setDirForm((v) => ({ ...v, discipline: e.target.value }))}>
+                      <option value="">Discipline…</option>
+                      {DISCIPLINES.map((d) => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  ) : (
+                    <select className="ev-in" value={dirForm.trade} onChange={(e) => setDirForm((v) => ({ ...v, trade: e.target.value }))}>
+                      <option value="">Trade…</option>
+                      {TRADES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  )}
+                  <input className="ev-in" type="email" value={dirForm.email} placeholder={dirTab === "consultants" ? "jane@holmes.co.nz" : "office@fireprotection.co.nz"} onChange={(e) => setDirForm((v) => ({ ...v, email: e.target.value }))} />
+                </div>
+                <button
+                  className="lg-btn primary" style={{ height: 40, margin: "10px 0 0", fontSize: 13.5 }}
+                  disabled={dirBusy || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dirForm.email.trim()) || (dirTab === "subs" && !dirForm.name.trim())}
+                  onClick={() => void dirCreate()}
+                >
+                  {dirTab === "consultants" ? "Add consultant" : "Add sub"}
+                </button>
+              </div>
+
+              {dirErr && <div className="ev-err" style={{ marginTop: 0, marginBottom: 12 }}>{dirErr}</div>}
+
+              {dirTab === "consultants" && conList.length === 0 && (
+                <p className="page-sub" style={{ margin: 0 }}>No consultants saved yet. Add one above - or just send an RFI: whoever you send to is saved here automatically.</p>
+              )}
+              {dirTab === "subs" && subsList.length === 0 && (
+                <p className="page-sub" style={{ margin: 0 }}>No subs saved yet - add the first one above.</p>
+              )}
+
+              {dirTab === "consultants" && conList.map((c) => dirEdit?.id === c.id ? (
+                <div key={c.id} className="dir-row">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="dir-grid">
+                      <input className="ev-in" value={dirEdit.name} placeholder="Jane Smith" onChange={(e) => setDirEdit((v) => v && { ...v, name: e.target.value })} />
+                      <input className="ev-in" value={dirEdit.company} placeholder="Holmes Structural" onChange={(e) => setDirEdit((v) => v && { ...v, company: e.target.value })} />
+                      <select className="ev-in" value={dirEdit.discipline} onChange={(e) => setDirEdit((v) => v && { ...v, discipline: e.target.value })}>
+                        <option value="">Discipline…</option>
+                        {DISCIPLINES.map((d) => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                      <input className="ev-in" type="email" value={dirEdit.email} placeholder="jane@holmes.co.nz" onChange={(e) => setDirEdit((v) => v && { ...v, email: e.target.value })} />
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <button className="dir-act" disabled={dirBusy || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dirEdit.email.trim())} onClick={() => void dirSaveEdit()}>{dirBusy ? "Saving…" : "Save"}</button>
+                      <button className="dir-act" disabled={dirBusy} onClick={() => setDirEdit(null)}>Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div key={c.id} className="dir-row">
+                  <div className="dir-txt">
+                    <b>{c.name || c.email}</b>
+                    <small>{[c.company, c.discipline, c.email].filter(Boolean).join(" · ")}</small>
+                  </div>
+                  <button className="dir-act" disabled={dirBusy} onClick={() => setDirEdit({ id: c.id, name: c.name ?? "", company: c.company ?? "", discipline: c.discipline ?? "", trade: "", email: c.email })}>Edit</button>
+                  <button className="dir-act del" disabled={dirBusy} onClick={() => void dirDelete(c.id, c.name || c.email)}>Remove</button>
+                </div>
+              ))}
+
+              {dirTab === "subs" && subsList.map((s) => dirEdit?.id === s.id ? (
+                <div key={s.id} className="dir-row">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="dir-grid">
+                      <input className="ev-in" value={dirEdit.name} placeholder="Fire Protection Ltd" onChange={(e) => setDirEdit((v) => v && { ...v, name: e.target.value })} />
+                      <select className="ev-in" value={dirEdit.trade} onChange={(e) => setDirEdit((v) => v && { ...v, trade: e.target.value })}>
+                        <option value="">Trade…</option>
+                        {TRADES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <input className="ev-in" type="email" value={dirEdit.email} placeholder="office@fireprotection.co.nz" onChange={(e) => setDirEdit((v) => v && { ...v, email: e.target.value })} />
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <button className="dir-act" disabled={dirBusy || !dirEdit.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dirEdit.email.trim())} onClick={() => void dirSaveEdit()}>{dirBusy ? "Saving…" : "Save"}</button>
+                      <button className="dir-act" disabled={dirBusy} onClick={() => setDirEdit(null)}>Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div key={s.id} className="dir-row">
+                  <div className="dir-txt">
+                    <b>{s.name}</b>
+                    <small>{[s.trade, s.email].filter(Boolean).join(" · ")}</small>
+                  </div>
+                  <button className="dir-act" disabled={dirBusy} onClick={() => setDirEdit({ id: s.id, name: s.name, company: "", discipline: "", trade: s.trade ?? "", email: s.email })}>Edit</button>
+                  <button className="dir-act del" disabled={dirBusy} onClick={() => void dirDelete(s.id, s.name)}>Remove</button>
+                </div>
+              ))}
             </div>
           </div>
         </div>
