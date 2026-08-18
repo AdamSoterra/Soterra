@@ -1,0 +1,79 @@
+{
+ "manufacturer": "Trafalgar",
+ "licence": "granted",
+ "dir": "C:/Users/adam/Desktop/Soterra/Trafalgar",
+ "docs": [
+  {
+   "file": "FyreFLEX and TWRAP for Plumbers Technical Manual.pdf",
+   "title": "FyreFLEX and TWRAP for Plumbers Technical Manual",
+   "url": "https://tfire.com.au/documents/FyreFLEX-and-TWRAP-Plumbers-Technical-Manual",
+   "exclude": []
+  },
+  {
+   "file": "FyreFLEX and TWRAP for Electricians Technical Manual.pdf",
+   "title": "FyreFLEX and TWRAP for Electricians Technical Manual",
+   "url": "https://tfire.com.au/documents/FyreFLEX-and-TWRAP-Electricians-Technical-Manual",
+   "exclude": []
+  },
+  {
+   "file": "FyreFLEX Control Joints Technical Manual.pdf",
+   "title": "FyreFLEX Control Joints Technical Manual",
+   "url": "https://tfire.com.au/documents/FyreFLEX_Control_Joints_Technical_Manual",
+   "exclude": []
+  },
+  {
+   "file": "FyreBOARD Maxilite Penetrations Systems Technical Manual.pdf",
+   "title": "FyreBOARD Maxilite Penetrations Systems Technical Manual",
+   "url": "https://tfire.com.au/documents/FyreBOARD_Maxilite_Penetrations_Systems_Technical_Manual",
+   "exclude": []
+  },
+  {
+   "file": "FyreBOARD Maxilite Bulkheads and Ceilings Technical Manual.pdf",
+   "title": "FyreBOARD Maxilite Bulkheads and Ceilings Technical Manual",
+   "url": "https://tfire.com.au/documents/FyreBOARD_Maxilite_60mm_Bulkheads_Technical_Manual",
+   "exclude": []
+  },
+  {
+   "file": "FyreBATT Technical Manual.pdf",
+   "title": "FyreBATT Technical Manual",
+   "url": "https://tfire.com.au/documents/FyreBATT_60_Technical_Manual",
+   "exclude": []
+  },
+  {
+   "file": "FyreCOLLAR Premium Retrofit and Conduit Technical Manual.pdf",
+   "title": "FyreCOLLAR Premium Retrofit and Conduit Technical Manual",
+   "url": "https://tfire.com.au/documents/FyreCOLLAR_Premium_Hinged_Retrofit_and_Conduit_Technical_Manual",
+   "exclude": []
+  },
+  {
+   "file": "FyreCOLLAR Floor Waste Technical Manual.pdf",
+   "title": "FyreCOLLAR Floor Waste Technical Manual",
+   "url": "https://tfire.com.au/documents/FyreCOLLAR_Floor_Waste_Technical_Manual",
+   "exclude": []
+  },
+  {
+   "file": "FyreCOLLAR Mixed Services Technical Manual.pdf",
+   "title": "FyreCOLLAR Mixed Services Technical Manual",
+   "url": "https://tfire.com.au/documents/FyreCOLLAR-Mixed-Services-Collar-Technical-Manual",
+   "exclude": []
+  },
+  {
+   "file": "FyreWRAP Ductwork Technical Manual.pdf",
+   "title": "FyreWRAP Ductwork Technical Manual",
+   "url": "https://tfire.com.au/documents/FyreWrap_Technical_Manual",
+   "exclude": []
+  },
+  {
+   "file": "FyrePLUG Technical Manual.pdf",
+   "title": "FyrePLUG Technical Manual",
+   "url": "https://tfire.com.au/documents/FyrePLUG_Technical_Manual",
+   "exclude": []
+  },
+  {
+   "file": "FyreSET Technical Manual.pdf",
+   "title": "FyreSET Technical Manual",
+   "url": "https://tfire.com.au/documents/FyreSET_Technical_Manual",
+   "exclude": []
+  }
+ ]
+}
