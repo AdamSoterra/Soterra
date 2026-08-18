@@ -123,6 +123,13 @@ type RfiAna = {
   ballSplit: { consultant: string; count: number }[];
   eot: { label: string; subject: string; consultant: string; requiredBy: string | null; answered: string | null; netLateWd: number; programmeDays: number | null; costImpact: string; status: string }[];
 };
+// QA close-out scorecard (defects sent to subs). Mirrors analytics() in
+// lib/qaCloseout - tiles + a worst-first subcontractor scorecard.
+type QaAna = {
+  slaWd: number;
+  tiles: { open: number; readyForReview: number; withConsultant: number; closed: number; avgCloseoutWd: number };
+  scorecard: { sub: string; open: number; overdue: number; avgFixWd: number; fixed: number; total: number }[];
+};
 const RFI_BALL_PILL = (r: { ballParty: string; consultantCompany: string | null; status: string }) =>
   r.status === "closed" || r.status === "void"
     ? { cls: "none", label: "-" }
@@ -909,6 +916,11 @@ export default function Page() {
   const [insBusy, setInsBusy] = useState(false);
   const [insErr, setInsErr] = useState<string | null>(null);
   const [insNotice, setInsNotice] = useState<string | null>(null);
+  // ─── QA close-out tracking (defect scorecard on the Inspections tab) ───
+  const [coOpen, setCoOpen] = useState(false);
+  const [coAna, setCoAna] = useState<QaAna | null>(null);
+  const [coLoading, setCoLoading] = useState(false);
+  const [coLoaded, setCoLoaded] = useState(false);
   // ─── RFIs (Feature 5) ───
   const [rfiList, setRfiList] = useState<RfiRow[]>([]);
   const [rfiLoaded, setRfiLoaded] = useState(false);
@@ -2433,6 +2445,22 @@ export default function Page() {
       if (d?.tiles) setRfiAna(d);
     } catch { /* rail shows nothing */ }
   };
+  // QA close-out scorecard: loaded lazily the first time the panel is opened.
+  const loadCoAna = async () => {
+    if (coLoaded) return;
+    setCoLoading(true);
+    try {
+      const r = await apiFetch("/api/qa-closeout");
+      const d = await r.json();
+      if (d?.tiles) { setCoAna(d); setCoLoaded(true); }
+    } catch { /* panel stays empty */ }
+    finally { setCoLoading(false); }
+  };
+  const toggleCo = () => {
+    const next = !coOpen;
+    setCoOpen(next);
+    if (next) loadCoAna();
+  };
   const openRfiById = async (id: string) => {
     setRfiErr(null); setAnsOpen(false); setAnsText(""); setFuText(""); setCiOpen(false); setCiTitle("");
     try {
@@ -3746,6 +3774,62 @@ export default function Page() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {/* ── Section 3: close-out tracking (the defect scorecard) ── */}
+            <div className="sub-k" style={{ marginTop: 26, cursor: "pointer", userSelect: "none" }} onClick={toggleCo}>
+              Close-out tracking<span>{coOpen ? "Hide" : "Show"}</span>
+            </div>
+            {coOpen && (
+              coLoading && !coAna ? (
+                <div className="page-sub" style={{ marginTop: 4 }}>Loading…</div>
+              ) : !coAna ? (
+                <div className="page-sub" style={{ marginTop: 4 }}>Couldn&apos;t load the scorecard just now. Reopen this panel to try again.</div>
+              ) : (() => {
+                const t = coAna.tiles;
+                const allZero = t.open === 0 && t.readyForReview === 0 && t.withConsultant === 0 && t.closed === 0;
+                if (allZero) {
+                  return (
+                    <div className="page-sub" style={{ marginTop: 4 }}>
+                      No defects have been sent to subs yet - the scorecard fills in as you send and close items.
+                    </div>
+                  );
+                }
+                return (
+                  <>
+                    <div className="rf-strip" style={{ marginTop: 6 }}>
+                      <div className="rf-tile"><b>{t.open}</b><span>open</span><small>with subs or still to send</small></div>
+                      <div className="rf-tile"><b>{t.readyForReview}</b><span>ready for review</span><small>fixed, back with you</small></div>
+                      <div className="rf-tile"><b>{t.withConsultant}</b><span>with consultant</span><small>out for sign-off</small></div>
+                      <div className="rf-tile"><b>{t.closed}</b><span>closed</span><small>signed off and done</small></div>
+                      <div className="rf-tile"><b>{t.avgCloseoutWd || 0} wd</b><span>avg close-out</span><small>avg working days to close</small></div>
+                    </div>
+
+                    <div className="rf-sc">
+                      <h3>Subcontractor scorecard</h3>
+                      <div className="note">Worst offender first · overdue = past {coAna.slaWd} working days with the sub</div>
+                      {coAna.scorecard.length > 0 ? (
+                        <table>
+                          <thead><tr><th>Sub</th><th>Open</th><th>Overdue</th><th>Avg fix (wd)</th><th>Fixed</th></tr></thead>
+                          <tbody>
+                            {coAna.scorecard.map((s) => (
+                              <tr key={s.sub}>
+                                <td className="cname">{s.sub}</td>
+                                <td>{s.open}</td>
+                                <td className={s.overdue ? "r" : "g"}>{s.overdue}</td>
+                                <td>{s.fixed ? `${s.avgFixWd} wd` : "-"}</td>
+                                <td>{s.fixed} / {s.total}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div className="page-sub" style={{ padding: "4px 15px 14px" }}>Numbers appear as defects are sent and closed.</div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()
             )}
           </div></div>
         )}

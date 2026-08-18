@@ -33,7 +33,7 @@
 // current closeout_status is the lock, and exactly one writer wins.
 
 import { randomBytes } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "./db";
 import { inspectionItems, inspections, projects, qaFlags } from "./schema";
 import type { Scope } from "./company";
@@ -515,8 +515,11 @@ export async function fixUploadTarget(
 type Agg = { sub: string; status: string; sentAt: Date | null; readyAt: Date | null; closedAt: Date | null };
 
 export async function analytics(scope: Scope) {
-  const flags = await db.select().from(qaFlags).where(eq(qaFlags.projectId, scope.projectId));
-  const items = await db.select().from(inspectionItems).where(eq(inspectionItems.projectId, scope.projectId));
+  // Only defects that actually ENTERED the loop (were sent to a sub) count -
+  // a never-sent 'open' item is backlog, not close-out tracking, and would
+  // otherwise pile up under "Unassigned" and swamp the scorecard.
+  const flags = await db.select().from(qaFlags).where(and(eq(qaFlags.projectId, scope.projectId), isNotNull(qaFlags.sentAt)));
+  const items = await db.select().from(inspectionItems).where(and(eq(inspectionItems.projectId, scope.projectId), isNotNull(inspectionItems.sentAt)));
   const now = new Date();
 
   const rows: Agg[] = [
