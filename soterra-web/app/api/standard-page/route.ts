@@ -5,11 +5,11 @@ import { isStandardDemoPage } from "@/lib/standardDemo";
 
 export const runtime = "nodejs";
 
-// Serve ONE pre-rendered page of a standard, from PRIVATE Blob, ONLY to a
-// demo-corpus account. This exists for personal-use evaluation of the standards
-// demo: the pages were rendered from Adam's own licensed copy and are shown back
-// to his account and no other. Every other signed-in user gets a 404 here, and
-// nothing routes to a page we did not deliberately render.
+// Serve ONE pre-rendered page of a standard, from PRIVATE Blob, to accounts
+// canSeeStandardsDemo allows. Under STANDARDS_PUBLIC that is every signed-in
+// user (Standards NZ confirmed customer use, 2026-08-18); otherwise the founder
+// allowlist only. Only a (slug, page) we deliberately rendered can be fetched -
+// nothing else routes through here.
 //
 //   GET /api/standard-page?ref=NZS-3604-2011&p=210  →  image/png
 export async function GET(req: Request) {

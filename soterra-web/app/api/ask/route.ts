@@ -798,10 +798,10 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
             cards: [],
           };
         }
-        // Personal-use evaluation only: for a demo-corpus account, attach the
-        // pages of that account's own licensed copy so they can see the real
-        // table in the UI. Never populated for a customer, and only when the
-        // topic matches (a stud question doesn't get the lintel pages).
+        // Attach the licensed pages so the user can see the real table in the
+        // UI. Under STANDARDS_PUBLIC every signed-in user is served (Standards
+        // NZ confirmed customer use); otherwise founder accounts only. Topic-
+        // gated either way, so a stud question never gets the lintel pages.
         const demo = canSeeStandardsDemo(userId) ? demoPagesFor(std.ref, `${holds} ${section ?? ""} ${name}`) : null;
         return {
           content: JSON.stringify(

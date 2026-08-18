@@ -3220,10 +3220,10 @@ export default function Page() {
                                         {c.std.holds}
                                       </div>
                                       {c.std.demo ? (
-                                        // Personal-use evaluation: your own licensed copy, this
-                                        // account only. Tap to read the real table.
+                                        // The real table pages from the licensed standard. Tap to
+                                        // read the exact figures on the page itself.
                                         <div className="stdpages">
-                                          <div className="stdpages-h">Your licensed copy</div>
+                                          <div className="stdpages-h">The exact table</div>
                                           {c.std.demo.pages.map((pg) => (
                                             <button
                                               key={pg.page}
@@ -3240,8 +3240,10 @@ export default function Page() {
                                           ))}
                                         </div>
                                       ) : (
-                                        <div className="stdredact" aria-label="Content withheld pending licence">
-                                          <span>content withheld pending licence</span>
+                                        // No rendered page for this topic yet - point at the free
+                                        // download rather than imply anything is being withheld.
+                                        <div className="stdredact" aria-label="Open the standard to read the table">
+                                          <span>open the standard to read the exact table</span>
                                         </div>
                                       )}
                                     </div>

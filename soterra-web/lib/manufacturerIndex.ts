@@ -70,26 +70,24 @@ export function canSeeDemoCorpus(userId: string | null | undefined): boolean {
 }
 
 /**
- * Whether this account may see the NZS 3604 sample: the rendered pages of the
- * founder's own licensed copy, and the hand-transcribed figures that go with
- * them.
+ * Whether this account may see the NZS content: the rendered pages of the
+ * licensed standards, and the figures that go with them.
  *
- * ⭐ Deliberately a SEPARATE list from DEMO_CORPUS_USERS, even though it started
- * as the same one. The two grant very different things:
+ * ⭐ STANDARDS_PUBLIC=1 opens this to EVERY signed-in user. Set 2026-08-18 after
+ * Standards NZ confirmed customer use in writing (email held by the founder).
+ * ONE reversible switch: unset it and only the founder allowlist below is
+ * served again, no other change needed. Keep the "in writing" evidence current,
+ * because this is the switch that reproduces a third party's content to
+ * customers.
  *
- *   DEMO_CORPUS_USERS    → seven manufacturers who have NOT granted permission
- *                          and who compete with each other.
- *   STANDARDS_DEMO_USERS → one standard the founder personally holds a licensed
- *                          copy of, with a licence conversation underway.
- *
- * Sharing one variable meant an account that needed the standards sample also
- * silently unlocked every ungranted manufacturer, which is both the permission
- * risk this file exists to prevent and a demo that promises a corpus the
- * customer would not actually get. Falls back to DEMO_CORPUS_USERS so the
- * founder's existing accounts keep working without being listed twice.
+ * Below the flag, STANDARDS_DEMO_USERS is the founder allowlist, deliberately a
+ * SEPARATE list from DEMO_CORPUS_USERS (which unlocks ungranted, competing
+ * manufacturer pages). Falls back to DEMO_CORPUS_USERS so existing founder
+ * accounts keep working without being listed twice.
  */
 export function canSeeStandardsDemo(userId: string | null | undefined): boolean {
   if (!userId) return false;
+  if ((process.env.STANDARDS_PUBLIC ?? "").trim() === "1") return true;
   const allow = (process.env.STANDARDS_DEMO_USERS ?? "")
     .split(",")
     .map((s) => s.trim())
