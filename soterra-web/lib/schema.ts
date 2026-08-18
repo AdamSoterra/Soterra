@@ -347,11 +347,33 @@ export const inspectionItems = pgTable(
     inspectedOn: text("inspected_on"), // denormalised, for "last 12 months" filters
     // Feature 6: the extracted failed items are a live worklist, not just a
     // record. not_done | in_progress | done.
-    workStatus: text("work_status").default("not_done").notNull(),
+    workStatus: text("work_status").default("not_done").notNull(), // LEGACY track, kept for the worklist UI
     // And they can be emailed to the responsible sub (same rails as QA flags):
     sentTo: text("sent_to"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     sentStatus: text("sent_status"), // sent | recorded (see checklist_items)
+    // ── Close-out loop (added by dev/migrate-qa-closeout). Same loop as qa_flags,
+    //    PLUS the consultant leg: an item off a CONSULTANT report (parent
+    //    inspections.source = 'consultant') runs open -> sent -> ready ->
+    //    submitted -> closed, forwarded to the consultant to sign off. An item
+    //    off a COUNCIL report runs the internal loop (no consultant), same as a
+    //    flag. work_status above is the legacy worklist track; closeout_status
+    //    is the loop's own (kept in step only at close: closed => work_status done).
+    closeoutStatus: text("closeout_status").default("open").notNull(), // open | sent | ready | submitted | closed
+    subToken: text("sub_token"), // secret in the sub's "Mark it fixed" link (partial unique idx in the migration)
+    consultantToken: text("consultant_token"), // secret in the consultant's "Sign it off" link (partial unique idx)
+    senderEmail: text("sender_email"), // whoever pressed Send - where the notices go
+    // The consultant a defect is forwarded to. The parent inspection only keeps
+    // the inspector ORG (anonymised), never a person or an address, so the MC
+    // types these when forwarding and they live on the item.
+    consultantName: text("consultant_name"),
+    consultantEmail: text("consultant_email"),
+    readyAt: timestamp("ready_at", { withTimezone: true }), // the sub marked it fixed
+    submittedAt: timestamp("submitted_at", { withTimezone: true }), // forwarded to the consultant
+    closedAt: timestamp("closed_at", { withTimezone: true }), // signed off (MC internal, or consultant)
+    fixPhoto: text("fix_photo"), // Blob pathname of the sub's photo of the fix (private)
+    subNote: text("sub_note"), // the sub's note when they marked it fixed
+    reviewNote: text("review_note"), // the MC / consultant note on close or bounce-back
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
@@ -597,12 +619,25 @@ export const qaFlags = pgTable(
     title: text("title").notNull(),
     trade: text("trade"), // CATEGORIES vocabulary
     note: text("note"),
-    status: text("status").default("open").notNull(), // open | sent | done
+    status: text("status").default("open").notNull(), // open | sent | done  (LEGACY track, kept for the existing sheet UI)
     subName: text("sub_name"), // who it's assigned/sent to
     subEmail: text("sub_email"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     sentStatus: text("sent_status"), // sent | recorded
     fixedAt: timestamp("fixed_at", { withTimezone: true }),
+    // ── Close-out loop (added by dev/migrate-qa-closeout). A qa_flag is an
+    //    INTERNAL defect, so its loop never reaches a consultant: it runs
+    //    open -> sent -> ready -> closed, and the MC closes it directly. The
+    //    legacy status column above is left for the sheet screens; closeout_status
+    //    is the loop's own track (kept in step only at close: closed => done).
+    closeoutStatus: text("closeout_status").default("open").notNull(), // open | sent | ready | closed
+    subToken: text("sub_token"), // secret in the sub's "Mark it fixed" link (partial unique idx in the migration)
+    senderEmail: text("sender_email"), // whoever pressed Send - where the "marked fixed" notice goes
+    readyAt: timestamp("ready_at", { withTimezone: true }), // the sub marked it fixed
+    closedAt: timestamp("closed_at", { withTimezone: true }), // the MC signed it off
+    fixPhoto: text("fix_photo"), // Blob pathname of the sub's photo of the fix (private)
+    subNote: text("sub_note"), // the sub's note when they marked it fixed
+    reviewNote: text("review_note"), // the MC's note on close or bounce-back
     createdBy: text("created_by"),
     createdByName: text("created_by_name"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

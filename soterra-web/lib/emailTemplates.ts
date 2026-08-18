@@ -84,6 +84,17 @@ function replyBlock(replyName: string, extra?: string): string {
   </tr></table>`;
 }
 
+// A tappable CTA button. The padding lives on the td, never the a: Outlook's
+// Word engine drops padding on an anchor, so the button would collapse to bare
+// text without it. Kept small so QA item cards can each carry their own.
+function ctaButton(label: string, url: string, small = false): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:${small ? "10px 0 2px" : "20px 0 8px"};"><tr>
+    <td bgcolor="${BRAND}" style="background:${BRAND};border-radius:9px;padding:${small ? "9px 18px" : "13px 28px"};">
+      <a href="${esc(url)}" style="display:inline-block;font-family:${FONT};font-size:${small ? "13px" : "14.5px"};font-weight:bold;color:#ffffff;text-decoration:none;">${esc(label)} &#8594;</a>
+    </td>
+  </tr></table>`;
+}
+
 // ─── 1 + 3: itemised sends (QA flags / inspection items) ─────────────────
 
 export type EmailItem = {
@@ -93,6 +104,10 @@ export type EmailItem = {
   note?: string | null;
   statusLabel?: string | null; // "not done" pill (inspection-items variant)
   photoNote?: string | null; // "site photo attached"
+  // Close-out loop: the sub's tokenized "Mark it fixed" link for THIS defect.
+  // One email can carry several defects, so the button rides per item card, not
+  // once per email (see lib/qaCloseout.ts). Absent on sends not in the loop.
+  fixUrl?: string | null;
 };
 
 export type ItemsEmailOptions = {
@@ -127,6 +142,12 @@ export function renderItemsEmail(opts: ItemsEmailOptions): { html: string; text:
       const photo = it.photoNote
         ? `<div style="font-family:${FONT};font-size:11px;color:${MUT};margin-top:8px;">&#128247; ${esc(it.photoNote)}</div>`
         : "";
+      // "Mark it fixed" per defect: the sub taps it, attaches a photo, and this
+      // item flips to ready on the project - no reply-parsing, no account.
+      const fix = it.fixUrl
+        ? ctaButton("Mark it fixed", it.fixUrl, true) +
+          `<div style="font-family:${FONT};font-size:11px;color:${MUT};margin-top:2px;">No account needed. Attach a photo of the fix and it is logged against this item.</div>`
+        : "";
       return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:12px;"><tr>
     <td style="border:1px solid ${LINE};border-radius:10px;padding:14px 16px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
@@ -140,6 +161,7 @@ export function renderItemsEmail(opts: ItemsEmailOptions): { html: string; text:
           <div style="font-family:${FONT};font-size:11.5px;color:#7A8CA3;margin-top:3px;">${metaHtml}</div>
           ${note}
           ${photo}
+          ${fix}
         </td>
       </tr></table>
     </td>
@@ -169,7 +191,7 @@ ${replyBlock(opts.replyName, opts.replyExtra ?? undefined)}`,
     "",
     ...opts.items.map(
       (it) =>
-        `${it.n}. ${it.title}${it.statusLabel ? ` [${it.statusLabel}]` : ""}\n   ${it.meta}${it.note ? `\n   ${it.note}` : ""}`
+        `${it.n}. ${it.title}${it.statusLabel ? ` [${it.statusLabel}]` : ""}\n   ${it.meta}${it.note ? `\n   ${it.note}` : ""}${it.fixUrl ? `\n   Mark it fixed (no account needed): ${it.fixUrl}` : ""}`
     ),
     "",
     ...(opts.snapshotCaption ? [opts.snapshotCaption, ""] : []),
@@ -366,6 +388,139 @@ ${header(opts.companyName, `${opts.projectName} · answered by ${opts.consultant
     opts.answer,
     "",
     `The response clock has stopped. Accept + close, raise a CI, or bounce it back in Soterra: ${opts.appUrl}`,
+  ].join("\n");
+  return { html, text };
+}
+
+// ─── QA close-out: the consultant sign-off request ───────────────────────
+// Sent when the MC forwards a fixed CONSULTANT defect for sign-off. The sub has
+// already marked it fixed and attached a photo; the consultant views the photo
+// on the page and either signs it off or bounces it back. Mirrors renderRfiEmail:
+// a "Sign it off" CTA button, a plain reply as the fallback.
+
+export function renderQaSignoffEmail(opts: {
+  companyName: string;
+  contextLine: string; // "Kauri Tower · Fire · marked fixed 18 Aug 2026"
+  title: string; // the defect
+  detail?: string | null; // the inspector's wording
+  location?: string | null;
+  category?: string | null;
+  subLine: string; // "Fire Protection Ltd" - who marked it fixed
+  fixNote?: string | null; // the sub's note on the fix
+  hasPhoto: boolean; // a photo of the fix is on the page
+  signoffUrl: string; // APP_URL/signoff/<token>
+  refLabel: string;
+}): { html: string; text: string } {
+  const headerHtml = `<tr><td bgcolor="${NAVY}" style="background:${NAVY};padding:14px 28px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+    <td nowrap style="font-family:${FONT};font-size:16px;font-weight:bold;color:#ffffff;white-space:nowrap;">Sign-off requested</td>
+    <td style="font-family:${FONT};font-size:13px;color:#B8CCE0;padding-left:12px;">${esc(opts.title)}</td>
+  </tr></table>
+</td></tr>
+${header(opts.companyName, opts.contextLine)}`;
+
+  const meta = [opts.category, opts.location].filter(Boolean).join(" · ");
+  const detailHtml = opts.detail
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0;"><tr>
+      <td style="background:#F8FAFC;border:1px solid ${LINE};border-radius:9px;padding:12px 14px;font-family:${FONT};font-size:13px;color:#43586E;line-height:1.5;">${esc(opts.detail)}</td>
+    </tr></table>`
+    : "";
+  const fixHtml = opts.fixNote
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0;"><tr>
+      <td style="background:#F0FAF4;border:1px solid #BFE8CE;border-radius:9px;padding:12px 14px;font-family:${FONT};font-size:13px;color:${INK};line-height:1.5;"><b>${esc(opts.subLine)} says:</b> ${esc(opts.fixNote)}</td>
+    </tr></table>`
+    : "";
+
+  const bodyHtml = `<div style="font-family:${FONT};font-size:14px;color:${INK};line-height:1.55;margin-bottom:4px;"><b>${esc(opts.subLine)}</b> has marked this item fixed and it needs your sign-off.</div>
+${meta ? `<div style="font-family:${FONT};font-size:12px;color:#7A8CA3;margin-bottom:6px;">${esc(meta)}</div>` : ""}
+${detailHtml}
+${fixHtml}
+<div style="font-family:${FONT};font-size:12.5px;color:${SLATE};margin:6px 0 2px;">${opts.hasPhoto ? "A photo of the fix is on the page below." : "Open the page to review and sign off."}</div>
+${ctaButton("Sign it off", opts.signoffUrl)}
+<div style="font-family:${FONT};font-size:12px;color:${MUT};margin:0 0 14px;">No account needed. Approve to close it out, or bounce it back to ${esc(opts.subLine)} with a note.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;"><tr>
+    <td style="background:#F8FAFC;border:1px dashed #D6DEE8;border-radius:8px;padding:11px 14px;font-family:${FONT};font-size:12.5px;color:#43586E;line-height:1.5;">&#8617; Or simply reply to this email - ${esc(opts.companyName)} logs your decision.</td>
+  </tr></table>`;
+
+  const html = shell({
+    headerHtml,
+    bodyHtml,
+    footerNote: "Sent with Soterra · soterra.co.nz",
+    refLabel: opts.refLabel,
+  });
+  const text = [
+    `Sign-off requested · ${opts.title}`,
+    opts.companyName,
+    opts.contextLine,
+    "",
+    `${opts.subLine} has marked this item fixed and it needs your sign-off.`,
+    ...(meta ? ["", meta] : []),
+    ...(opts.detail ? ["", opts.detail] : []),
+    ...(opts.fixNote ? ["", `${opts.subLine} says: ${opts.fixNote}`] : []),
+    "",
+    `SIGN IT OFF (no account needed): ${opts.signoffUrl}`,
+    "",
+    `Or simply reply to this email - ${opts.companyName} logs your decision.`,
+    "",
+    `Sent with Soterra · soterra.co.nz · ${opts.refLabel}`,
+  ].join("\n");
+  return { html, text };
+}
+
+// ─── QA close-out: the notice back to the MC ─────────────────────────────
+// Two shapes, one template: the sub marked a defect fixed (ready), or a
+// consultant made a decision (signed off / bounced). Small, like renderRfiAnswerNotice.
+
+export function renderQaCloseoutNotice(opts: {
+  companyName: string;
+  projectName: string;
+  title: string; // the defect
+  kind: "ready" | "signed_off" | "bounced"; // what happened
+  actorLine: string; // "Fire Protection Ltd" or "Jane Smith · Holmes Structural"
+  note?: string | null; // the sub's fix note or the consultant's note
+  nextLine: string; // what the MC does next
+  appUrl: string;
+  refLabel: string;
+}): { html: string; text: string } {
+  const banner =
+    opts.kind === "ready"
+      ? { title: "Marked fixed", tone: "#0A78C8", bg: "#EFF7FE", border: "#C9E4FA" }
+      : opts.kind === "signed_off"
+        ? { title: "Signed off", tone: "#0F7B43", bg: "#F0FAF4", border: "#BFE8CE" }
+        : { title: "Bounced back", tone: "#B45309", bg: "#FFF7ED", border: "#FDBA74" };
+
+  const headerHtml = `<tr><td bgcolor="${NAVY}" style="background:${NAVY};padding:14px 28px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+    <td nowrap style="font-family:${FONT};font-size:16px;font-weight:bold;color:#ffffff;white-space:nowrap;">${esc(banner.title)}</td>
+    <td style="font-family:${FONT};font-size:13px;color:#B8CCE0;padding-left:12px;">${esc(opts.title)}</td>
+  </tr></table>
+</td></tr>
+${header(opts.companyName, `${opts.projectName} · ${opts.actorLine}`)}`;
+
+  const noteHtml = opts.note
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:12px 0;"><tr>
+      <td style="background:${banner.bg};border:1px solid ${banner.border};border-radius:9px;padding:13px 15px;font-family:${FONT};font-size:13.5px;color:${INK};line-height:1.55;">${esc(opts.note).replace(/\n/g, "<br/>")}</td>
+    </tr></table>`
+    : "";
+
+  const bodyHtml = `<div style="font-family:${FONT};font-size:14px;color:${INK};line-height:1.55;margin-bottom:6px;"><b>${esc(opts.actorLine)}</b> - ${esc(opts.nextLine)}</div>
+${noteHtml}
+<div style="font-family:${FONT};font-size:12.5px;color:${SLATE};line-height:1.5;">Open Soterra to action it: <a href="${esc(opts.appUrl)}" style="color:${BRAND};font-weight:bold;text-decoration:none;">${esc(opts.appUrl.replace(/^https?:\/\//, ""))}</a></div>`;
+
+  const html = shell({
+    headerHtml,
+    bodyHtml,
+    footerNote: "Sent with Soterra · recorded on the project QA log",
+    refLabel: opts.refLabel,
+  });
+  const text = [
+    `${banner.title} · ${opts.title}`,
+    `${opts.projectName} · ${opts.actorLine}`,
+    "",
+    opts.nextLine,
+    ...(opts.note ? ["", opts.note] : []),
+    "",
+    `Open Soterra to action it: ${opts.appUrl}`,
   ].join("\n");
   return { html, text };
 }

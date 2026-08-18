@@ -7,6 +7,7 @@ import { isCategory } from "@/lib/categories";
 import { emailEnabled, projectSenderAddress, sendEmail, type EmailAttachment } from "@/lib/email";
 import { renderItemsEmail } from "@/lib/emailTemplates";
 import { renderSheetWithPins } from "@/lib/pinSnapshot";
+import { armFlagFix } from "@/lib/qaCloseout";
 
 export const runtime = "nodejs";
 // Sending renders the drawing snapshot.
@@ -17,6 +18,15 @@ export const maxDuration = 120;
 // the flag record and its send.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// The sub's "Mark it fixed" link secret and the MC's own sender_email stay
+// server-side - never ship them to the browser (mirrors publicRfi in lib/rfi).
+// A harvested sub_token would let anyone mark this defect fixed with no login.
+type FlagRow = typeof qaFlags.$inferSelect;
+function publicFlag(row: FlagRow): Omit<FlagRow, "subToken" | "senderEmail"> {
+  const { subToken: _t, senderEmail: _e, ...pub } = row;
+  return pub;
+}
 
 // GET /api/flags?doc=<title>            → flags on a drawing (all pages)
 // GET /api/flags?doc=<title>&page=<n>   → flags on one page
@@ -33,7 +43,7 @@ export async function GET(req: Request) {
     if (!UUID_RE.test(id)) return Response.json({ error: "Bad id" }, { status: 400 });
     const [flag] = await db.select().from(qaFlags).where(and(eq(qaFlags.id, id), eq(qaFlags.projectId, scope.projectId))).limit(1);
     if (!flag) return Response.json({ error: "Flag not found" }, { status: 404 });
-    return Response.json({ flag });
+    return Response.json({ flag: publicFlag(flag) });
   }
   const doc = url.searchParams.get("doc")?.trim();
   if (!doc) return Response.json({ error: "Pass doc or id" }, { status: 400 });
@@ -46,7 +56,7 @@ export async function GET(req: Request) {
       : null;
   if (!where) return Response.json({ error: "Bad page" }, { status: 400 });
   const flags = await db.select().from(qaFlags).where(where).orderBy(asc(qaFlags.n));
-  return Response.json({ flags });
+  return Response.json({ flags: flags.map(publicFlag) });
 }
 
 // POST /api/flags { doc, page, x, y, title, trade?, note?, subId? }
@@ -135,7 +145,7 @@ export async function POST(req: Request) {
     label: String(n),
     createdBy: scope.userId,
   });
-  return Response.json({ flag }, { status: 201 });
+  return Response.json({ flag: publicFlag(flag) }, { status: 201 });
 }
 
 // PATCH /api/flags { id, action: "send" | "done" | "reopen", subId? , message? }
@@ -159,11 +169,11 @@ export async function PATCH(req: Request) {
 
   if (action === "done") {
     const [row] = await db.update(qaFlags).set({ status: "done", fixedAt: new Date() }).where(eq(qaFlags.id, id)).returning();
-    return Response.json({ flag: row });
+    return Response.json({ flag: publicFlag(row) });
   }
   if (action === "reopen") {
     const [row] = await db.update(qaFlags).set({ status: flag.sentAt ? "sent" : "open", fixedAt: null }).where(eq(qaFlags.id, id)).returning();
-    return Response.json({ flag: row });
+    return Response.json({ flag: publicFlag(row) });
   }
   if (action !== "send") return Response.json({ error: "Unknown action" }, { status: 400 });
 
@@ -204,17 +214,28 @@ export async function PATCH(req: Request) {
     }
   }
 
+  // Close-out loop: mint (or reuse) the sub's "Mark it fixed" link BEFORE
+  // composing, so it rides out in this same email (see lib/qaCloseout.ts).
+  // Failure-isolated: an arming error must not block the send.
+  let fix: { token: string; url: string } | null = null;
+  try {
+    fix = await armFlagFix(scope, id);
+  } catch (e) {
+    console.error("qa arm (flag) failed:", e);
+  }
+
   const rendered = renderItemsEmail({
     companyName: company,
     contextLine: `${projectName} · ${flag.doc} · ${new Date().toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric", timeZone: "Pacific/Auckland" })}`,
     intro:
       message ||
-      `Hi team, this came up on ${projectName}. It's pinned on the drawing${snapshotAttached ? " (snapshot attached)" : ""}. Please put it right and reply with a photo when done.`,
+      `Hi team, this came up on ${projectName}. It's pinned on the drawing${snapshotAttached ? " (snapshot attached)" : ""}. Please put it right, then tap Mark it fixed with a photo.`,
     items: [{
       n: flag.n,
       title: flag.title,
       meta: [flag.trade, `${flag.doc} · p${flag.page}${snapshotAttached ? " (pinned, snapshot attached)" : ""}`].filter(Boolean).join(" · "),
       note: flag.note,
+      fixUrl: fix?.url ?? null,
     }],
     numberColor: "amber",
     snapshotCaption: snapshotAttached ? `${flag.doc} · p${flag.page} (snapshot with the pin, attached full-size)` : null,
@@ -241,14 +262,28 @@ export async function PATCH(req: Request) {
   });
 
   if (result.status === "failed") {
-    return Response.json({ error: `Couldn't email ${subName} - recorded as failed, nothing delivered. Check the address and try again.`, flag }, { status: 502 });
+    return Response.json({ error: `Couldn't email ${subName} - recorded as failed, nothing delivered. Check the address and try again.`, flag: publicFlag(flag) }, { status: 502 });
   }
+  // Legacy status ('sent') for the sheet UI, AND the close-out track: the flag
+  // enters the loop with the ball on the sub. sender_email is where the "marked
+  // fixed" notice will go. The close-out fields only advance from open/sent -
+  // a resend or reminder must NEVER drag a 'ready' (sub already fixed it) or
+  // 'closed' flag back to 'sent', which would re-arm the sub link and drop it
+  // out of review. The email still goes out either way.
+  const advanceCloseout = flag.closeoutStatus === "open" || flag.closeoutStatus === "sent";
   const [row] = await db
     .update(qaFlags)
-    .set({ status: "sent", subName, subEmail, sentAt: new Date(), sentStatus: result.status })
+    .set({
+      status: "sent",
+      subName,
+      subEmail,
+      sentAt: new Date(),
+      sentStatus: result.status,
+      ...(advanceCloseout ? { closeoutStatus: "sent" as const, senderEmail } : {}),
+    })
     .where(eq(qaFlags.id, id))
     .returning();
-  return Response.json({ flag: row, transmitting: emailEnabled() });
+  return Response.json({ flag: publicFlag(row), transmitting: emailEnabled() });
 }
 
 // DELETE /api/flags?id=<uuid> — removes the flag AND its pin

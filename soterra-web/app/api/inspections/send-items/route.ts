@@ -7,6 +7,7 @@ import { inspectionDetail } from "@/lib/history";
 import { emailEnabled, projectSenderAddress, sendEmail } from "@/lib/email";
 import { renderItemsEmail, type EmailItem } from "@/lib/emailTemplates";
 import { resolveRecipients, recipientsLabel } from "@/lib/sendRecipients";
+import { armItemsFix } from "@/lib/qaCloseout";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -64,6 +65,16 @@ export async function POST(req: Request) {
   const inspectionLabel = inspection.inspectionType || inspection.doc;
   const failedLabel = inspection.inspectedOn ? `inspected ${inspection.inspectedOn}` : "from the filed report";
 
+  // Close-out loop: mint (or reuse) each item's "Mark it fixed" link BEFORE
+  // composing, so every defect carries its own link in the one email. Failure-
+  // isolated: if arming trips, the send still goes out (just without the links).
+  let fixUrls = new Map<string, string>();
+  try {
+    fixUrls = await armItemsFix(scope, sendItems.map((i) => i.id));
+  } catch (e) {
+    console.error("qa arm (items) failed:", e);
+  }
+
   // Composed ONCE — every recipient gets the identical email.
   const emailItems: EmailItem[] = sendItems.map((it) => ({
     n: it.n,
@@ -72,6 +83,7 @@ export async function POST(req: Request) {
     // The inspector's own wording, quoted — that's what the sub answers to.
     note: it.detail ? `Inspector: "${it.detail}"` : null,
     statusLabel: it.workStatus === "in_progress" ? "in progress" : "not done",
+    fixUrl: fixUrls.get(it.id) ?? null,
   }));
 
   const rendered = renderItemsEmail({
@@ -79,7 +91,7 @@ export async function POST(req: Request) {
     contextLine: `${projectName} · ${inspectionLabel} · ${failedLabel}`,
     intro:
       message ||
-      `The ${inspectionLabel} inspection failed the item${sendItems.length === 1 ? "" : "s"} below, listed exactly as the inspector wrote ${sendItems.length === 1 ? "it" : "them"}. Please work through the list and reply when each is done; we re-book the inspection once all are closed.`,
+      `The ${inspectionLabel} inspection failed the item${sendItems.length === 1 ? "" : "s"} below, listed exactly as the inspector wrote ${sendItems.length === 1 ? "it" : "them"}. Please work through the list and tap Mark it fixed on each, with a photo; we re-book the inspection once all are closed.`,
     items: emailItems,
     numberColor: "red",
     replyName: `${senderName} at ${company}`,
@@ -114,6 +126,9 @@ export async function POST(req: Request) {
   // Stamp once, naming only the recipients whose send went through;
   // all-failed stamps nothing so the UI never claims a dead send.
   if (okRecipients.length) {
+    const ids = sendItems.map((i) => i.id);
+    // The legacy send stamp updates every item that went out - fine to refresh
+    // on a resend.
     await db
       .update(inspectionItems)
       .set({
@@ -121,7 +136,18 @@ export async function POST(req: Request) {
         sentAt: new Date(),
         sentStatus: okStatuses.has("sent") ? "sent" : "recorded",
       })
-      .where(and(eq(inspectionItems.companyId, scope.companyId), inArray(inspectionItems.id, sendItems.map((i) => i.id))));
+      .where(and(eq(inspectionItems.companyId, scope.companyId), inArray(inspectionItems.id, ids)));
+    // The close-out entry is GUARDED: a resend/reminder must never drag an item
+    // already at 'ready' (sub fixed it) or 'submitted' (with the consultant)
+    // back to 'sent'. Only items still open/sent enter or refresh the loop.
+    await db
+      .update(inspectionItems)
+      .set({ closeoutStatus: "sent", senderEmail })
+      .where(and(
+        eq(inspectionItems.companyId, scope.companyId),
+        inArray(inspectionItems.id, ids),
+        inArray(inspectionItems.closeoutStatus, ["open", "sent"])
+      ));
   }
 
   return Response.json({ sent: results, transmitting: emailEnabled() });
