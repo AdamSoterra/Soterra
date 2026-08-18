@@ -916,8 +916,7 @@ export default function Page() {
   const [insBusy, setInsBusy] = useState(false);
   const [insErr, setInsErr] = useState<string | null>(null);
   const [insNotice, setInsNotice] = useState<string | null>(null);
-  // ─── QA close-out tracking (defect scorecard on the Inspections tab) ───
-  const [coOpen, setCoOpen] = useState(false);
+  // ─── QA close-out tracking (defect scorecard on the Insights tab) ───
   const [coAna, setCoAna] = useState<QaAna | null>(null);
   const [coLoading, setCoLoading] = useState(false);
   const [coLoaded, setCoLoaded] = useState(false);
@@ -1183,6 +1182,11 @@ export default function Page() {
     // The Inspections tab (and Insights, for the failure counts) needs the
     // checklists — the pre-inspection QA checks and the safety plans.
     if ((tab === "inspections" || tab === "insights") && !checklists.length) loadChecklists();
+    // Insights is the analytics home: pull the QA close-out scorecard and the
+    // RFI turnaround the first time the tab opens. loadCoAna self-guards on
+    // coLoaded; loadRfiAna only fires while rfiAna is still empty — so each
+    // fetches once.
+    if (tab === "insights") { loadCoAna(); if (!rfiAna) loadRfiAna(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, evLoaded, taskLoaded, docsLoaded, insightsLoaded, projectId]);
 
@@ -2455,11 +2459,6 @@ export default function Page() {
       if (d?.tiles) { setCoAna(d); setCoLoaded(true); }
     } catch { /* panel stays empty */ }
     finally { setCoLoading(false); }
-  };
-  const toggleCo = () => {
-    const next = !coOpen;
-    setCoOpen(next);
-    if (next) loadCoAna();
   };
   const openRfiById = async (id: string) => {
     setRfiErr(null); setAnsOpen(false); setAnsText(""); setFuText(""); setCiOpen(false); setCiTitle("");
@@ -3775,62 +3774,6 @@ export default function Page() {
                 ))}
               </div>
             )}
-
-            {/* ── Section 3: close-out tracking (the defect scorecard) ── */}
-            <div className="sub-k" style={{ marginTop: 26, cursor: "pointer", userSelect: "none" }} onClick={toggleCo}>
-              Close-out tracking<span>{coOpen ? "Hide" : "Show"}</span>
-            </div>
-            {coOpen && (
-              coLoading && !coAna ? (
-                <div className="page-sub" style={{ marginTop: 4 }}>Loading…</div>
-              ) : !coAna ? (
-                <div className="page-sub" style={{ marginTop: 4 }}>Couldn&apos;t load the scorecard just now. Reopen this panel to try again.</div>
-              ) : (() => {
-                const t = coAna.tiles;
-                const allZero = t.open === 0 && t.readyForReview === 0 && t.withConsultant === 0 && t.closed === 0;
-                if (allZero) {
-                  return (
-                    <div className="page-sub" style={{ marginTop: 4 }}>
-                      No defects have been sent to subs yet - the scorecard fills in as you send and close items.
-                    </div>
-                  );
-                }
-                return (
-                  <>
-                    <div className="rf-strip" style={{ marginTop: 6 }}>
-                      <div className="rf-tile"><b>{t.open}</b><span>open</span><small>with subs or still to send</small></div>
-                      <div className="rf-tile"><b>{t.readyForReview}</b><span>ready for review</span><small>fixed, back with you</small></div>
-                      <div className="rf-tile"><b>{t.withConsultant}</b><span>with consultant</span><small>out for sign-off</small></div>
-                      <div className="rf-tile"><b>{t.closed}</b><span>closed</span><small>signed off and done</small></div>
-                      <div className="rf-tile"><b>{t.avgCloseoutWd || 0} wd</b><span>avg close-out</span><small>avg working days to close</small></div>
-                    </div>
-
-                    <div className="rf-sc">
-                      <h3>Subcontractor scorecard</h3>
-                      <div className="note">Worst offender first · overdue = past {coAna.slaWd} working days with the sub</div>
-                      {coAna.scorecard.length > 0 ? (
-                        <table>
-                          <thead><tr><th>Sub</th><th>Open</th><th>Overdue</th><th>Avg fix (wd)</th><th>Fixed</th></tr></thead>
-                          <tbody>
-                            {coAna.scorecard.map((s) => (
-                              <tr key={s.sub}>
-                                <td className="cname">{s.sub}</td>
-                                <td>{s.open}</td>
-                                <td className={s.overdue ? "r" : "g"}>{s.overdue}</td>
-                                <td>{s.fixed ? `${s.avgFixWd} wd` : "-"}</td>
-                                <td>{s.fixed} / {s.total}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      ) : (
-                        <div className="page-sub" style={{ padding: "4px 15px 14px" }}>Numbers appear as defects are sent and closed.</div>
-                      )}
-                    </div>
-                  </>
-                );
-              })()
-            )}
           </div></div>
         )}
 
@@ -4291,6 +4234,112 @@ export default function Page() {
                   );
                 })()}
                 </>
+                )}
+
+                {/* Subcontractor close-out — moved here from the Inspections tab.
+                    Same tiles + scorecard, now living on the analytics home. Loaded
+                    when the Insights tab opens, so it shows expanded, no click. */}
+                <IzToggle label="Subcontractor close-out" open={!izClosed.closeout} onClick={() => izToggle("closeout")} />
+                {!izClosed.closeout && (
+                  coLoading && !coAna ? (
+                    <div className="page-sub" style={{ marginTop: 4 }}>Loading…</div>
+                  ) : !coAna ? (
+                    <div className="page-sub" style={{ marginTop: 4 }}>Couldn&apos;t load the scorecard just now.</div>
+                  ) : (() => {
+                    const t = coAna.tiles;
+                    const allZero = t.open === 0 && t.readyForReview === 0 && t.withConsultant === 0 && t.closed === 0;
+                    if (allZero) {
+                      return (
+                        <div className="page-sub" style={{ marginTop: 4 }}>
+                          No defects have been sent to subs yet - the scorecard fills in as you send and close items.
+                        </div>
+                      );
+                    }
+                    return (
+                      <>
+                        <div className="rf-strip" style={{ marginTop: 6 }}>
+                          <div className="rf-tile"><b>{t.open}</b><span>open</span><small>with subs or still to send</small></div>
+                          <div className="rf-tile"><b>{t.readyForReview}</b><span>ready for review</span><small>fixed, back with you</small></div>
+                          <div className="rf-tile"><b>{t.withConsultant}</b><span>with consultant</span><small>out for sign-off</small></div>
+                          <div className="rf-tile"><b>{t.closed}</b><span>closed</span><small>signed off and done</small></div>
+                          <div className="rf-tile"><b>{t.avgCloseoutWd || 0} wd</b><span>avg close-out</span><small>avg working days to close</small></div>
+                        </div>
+
+                        <div className="rf-sc">
+                          <h3>Subcontractor scorecard</h3>
+                          <div className="note">Worst offender first · overdue = past {coAna.slaWd} working days with the sub</div>
+                          {coAna.scorecard.length > 0 ? (
+                            <table>
+                              <thead><tr><th>Sub</th><th>Open</th><th>Overdue</th><th>Avg fix (wd)</th><th>Fixed</th></tr></thead>
+                              <tbody>
+                                {coAna.scorecard.map((s) => (
+                                  <tr key={s.sub}>
+                                    <td className="cname">{s.sub}</td>
+                                    <td>{s.open}</td>
+                                    <td className={s.overdue ? "r" : "g"}>{s.overdue}</td>
+                                    <td>{s.fixed ? `${s.avgFixWd} wd` : "-"}</td>
+                                    <td>{s.fixed} / {s.total}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          ) : (
+                            <div className="page-sub" style={{ padding: "4px 15px 14px" }}>Numbers appear as defects are sent and closed.</div>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()
+                )}
+
+                {/* Consultant RFI turnaround — mirrors the RFI tab's Analytics view
+                    (same rfiAna data, same classes). The RFI tab keeps its own
+                    Register/Analytics view untouched; this is a read-only mirror. */}
+                <IzToggle label="Consultant RFI turnaround" open={!izClosed.rfiturn} onClick={() => izToggle("rfiturn")} />
+                {!izClosed.rfiturn && (
+                  <>
+                    <div className="rf-strip" style={{ marginTop: 6 }}>
+                      <div className="rf-tile"><b>{rfiAna ? `${rfiAna.tiles.ballConsultants} / ${rfiAna.tiles.ballUs}` : "-"}</b><span>ball in court</span><small>design team / us</small></div>
+                      <div className="rf-tile"><b className={rfiAna && rfiAna.tiles.avgResponseWd > rfiAna.slaWd ? "red" : ""}>{rfiAna?.tiles.avgResponseWd || 0} wd</b><span>avg consultant response</span><small>vs {rfiAna?.slaWd ?? 7} wd allowed</small></div>
+                      <div className="rf-tile"><b className={rfiAna && rfiAna.tiles.overdue > 0 ? "red" : ""}>{rfiAna?.tiles.overdue ?? 0}</b><span>overdue</span><small>past required-by</small></div>
+                      <div className="rf-tile"><b>{rfiAna?.tiles.openTotal ?? 0}</b><span>open RFIs</span><small>of {rfiAna?.tiles.raisedTotal ?? 0} raised</small></div>
+                    </div>
+
+                    <div className="rf-sc">
+                      <h3>Consultant scorecard</h3>
+                      <div className="note">Worst offender first · RAG against the {rfiAna?.slaWd ?? 7} working-day allowance · this table goes in the monthly minutes</div>
+                      {rfiAna && rfiAna.scorecard.length > 0 ? (
+                        <table>
+                          <thead><tr><th>Consultant</th><th>Open</th><th>Avg (wd)</th><th>Median *</th><th>% in SLA †</th><th>Overdue</th><th>Avg late</th><th>Longest</th></tr></thead>
+                          <tbody>
+                            {rfiAna.scorecard.map((s) => {
+                              const rag = (v: number, warn: number, bad: number) => (v >= bad ? "r" : v >= warn ? "a" : "g");
+                              const ragPct = (v: number | null) => (v == null ? "" : v < 50 ? "r" : v < 75 ? "a" : "g");
+                              return (
+                                <tr key={s.consultant}>
+                                  <td className="cname">{s.consultant}</td>
+                                  <td>{s.open}</td>
+                                  <td className={s.answered ? rag(s.avgWd, rfiAna.slaWd, rfiAna.slaWd * 1.6) : ""}>{s.answered ? s.avgWd : "-"}</td>
+                                  <td className={s.answered ? rag(s.medianWd, rfiAna.slaWd, rfiAna.slaWd * 1.6) : ""}>{s.answered ? s.medianWd : "-"}</td>
+                                  <td className={ragPct(s.pctInSla)}>{s.pctInSla == null ? "-" : `${s.pctInSla}%`}</td>
+                                  <td className={s.overdue ? "r" : "g"}>{s.overdue}</td>
+                                  <td className={s.avgLateWd ? rag(s.avgLateWd, 2, 5) : "g"}>{s.avgLateWd ? `${s.avgLateWd} wd` : "-"}</td>
+                                  <td>{s.longestOpenWd ? `${s.longestOpenWd} wd` : "-"}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div className="page-sub" style={{ padding: "4px 15px 14px" }}>Numbers appear as RFIs are sent and answered.</div>
+                      )}
+                      {rfiAna && rfiAna.scorecard.length > 0 && (
+                        <div className="rf-guard" style={{ padding: "2px 15px 12px" }}>
+                          * Median = the middle answer time, so one slow RFI can&apos;t skew it. &nbsp; † % in SLA = share answered within the {rfiAna.slaWd} working-day allowance.
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
 
               </>
