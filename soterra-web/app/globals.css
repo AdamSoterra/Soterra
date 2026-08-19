@@ -733,6 +733,15 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .iz-sub{flex:1 1 auto;min-width:0;font-size:12px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .iz-arr{flex:0 0 auto;color:var(--mut);font-size:16px}
 .iz-none{padding:14px 4px;font-size:13.5px;color:var(--mut)}
+/* Insights = history feed: one compact, tappable row per filed report. */
+.iz-hist{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.iz-hrow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;font-family:var(--font);background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:11px 14px;cursor:pointer}
+.iz-hrow:hover{border-color:var(--brand)}
+.iz-hdate{font-size:12.5px;font-weight:600;color:var(--mut);min-width:74px;flex:0 0 auto}
+.iz-htype{font-size:13.5px;font-weight:600;color:var(--navy);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iz-hins{font-size:12.5px;color:var(--mut);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iz-hgrow{flex:1 1 auto;min-width:8px}
+.iz-hnum{font-size:12px;font-weight:700;color:var(--slate);background:rgba(146,166,190,.14);border-radius:20px;padding:2px 9px;flex:0 0 auto;white-space:nowrap}
 /* Inspection-reports table (Procore-style aligned, sortable columns) */
 .rt-wrap{overflow-x:auto;border:1px solid var(--line2);border-radius:12px;background:#fff}
 .rt{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px;min-width:560px}

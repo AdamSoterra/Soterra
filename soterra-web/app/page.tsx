@@ -850,6 +850,10 @@ export default function Page() {
   // closed when its key is true. Lets a manager fold away the long lists.
   const [izClosed, setIzClosed] = useState<Record<string, boolean>>({});
   const izToggle = (k: string) => setIzClosed((s) => ({ ...s, [k]: !s[k] }));
+  // Inspections tab splits into two pockets so the two inspection types never
+  // mix on screen. External (council + consultant — what moves the job) opens
+  // by default; Internal is the crew's own pre-inspection checks.
+  const [inspPocket, setInspPocket] = useState<"external" | "internal">("external");
   // Past-inspections list filters: free-text search, trade (discipline), outcome.
   const [izSearch, setIzSearch] = useState("");
   const [izDisc, setIzDisc] = useState(""); // "" = all trades
@@ -1182,11 +1186,10 @@ export default function Page() {
     // The Inspections tab (and Insights, for the failure counts) needs the
     // checklists — the pre-inspection QA checks and the safety plans.
     if ((tab === "inspections" || tab === "insights") && !checklists.length) loadChecklists();
-    // Insights is the analytics home: pull the QA close-out scorecard and the
-    // RFI turnaround the first time the tab opens. loadCoAna self-guards on
-    // coLoaded; loadRfiAna only fires while rfiAna is still empty — so each
-    // fetches once.
-    if (tab === "insights") { loadCoAna(); if (!rfiAna) loadRfiAna(); }
+    // The External pocket of the Inspections tab carries the QA close-out
+    // scorecard, so pull it whenever that tab opens. loadCoAna self-guards on
+    // coLoaded, so it fetches once. Insights is now just history — no analytics.
+    if (tab === "inspections") loadCoAna();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, evLoaded, taskLoaded, docsLoaded, insightsLoaded, projectId]);
 
@@ -3602,13 +3605,36 @@ export default function Page() {
               <div>
                 <div className="page-h">Inspections</div>
                 <div className="page-sub" style={{ marginBottom: 0 }}>
-                  Your pre-inspection checks and the council and consultant reports filed on {projName}.
+                  {inspPocket === "external"
+                    ? `Council and consultant reports filed on ${projName} — and what they keep pulling you up on.`
+                    : `Your crew's own pre-inspection checks on ${projName} — catch it before the inspector does.`}
                 </div>
               </div>
-              <button className="cal-new" onClick={() => { setNewCl({ eventId: null, eventTitle: null }); setNewClKind("inspection"); setNewClCode(""); setClErr(null); }}>＋ New check</button>
+              {inspPocket === "internal"
+                ? <button className="cal-new" onClick={() => { setNewCl({ eventId: null, eventTitle: null }); setNewClKind("inspection"); setNewClCode(""); setClErr(null); }}>＋ New check</button>
+                : <button className="cal-new" onClick={() => { if (!repCurrent) reportFileRef.current?.click(); }}>＋ Add report</button>}
             </div>
 
-            {/* ── Section 1: the pre-inspection QA checks we generate ── */}
+            {/* Two pockets so the inspection types never mix. External (council +
+                consultant — what moves the job) opens first; Internal is our own
+                pre-inspection checks. */}
+            <div className="rf-vs" style={{ marginTop: 14 }}>
+              <button className={"rf-vsb" + (inspPocket === "external" ? " act" : "")} onClick={() => setInspPocket("external")}>External</button>
+              <button className={"rf-vsb" + (inspPocket === "internal" ? " act" : "")} onClick={() => setInspPocket("internal")}>Internal</button>
+            </div>
+
+            {inspPocket === "internal" && (<>
+            {/* ── Internal: the pre-inspection QA checks we generate ── */}
+            {checklists.length > 0 && (() => {
+              const done = checklists.filter((c) => c.status === "done").length;
+              return (
+                <div className="rf-strip" style={{ marginTop: 12 }}>
+                  <div className="rf-tile"><b>{checklists.length}</b><span>checks run</span><small>pre-inspection checks</small></div>
+                  <div className="rf-tile"><b>{done}</b><span>done</span><small>ticked off on site</small></div>
+                  <div className="rf-tile"><b>{checklists.length - done}</b><span>open</span><small>still to close</small></div>
+                </div>
+              );
+            })()}
             <div className="sub-k" style={{ marginTop: 20 }}>Pre-inspection checks<span>{checklists.length}</span></div>
             {checklists.length === 0 ? (
               <div className="page-sub" style={{ marginTop: 4 }}>
@@ -3643,6 +3669,150 @@ export default function Page() {
                 </>
               );
             })()}
+            </>)}
+
+            {inspPocket === "external" && (<>
+            {/* ── External outcomes: the story the council + consultant reports tell ── */}
+            {insightsLoaded && (insights?.summary.inspections ?? 0) > 0 && (
+              <div className="rf-strip" style={{ marginTop: 12 }}>
+                <div className="rf-tile"><b>{insights!.summary.inspections}</b><span>reports read</span><small>council + consultant</small></div>
+                <div className="rf-tile"><b>{insights!.summary.graded ? Math.round((insights!.summary.cleanPasses / insights!.summary.graded) * 100) : 0}%</b><span>clean pass</span><small>of {insights!.summary.graded} graded</small></div>
+                <div className="rf-tile"><b className={insights!.summary.returnVisits > 0 ? "red" : ""}>{insights!.summary.returnVisits}</b><span>return visits</span><small>partial or failed</small></div>
+                <div className="rf-tile"><b>{insights!.summary.failedItems}</b><span>items flagged</span><small>across all reports</small></div>
+              </div>
+            )}
+
+            {/* What keeps failing — moved from the old Insights tab. By-trade
+                chart + drill-down; the headline counts now live in the strip. */}
+            {insightsLoaded && (insights?.summary.inspections ?? 0) > 0 && insights!.categories.length > 0 && (
+              <>
+                <IzToggle label="What keeps failing" open={!izClosed.fails} onClick={() => izToggle("fails")} />
+                {!izClosed.fails && (
+                  <>
+                    <div className="iz-note"><b>●</b> Every item below came off one of your own reports.</div>
+                    {(() => {
+                      const selCat = insights!.selectedCategory ?? insights!.categories[0].category;
+                      const selCount = insights!.categories.find((c) => c.category === selCat)?.count ?? 0;
+                      const items = insights!.topItems;
+                      const maxN = Math.max(1, ...items.map((i) => i.count));
+                      const shown = items.reduce((s, i) => s + i.count, 0);
+                      const more = Math.max(0, selCount - shown);
+                      const maxCat = insights!.categories[0]?.count || 1;
+                      return (
+                        <div className="iz-split">
+                          <div className="iz-card">
+                            <div className="iz-cardh">
+                              <div className="iz-cardt">By trade</div>
+                              <div className="iz-cards">Across every report. Tap one to open it.</div>
+                            </div>
+                            <div className="iz-bars">
+                              {insights!.categories.map((c) => {
+                                const on = c.category === selCat;
+                                return (
+                                  <button key={c.category} className={"iz-bar" + (on ? " on" : "")} onClick={() => { setCatFilter(c.category); loadInsights(c.category); }} title={`Show ${c.category}`}>
+                                    <span className="iz-bl"><span className="rank-dot" style={{ background: catColor(c.category) }} /><span>{c.category}</span></span>
+                                    <span className="iz-bt"><span className="iz-bf" style={{ width: `${Math.round((c.count / maxCat) * 100)}%`, background: catColor(c.category) }} /></span>
+                                    <span className="iz-bn">{c.count}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div className="iz-cardf">{insights!.summary.failedItems} items · {insights!.summary.inspections} reports</div>
+                          </div>
+
+                          <div className="iz-card">
+                            <div className="iz-ddh">
+                              <div className="iz-sw" style={{ background: catColor(selCat) }} />
+                              <div>
+                                <div className="iz-ddn">{selCat}</div>
+                                <div className="iz-ddm">{selCount} item{selCount === 1 ? "" : "s"} across your reports · most repeated at the top</div>
+                              </div>
+                            </div>
+                            {items.length === 0 ? (
+                              <div className="page-sub" style={{ padding: "16px 20px", marginBottom: 0 }}>Nothing to show here yet.</div>
+                            ) : (
+                              <div className="iz-list">
+                                {items.map((t, i) => (
+                                  <div className="iz-item" key={i}>
+                                    <div className="iz-im">
+                                      <div className="iz-it">{t.title}</div>
+                                      {t.firstSeen && t.lastSeen && t.firstSeen !== t.lastSeen && (
+                                        <div className="iz-ispan">open {t.firstSeen} → {t.lastSeen}</div>
+                                      )}
+                                      <div className="iz-itk"><div className="iz-itf" style={{ width: `${Math.round((t.count / maxN) * 100)}%`, background: catColor(selCat) }} /></div>
+                                    </div>
+                                    <div className="iz-ic">{t.count}<small>×</small></div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <div className="iz-ddf"><span className="more">{more > 0 ? `+ ${more} more ${selCat} item${more === 1 ? "" : "s"}` : "All items shown"}</span><span>the number is how many inspections it came up on</span></div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+              </>
+            )}
+
+            {/* Subcontractor close-out — moved from the old Insights tab. */}
+            {insightsLoaded && (insights?.summary.inspections ?? 0) > 0 && (
+              <>
+                <IzToggle label="Subcontractor close-out" open={!izClosed.closeout} onClick={() => izToggle("closeout")} />
+                {!izClosed.closeout && (
+                  coLoading && !coAna ? (
+                    <div className="page-sub" style={{ marginTop: 4 }}>Loading…</div>
+                  ) : !coAna ? (
+                    <div className="page-sub" style={{ marginTop: 4 }}>Couldn&apos;t load the scorecard just now.</div>
+                  ) : (() => {
+                    const t = coAna.tiles;
+                    const allZero = t.open === 0 && t.readyForReview === 0 && t.withConsultant === 0 && t.closed === 0;
+                    if (allZero) {
+                      return (
+                        <div className="page-sub" style={{ marginTop: 4 }}>
+                          No defects have been sent to subs yet - the scorecard fills in as you send and close items.
+                        </div>
+                      );
+                    }
+                    return (
+                      <>
+                        <div className="rf-strip" style={{ marginTop: 6 }}>
+                          <div className="rf-tile"><b>{t.open}</b><span>open</span><small>with subs or still to send</small></div>
+                          <div className="rf-tile"><b>{t.readyForReview}</b><span>ready for review</span><small>fixed, back with you</small></div>
+                          <div className="rf-tile"><b>{t.withConsultant}</b><span>with consultant</span><small>out for sign-off</small></div>
+                          <div className="rf-tile"><b>{t.closed}</b><span>closed</span><small>signed off and done</small></div>
+                          <div className="rf-tile"><b>{t.avgCloseoutWd || 0} wd</b><span>avg close-out</span><small>avg working days to close</small></div>
+                        </div>
+
+                        <div className="rf-sc">
+                          <h3>Subcontractor scorecard</h3>
+                          <div className="note">Worst offender first · overdue = past {coAna.slaWd} working days with the sub</div>
+                          {coAna.scorecard.length > 0 ? (
+                            <table>
+                              <thead><tr><th>Sub</th><th>Open</th><th>Overdue</th><th>Avg fix (wd)</th><th>Fixed</th></tr></thead>
+                              <tbody>
+                                {coAna.scorecard.map((s) => (
+                                  <tr key={s.sub}>
+                                    <td className="cname">{s.sub}</td>
+                                    <td>{s.open}</td>
+                                    <td className={s.overdue ? "r" : "g"}>{s.overdue}</td>
+                                    <td>{s.fixed ? `${s.avgFixWd} wd` : "-"}</td>
+                                    <td>{s.fixed} / {s.total}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          ) : (
+                            <div className="page-sub" style={{ padding: "4px 15px 14px" }}>Numbers appear as defects are sent and closed.</div>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()
+                )}
+              </>
+            )}
 
             {/* ── Section 2: the filed council + consultant inspection reports ── */}
             <input ref={reportFileRef} type="file" accept="application/pdf" multiple style={HIDDEN_INPUT}
@@ -3774,6 +3944,7 @@ export default function Page() {
                 ))}
               </div>
             )}
+            </>)}
           </div></div>
         )}
 
@@ -4121,7 +4292,7 @@ export default function Page() {
                 <div className="page-h">Insights</div>
                 <div className="page-sub" style={{ marginBottom: 0 }}>
                   {insights?.company.name ? `${insights.company.name} · ` : ""}
-                  what you keep getting pulled up on, across {insights?.company.sites === 1 ? "your site" : `all ${insights?.company.sites ?? ""} sites`}
+                  every report filed, newest first{insights && insights.company.sites > 1 ? ` — across all ${insights.company.sites} sites` : ""}
                 </div>
               </div>
             </div>
@@ -4130,218 +4301,32 @@ export default function Page() {
               <div className="page-sub" style={{ marginTop: 18 }}>Loading…</div>
             ) : (insights?.summary.inspections ?? 0) === 0 ? (
               <div className="cal-card" style={{ marginTop: 18 }}>
-                <b style={{ color: "var(--navy)" }}>Nothing to learn from yet.</b>
-                <p className="page-sub" style={{ margin: "6px 0 12px" }}>Add your council and consultant reports on the Inspections tab. Once a handful are in, this shows what your crew keeps getting pulled up on across every report.</p>
+                <b style={{ color: "var(--navy)" }}>No history yet.</b>
+                <p className="page-sub" style={{ margin: "6px 0 12px" }}>As you file council and consultant reports on the Inspections tab, every one lands here as a running record — newest first.</p>
                 <button className="lg-btn primary" style={{ height: 42, margin: 0, width: "auto", padding: "0 18px" }} onClick={() => setTab("inspections")}>Go to Inspections</button>
               </div>
             ) : (
               <>
-                {/* Headline counts — what fails and how much. No grading, no
-                    reinspections, no fix-tracking: this page just learns what
-                    keeps getting pulled up. The whole block folds under one toggle. */}
-                <IzToggle label="What keeps failing" open={!izClosed.fails} onClick={() => izToggle("fails")} />
-                {!izClosed.fails && (
-                <>
-                <div className="iz-kpis" style={{ marginTop: 4 }}>
-                  <div className="iz-kpi hero">
-                    <div className="iz-lab">Items flagged</div>
-                    <div className="iz-val">{insights!.summary.failedItems}</div>
-                    <div className="iz-sub">things picked up in your reports</div>
-                  </div>
-                  <div className="iz-kpi">
-                    <div className="iz-lab">Reports read</div>
-                    <div className="iz-val">{insights!.summary.inspections}</div>
-                    <div className="iz-sub">council + consultant inspections</div>
-                  </div>
-                  <div className="iz-kpi">
-                    <div className="iz-lab">Worst trade</div>
-                    {insights!.categories[0] ? (
-                      <>
-                        <div className="iz-trade"><span className="rank-dot" style={{ width: 12, height: 12, background: catColor(insights!.categories[0].category) }} /><span className="iz-val">{insights!.categories[0].category}</span></div>
-                        <div className="iz-sub">{insights!.categories[0].count} item{insights!.categories[0].count === 1 ? "" : "s"}, most of any trade</div>
-                      </>
-                    ) : (
-                      <div className="iz-val">—</div>
-                    )}
-                  </div>
-                </div>
-                <div className="iz-note"><b>●</b> Every item below came off one of your own reports.</div>
-
-                {insights!.categories.length === 0 ? (
-                  <div className="cal-card"><div className="page-sub" style={{ marginBottom: 0 }}>Nothing failed yet across your filed reports. Enjoy it.</div></div>
-                ) : (() => {
-                  const selCat = insights!.selectedCategory ?? insights!.categories[0].category;
-                  const selCount = insights!.categories.find((c) => c.category === selCat)?.count ?? 0;
-                  const items = insights!.topItems;
-                  const maxN = Math.max(1, ...items.map((i) => i.count));
-                  const shown = items.reduce((s, i) => s + i.count, 0);
-                  const more = Math.max(0, selCount - shown);
-                  const maxCat = insights!.categories[0]?.count || 1;
-                  return (
-                    <div className="iz-split">
-                      <div className="iz-card">
-                        <div className="iz-cardh">
-                          <div className="iz-cardt">By trade</div>
-                          <div className="iz-cards">Across every report. Tap one to open it.</div>
-                        </div>
-                        <div className="iz-bars">
-                          {insights!.categories.map((c) => {
-                            const on = c.category === selCat;
-                            return (
-                              <button key={c.category} className={"iz-bar" + (on ? " on" : "")} onClick={() => { setCatFilter(c.category); loadInsights(c.category); }} title={`Show ${c.category}`}>
-                                <span className="iz-bl"><span className="rank-dot" style={{ background: catColor(c.category) }} /><span>{c.category}</span></span>
-                                <span className="iz-bt"><span className="iz-bf" style={{ width: `${Math.round((c.count / maxCat) * 100)}%`, background: catColor(c.category) }} /></span>
-                                <span className="iz-bn">{c.count}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="iz-cardf">{insights!.summary.failedItems} items · {insights!.summary.inspections} reports</div>
-                      </div>
-
-                      <div className="iz-card">
-                        <div className="iz-ddh">
-                          <div className="iz-sw" style={{ background: catColor(selCat) }} />
-                          <div>
-                            <div className="iz-ddn">{selCat}</div>
-                            <div className="iz-ddm">{selCount} item{selCount === 1 ? "" : "s"} across your reports · most repeated at the top</div>
-                          </div>
-                        </div>
-                        {items.length === 0 ? (
-                          <div className="page-sub" style={{ padding: "16px 20px", marginBottom: 0 }}>Nothing to show here yet.</div>
-                        ) : (
-                          <div className="iz-list">
-                            {items.map((t, i) => (
-                              <div className="iz-item" key={i}>
-                                <div className="iz-im">
-                                  <div className="iz-it">{t.title}</div>
-                                  {/* The span an item stayed open matters more than its
-                                      count — open time is what delays the CCC. Only shown
-                                      when it genuinely spans more than one date. */}
-                                  {t.firstSeen && t.lastSeen && t.firstSeen !== t.lastSeen && (
-                                    <div className="iz-ispan">open {t.firstSeen} → {t.lastSeen}</div>
-                                  )}
-                                  <div className="iz-itk"><div className="iz-itf" style={{ width: `${Math.round((t.count / maxN) * 100)}%`, background: catColor(selCat) }} /></div>
-                                </div>
-                                <div className="iz-ic">{t.count}<small>×</small></div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <div className="iz-ddf"><span className="more">{more > 0 ? `+ ${more} more ${selCat} item${more === 1 ? "" : "s"}` : "All items shown"}</span><span>the number is how many inspections it came up on</span></div>
-                      </div>
-                    </div>
-                  );
-                })()}
-                </>
-                )}
-
-                {/* Subcontractor close-out — moved here from the Inspections tab.
-                    Same tiles + scorecard, now living on the analytics home. Loaded
-                    when the Insights tab opens, so it shows expanded, no click. */}
-                <IzToggle label="Subcontractor close-out" open={!izClosed.closeout} onClick={() => izToggle("closeout")} />
-                {!izClosed.closeout && (
-                  coLoading && !coAna ? (
-                    <div className="page-sub" style={{ marginTop: 4 }}>Loading…</div>
-                  ) : !coAna ? (
-                    <div className="page-sub" style={{ marginTop: 4 }}>Couldn&apos;t load the scorecard just now.</div>
-                  ) : (() => {
-                    const t = coAna.tiles;
-                    const allZero = t.open === 0 && t.readyForReview === 0 && t.withConsultant === 0 && t.closed === 0;
-                    if (allZero) {
-                      return (
-                        <div className="page-sub" style={{ marginTop: 4 }}>
-                          No defects have been sent to subs yet - the scorecard fills in as you send and close items.
-                        </div>
-                      );
-                    }
+                <div className="iz-hist">
+                  {insights!.inspections.map((r) => {
+                    const oc = outcomeChip(r.source, r.outcome, r.itemCount);
                     return (
-                      <>
-                        <div className="rf-strip" style={{ marginTop: 6 }}>
-                          <div className="rf-tile"><b>{t.open}</b><span>open</span><small>with subs or still to send</small></div>
-                          <div className="rf-tile"><b>{t.readyForReview}</b><span>ready for review</span><small>fixed, back with you</small></div>
-                          <div className="rf-tile"><b>{t.withConsultant}</b><span>with consultant</span><small>out for sign-off</small></div>
-                          <div className="rf-tile"><b>{t.closed}</b><span>closed</span><small>signed off and done</small></div>
-                          <div className="rf-tile"><b>{t.avgCloseoutWd || 0} wd</b><span>avg close-out</span><small>avg working days to close</small></div>
-                        </div>
-
-                        <div className="rf-sc">
-                          <h3>Subcontractor scorecard</h3>
-                          <div className="note">Worst offender first · overdue = past {coAna.slaWd} working days with the sub</div>
-                          {coAna.scorecard.length > 0 ? (
-                            <table>
-                              <thead><tr><th>Sub</th><th>Open</th><th>Overdue</th><th>Avg fix (wd)</th><th>Fixed</th></tr></thead>
-                              <tbody>
-                                {coAna.scorecard.map((s) => (
-                                  <tr key={s.sub}>
-                                    <td className="cname">{s.sub}</td>
-                                    <td>{s.open}</td>
-                                    <td className={s.overdue ? "r" : "g"}>{s.overdue}</td>
-                                    <td>{s.fixed ? `${s.avgFixWd} wd` : "-"}</td>
-                                    <td>{s.fixed} / {s.total}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          ) : (
-                            <div className="page-sub" style={{ padding: "4px 15px 14px" }}>Numbers appear as defects are sent and closed.</div>
-                          )}
-                        </div>
-                      </>
+                      <button className="iz-hrow" key={r.id} onClick={async () => {
+                        const res = await apiFetch(`/api/inspections?id=${encodeURIComponent(r.id)}`);
+                        const data = await res.json();
+                        if (res.ok) setOpenInspection({ inspection: r, items: data.items || [] });
+                      }}>
+                        <span className="iz-hdate">{r.inspectedOn || "—"}</span>
+                        <span className="rt-badge" style={{ background: oc.cls === "pass" ? "var(--green)" : oc.cls === "fail" ? "var(--red)" : undefined }}>{r.inspectionCode || (r.source === "council" ? "BCA" : "CON")}</span>
+                        <span className="iz-htype">{r.inspectionType || r.doc}</span>
+                        <span className="iz-hins">{r.inspector || ""}</span>
+                        <span className="iz-hgrow" />
+                        {r.itemCount ? <span className="iz-hnum">{r.itemCount} to fix</span> : null}
+                        <span className={"pill " + oc.cls}>{oc.label}</span>
+                      </button>
                     );
-                  })()
-                )}
-
-                {/* Consultant RFI turnaround — mirrors the RFI tab's Analytics view
-                    (same rfiAna data, same classes). The RFI tab keeps its own
-                    Register/Analytics view untouched; this is a read-only mirror. */}
-                <IzToggle label="Consultant RFI turnaround" open={!izClosed.rfiturn} onClick={() => izToggle("rfiturn")} />
-                {!izClosed.rfiturn && (
-                  <>
-                    <div className="rf-strip" style={{ marginTop: 6 }}>
-                      <div className="rf-tile"><b>{rfiAna ? `${rfiAna.tiles.ballConsultants} / ${rfiAna.tiles.ballUs}` : "-"}</b><span>ball in court</span><small>design team / us</small></div>
-                      <div className="rf-tile"><b className={rfiAna && rfiAna.tiles.avgResponseWd > rfiAna.slaWd ? "red" : ""}>{rfiAna?.tiles.avgResponseWd || 0} wd</b><span>avg consultant response</span><small>vs {rfiAna?.slaWd ?? 7} wd allowed</small></div>
-                      <div className="rf-tile"><b className={rfiAna && rfiAna.tiles.overdue > 0 ? "red" : ""}>{rfiAna?.tiles.overdue ?? 0}</b><span>overdue</span><small>past required-by</small></div>
-                      <div className="rf-tile"><b>{rfiAna?.tiles.openTotal ?? 0}</b><span>open RFIs</span><small>of {rfiAna?.tiles.raisedTotal ?? 0} raised</small></div>
-                    </div>
-
-                    <div className="rf-sc">
-                      <h3>Consultant scorecard</h3>
-                      <div className="note">Worst offender first · RAG against the {rfiAna?.slaWd ?? 7} working-day allowance · this table goes in the monthly minutes</div>
-                      {rfiAna && rfiAna.scorecard.length > 0 ? (
-                        <table>
-                          <thead><tr><th>Consultant</th><th>Open</th><th>Avg (wd)</th><th>Median *</th><th>% in SLA †</th><th>Overdue</th><th>Avg late</th><th>Longest</th></tr></thead>
-                          <tbody>
-                            {rfiAna.scorecard.map((s) => {
-                              const rag = (v: number, warn: number, bad: number) => (v >= bad ? "r" : v >= warn ? "a" : "g");
-                              const ragPct = (v: number | null) => (v == null ? "" : v < 50 ? "r" : v < 75 ? "a" : "g");
-                              return (
-                                <tr key={s.consultant}>
-                                  <td className="cname">{s.consultant}</td>
-                                  <td>{s.open}</td>
-                                  <td className={s.answered ? rag(s.avgWd, rfiAna.slaWd, rfiAna.slaWd * 1.6) : ""}>{s.answered ? s.avgWd : "-"}</td>
-                                  <td className={s.answered ? rag(s.medianWd, rfiAna.slaWd, rfiAna.slaWd * 1.6) : ""}>{s.answered ? s.medianWd : "-"}</td>
-                                  <td className={ragPct(s.pctInSla)}>{s.pctInSla == null ? "-" : `${s.pctInSla}%`}</td>
-                                  <td className={s.overdue ? "r" : "g"}>{s.overdue}</td>
-                                  <td className={s.avgLateWd ? rag(s.avgLateWd, 2, 5) : "g"}>{s.avgLateWd ? `${s.avgLateWd} wd` : "-"}</td>
-                                  <td>{s.longestOpenWd ? `${s.longestOpenWd} wd` : "-"}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      ) : (
-                        <div className="page-sub" style={{ padding: "4px 15px 14px" }}>Numbers appear as RFIs are sent and answered.</div>
-                      )}
-                      {rfiAna && rfiAna.scorecard.length > 0 && (
-                        <div className="rf-guard" style={{ padding: "2px 15px 12px" }}>
-                          * Median = the middle answer time, so one slow RFI can&apos;t skew it. &nbsp; † % in SLA = share answered within the {rfiAna.slaWd} working-day allowance.
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-
+                  })}
+                </div>
               </>
             )}
           </div></div>
