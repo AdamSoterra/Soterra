@@ -1,206 +1,17 @@
 "use client";
-import { useEffect, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import { useState } from "react";
 
-// Set CSS custom properties inline without fighting React's CSSProperties type.
-const cvar = (o: Record<string, string>): CSSProperties => o as unknown as CSSProperties;
-
-// Soterra public landing (Adam, 2026-07-16 rebuild).
-// Positioning: two layers. Layer 1 = the project assistant people use today.
-// Layer 2 = the company learning engine (the moat). Umbrella line = "Turning
-// construction data into company intelligence." Partner-backed (AUT). Same
-// blue/navy palette as the previous version. Rendered as the signed-out front
-// page (app/page.tsx, with Clerk handlers) and at /preview/command.
-
-function Cta({ kind, label, big, onAct }: { kind: "solid" | "ghost"; label: string; big?: boolean; onAct?: () => void }) {
-  const cls = `${kind}${big ? " big" : ""}`;
-  return onAct ? (
-    <button type="button" className={cls} onClick={onAct}>{label}</button>
-  ) : (
-    <a className={cls} href="/">{label}</a>
-  );
-}
-
-// Layer 1 capabilities — kept tight, no fluff (Adam's brief).
-const DO_NOW = [
-  "Reads and understands all your project documents: drawings, specs, schedules.",
-  "Answers construction questions from your documents and the Building Code.",
-  "Helps write and review RFIs.",
-  "Checks plans for missing or conflicting information.",
-  "Generates a pre-inspection QA check your crew ticks off on site.",
-  "Writes safety plans and the CCC evidence pack.",
-];
-
-// Layer 2 — the kind of insight the learning engine surfaces over time.
-const INSIGHTS = [
-  {
-    tag: "62 apartment projects",
-    quote: "Waterproofing penetrations fail 28% more often than any other inspection.",
-  },
-  {
-    tag: "Pre-line inspections",
-    quote: "3 in 5 fail first time on your jobs, almost always on missing back blocking.",
-  },
-  {
-    tag: "3 years of records",
-    quote: "Before ceiling inspections, check these five items: they've caused 140 defects.",
-  },
-];
-
-// ─── Partner logos — SVG recreations traced from the official brand images
-// (Adam, 2026-07-16): AUT Ventures peak mark, AUT outline wordmark, and the
-// CISRC red network-globe with its navy background removed (transparent vector,
-// text flipped dark so it reads on the light plates). ───
-function LogoVentures() {
-  return (
-    <div className="lg">
-      <svg className="av-mark" viewBox="0 0 100 88" aria-hidden="true">
-        <defs>
-          <linearGradient id="avgrad" x1="0" y1="0" x2="0.55" y2="1">
-            <stop offset="0" stopColor="#2E9ED2" />
-            <stop offset="1" stopColor="#14486B" />
-          </linearGradient>
-        </defs>
-        {/* light-blue upstroke → gradient downstroke → green upstroke */}
-        <polygon points="0,88 30,4 46,4 16,88" fill="#36B5E8" />
-        <polygon points="30,4 46,4 66,62 50,62" fill="url(#avgrad)" />
-        <polygon points="50,62 66,62 96,8 80,8" fill="#79BD44" />
-      </svg>
-      <span className="av-txt">AUT<br />VENTURES</span>
-    </div>
-  );
-}
-function LogoAUT() {
-  return (
-    <div className="lg">
-      {/* Real AUT mark (transparent PNG lifted from the official file) */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="aut-img" src="/partners/aut.png" alt="AUT" />
-    </div>
-  );
-}
-function LogoCIS() {
-  return (
-    <div className="lg">
-      {/* Real CISRC globe, lifted off its maroon background; text set dark for the light plate */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="cis-img" src="/partners/cisrc-globe.png" alt="" />
-      <span className="cis-txt">AUT COMPUTER AND INFORMATION<br />SCIENCES RESEARCH CENTRE</span>
-    </div>
-  );
-}
-
-// ─── Layer 1 phone demo — a sped-up, looping construction conversation that
-// shows the two sources (plans + NZ Building Code) and then a generated check.
-// The last turn used to book an inspection onto a shared calendar; that was cut
-// from the product, and the assistant is now instructed to refuse it, so the
-// site must not sell it. Facts signed off by Adam 2026-07-16. ───
-type DemoTurn = { q: string; src: string | null; ans: ReactNode; cite?: { code: string; sub: string }; tag?: string };
-const DEMO_TURNS: DemoTurn[] = [
-  {
-    q: "What's the fire rating on the exterior doors?",
-    src: "From your plans",
-    ans: <><b>FRR 60</b>, fire-rated 60 minutes. Leaf 910 × 2240 × 48&nbsp;mm.</>,
-    cite: { code: "ED003 · Door Schedule", sub: "95% Detail Design · p60/85" },
-  },
-  {
-    q: "Does the code need a cavity behind the weatherboards?",
-    src: "From the NZ Building Code",
-    ans: <><b>E2/AS1</b> calls for a drained cavity behind absorbent claddings like weatherboard. Confirm with your designer.</>,
-    cite: { code: "E2/AS1 · External Moisture", sub: "NZ Building Code" },
-  },
-  {
-    q: "Get me ready for the pre-line inspection.",
-    src: null,
-    ans: <>Done. <b>14 checks</b>, each cited to your plans, the Code or the GIB manual.</>,
-    tag: "✓ Saved as a check you can tick off on site",
-  },
-];
-
-// ─── Layer 3 visual — the payoff answer, not an illustration of a building.
-// One question answered from all three sources at once (plans + Building Code +
-// company history), which is the whole Layer 3 claim and the one thing no
-// competitor can screenshot. Copy signed off by Adam 2026-07-16. ───
-function AnswerCard() {
-  return (
-    <div className="phone">
-      <div className="ph-top"><span className="ph-cam" /></div>
-      <div className="ph-screen">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <div className="ph-bar"><img src="/logo-mark.png" alt="" /><b>43 Kauri Road</b></div>
-        <div className="q">Anything I should watch before the Level 3 fire penetration inspection?</div>
-        <div className="a l3a">
-          <div className="srcb">
-            <div className="a-src">From your plans</div>
-            <p>18 services cross the <b>FRR 60</b> separation on Level 3.</p>
-            <small className="cref">A-402 · Fire Rating Plan</small>
-          </div>
-          <div className="srcb">
-            <div className="a-src grn">From the NZ Building Code</div>
-            <p>Penetrations must be fire-stopped to maintain the separation&apos;s FRR, using a system tested to AS 4072.1. Confirm the detail with your fire engineer.</p>
-            <small className="cref">C/AS2 · Protection from Fire</small>
-          </div>
-          <div className="srcb">
-            <div className="a-src pur">From your history</div>
-            <p>Fire penetrations are your <b>most-failed first inspection</b>: 41 defects across 62 projects, nearly all missing collars on PVC waste.</p>
-          </div>
-          <div className="l3act">Want me to add the check to Thursday&apos;s pre-inspection?</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ChatDemo() {
-  // 3 frames per turn: 0 = question in, 1 = typing dots, 2 = answer.
-  const [f, setF] = useState(0);
-  useEffect(() => {
-    const delays = [1000, 1100, 2800, 1000, 1100, 2800, 1000, 1100, 2800];
-    const id = setTimeout(() => setF((x) => (x + 1) % delays.length), delays[f]);
-    return () => clearTimeout(id);
-  }, [f]);
-  const turn = Math.floor(f / 3);
-  const stage = f % 3;
-  const t = DEMO_TURNS[turn];
-  return (
-    <div className="phone">
-      <div className="ph-top"><span className="ph-cam" /></div>
-      <div className="ph-screen">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <div className="ph-bar"><img src="/logo-mark.png" alt="" /><b>43 Kauri Road</b></div>
-        <div className="chat">
-          <div className="q pop" key={`q${turn}`}>{t.q}</div>
-          {stage === 1 && <div className="dots pop"><i /><i /><i /></div>}
-          {stage === 2 && (
-            <div className="a pop" key={`a${turn}`}>
-              {t.src && <div className="a-src">{t.src}</div>}
-              <p>{t.ans}</p>
-              {t.cite && (
-                <div className="cite"><span className="ci">▦</span><span className="ct"><b>{t.cite.code}</b><small>{t.cite.sub}</small></span></div>
-              )}
-              {t.tag && <div className="cal-ok">{t.tag}</div>}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+// Soterra public landing — product-first rebuild (2026-08-20).
+// Flow: hero (calm) → what it does (the assistant) → how it works (3 sources
+// into one sealed AI) → the proof (trackers) → why now (liability) → team → CTA.
+// Rendered as the signed-out front page from app/page.tsx with Clerk handlers,
+// and at /preview/command with none (buttons become no-ops there). All styles
+// are scoped under .lp so nothing leaks into the app.
 
 export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => void; onGetStarted?: () => void }) {
-  // Phone: the header is brand + hamburger only. The site's job is to sell;
-  // logging in belongs in the app, so the CTAs live in the menu (and this is
-  // where app-store badges will go later).
   const [menu, setMenu] = useState(false);
-
-  useEffect(() => {
-    const io = new IntersectionObserver(
-      (es) => es.forEach((e) => e.isIntersecting && e.target.classList.add("in")),
-      { threshold: 0.16 }
-    );
-    document.querySelectorAll(".lp .rv").forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, []);
+  const go = () => onGetStarted?.();
+  const login = () => onLogin?.();
 
   return (
     <div className="lp">
@@ -209,17 +20,17 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
       <header className="nav">
         <div className="brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-mark.png" alt="" />
-          <span>Soterra</span>
+          <img src="/logo-mark.png" alt="Soterra" /><span>Soterra</span>
         </div>
         <nav className="links">
-          <a href="#now">What it does</a>
-          <a href="#vision">The vision</a>
-          <a href="#safe">Why it&apos;s safe</a>
+          <a href="#assistant">What it does</a>
+          <a href="#how">How it works</a>
+          <a href="#why">Why now</a>
+          <a href="/team">Team</a>
         </nav>
         <div className="navcta">
-          <Cta kind="ghost" label="Log in" onAct={onLogin} />
-          <Cta kind="solid" label="Get set up" onAct={onGetStarted} />
+          <button className="ghost" onClick={login}>Log in</button>
+          <button className="solid" onClick={go}>Get set up</button>
         </div>
         <button className="burger" onClick={() => setMenu((o) => !o)} aria-label="Menu" aria-expanded={menu}>
           {menu ? (
@@ -231,147 +42,227 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
       </header>
       {menu && (
         <div className="msheet">
-          <a href="#now" onClick={() => setMenu(false)}>What it does</a>
-          <a href="#vision" onClick={() => setMenu(false)}>The vision</a>
-          <a href="#safe" onClick={() => setMenu(false)}>Why it&apos;s safe</a>
+          <a href="#assistant" onClick={() => setMenu(false)}>What it does</a>
+          <a href="#how" onClick={() => setMenu(false)}>How it works</a>
+          <a href="#why" onClick={() => setMenu(false)}>Why now</a>
+          <a href="/team" onClick={() => setMenu(false)}>Team</a>
           <div className="msheet-cta">
-            <button className="ghost" onClick={() => { setMenu(false); onLogin?.(); }}>Log in</button>
-            <button className="solid" onClick={() => { setMenu(false); onGetStarted?.(); }}>Get set up</button>
+            <button className="ghost" onClick={() => { setMenu(false); login(); }}>Log in</button>
+            <button className="solid" onClick={() => { setMenu(false); go(); }}>Get set up</button>
           </div>
         </div>
       )}
 
-      {/* ─── HERO — deliberately simple. Headline sits straight under the nav
-           (the eyebrow pill was removed 2026-07-16) and the whole hero is tuned
-           to land on one phone screen, ending on the CTAs. ─── */}
+      {/* HERO — calm, subtle motion */}
       <section className="hero">
-        <h1 className="rv in">Turning construction data into <span className="g">company intelligence.</span></h1>
-        <p className="lead rv in">
-          An AI assistant that knows your whole project today, and a learning engine that captures
-          knowledge from every project to reduce mistakes on the next one.
-        </p>
-        {/* Three ways in, one row: set up, log in, or install the app. /install
-            detects a phone (add to home screen) or a computer (install as a
-            desktop app) and shows only that. Smaller than the old big pair so
-            all three sit side by side. */}
-        <div className="cta cta3 rv in">
-          <Cta kind="solid" label="Get set up" onAct={onGetStarted} />
-          <Cta kind="ghost" label="Log in" onAct={onLogin} />
-          <a className="ghost getapp3" href="/install" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="6" y="2" width="12" height="20" rx="2.6" />
-              <line x1="10.5" y1="18.5" x2="13.5" y2="18.5" />
-            </svg>
+        <div className="mesh" /><div className="grid" />
+        <h1>Turning construction data into <span className="g">company intelligence.</span></h1>
+        <div className="cta">
+          <button className="solid" onClick={go}>Get set up</button>
+          <button className="ghost" onClick={login}>Log in</button>
+          <a className="ghost inst" href="/install">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.6" /><line x1="10.5" y1="18.5" x2="13.5" y2="18.5" /></svg>
             Install
           </a>
         </div>
+        <div className="tryfree">No access code yet? <button className="linkbtn" onClick={go}>Ask it 5 questions free →</button></div>
+        <div className="partners">
+          <div className="pk">Built in partnership with</div>
+          <div className="prow">
+            <div className="plate"><span className="lg">
+              <svg className="av-mark" viewBox="0 0 100 88" aria-hidden="true">
+                <defs><linearGradient id="avg" x1="0" y1="0" x2="0.55" y2="1"><stop offset="0" stopColor="#2E9ED2" /><stop offset="1" stopColor="#14486B" /></linearGradient></defs>
+                <polygon points="0,88 30,4 46,4 16,88" fill="#36B5E8" />
+                <polygon points="30,4 46,4 66,62 50,62" fill="url(#avg)" />
+                <polygon points="50,62 66,62 96,8 80,8" fill="#79BD44" />
+              </svg><span className="av-txt">AUT<br />VENTURES</span></span></div>
+            <div className="plate cisp"><span className="lg">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/partners/cisrc-globe.png" alt="" /><span className="cis-txt">AUT COMPUTER AND INFORMATION SCIENCES RESEARCH CENTRE</span></span></div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <div className="plate"><img className="autimg" src="/partners/aut.png" alt="AUT" /></div>
+          </div>
+        </div>
       </section>
 
-      {/* ─── PARTNERS ─── */}
-      <section className="partners rv">
-        <div className="pk">Built in partnership with</div>
-        <div className="prow">
-          <div className="plate"><LogoVentures /></div>
-          <div className="plate wide"><LogoCIS /></div>
-          <div className="plate"><LogoAUT /></div>
-        </div>
-      </section>
-
-      {/* ─── LAYER 1 — what it does today ─── */}
-      <section className="layer" id="now">
-        <div className="lhead rv">
-          <div className="lbadge pb"><span>Layer 1</span> The project assistant</div>
-          <h2>Run your projects with <span className="g">Soterra.</span></h2>
+      {/* WHAT IT DOES — the assistant */}
+      <section className="band" id="assistant">
+        <div className="center">
+          <div className="kick">The assistant</div>
+          <h2>It helps prevent rework and the delays that come with it, <span className="g">before the job and while it&apos;s underway.</span></h2>
+          <p className="lead">The same assistant works both ends of the job.</p>
         </div>
 
-        <div className="frow rv">
+        <div className="frow">
           <div className="ftext">
-            <div className="fk">Answers from your plans</div>
-            <h3>Soterra understands your drawings, specifications and project documents, so your team spends less time searching and more time building.</h3>
-            <p>Fire ratings, GIB specs, beam sizes and setouts are answered in seconds, with references to the exact sheet.</p>
+            <div className="fk">Before · catch the gaps</div>
+            <h3>It reads your specs, PS1s and drawings, and flags what doesn&apos;t line up.</h3>
+            <p>Contradictions between the spec, the PS1 and the architectural drawings. Gaps in the scope. Missing information. Soterra finds them before they become a variation.</p>
           </div>
           <div className="fvis">
-            <ChatDemo />
-          </div>
-        </div>
-
-        <div className="frow rev rv">
-          <div className="ftext">
-            <div className="fk">Checks before the inspection</div>
-            <h3>Generated from your drawings, the Code and the manufacturer&apos;s manual, with a photo and a note on every item.</h3>
-          </div>
-          <div className="fvis">
-            {/* The check itself. Reuses the .cal-* styles the calendar block
-                used: the day column carries the tick state and the event row
-                carries the item plus where it came from, so the citation shows
-                in the picture and not only in the copy. */}
-            <div className="tablet cal">
-              <div className="cal-h">Pre-line check · 14 items</div>
-              <div className="cal-row"><span className="cal-d">✓</span><span className="cal-ev g">Fyreline to the correct face · GIB p36</span></div>
-              <div className="cal-row"><span className="cal-d">✓</span><span className="cal-ev g">Screw centres to studs · GIB p82</span></div>
-              <div className="cal-row"><span className="cal-d">!</span><span className="cal-ev a">Penetrations fire-stopped · C/AS2</span></div>
-              <div className="cal-row"><span className="cal-d">✓</span><span className="cal-ev g">Insulation, no gaps at dwangs</span></div>
-              <div className="cal-row"><span className="cal-d">✓</span><span className="cal-ev b">Pre-line plumbing signed off · AC1229</span></div>
+            <div className="card">
+              <div className="card-h">🔍 Gap check · Level 4 lining</div>
+              <div className="card-b">
+                <div className="gap-row"><span className="gap-doc">Spec (§9.4)</span><span className="gap-val">13mm fire-rated GIB to garage ceiling</span></div>
+                <div className="gap-row"><span className="gap-doc">Arch A-210</span><span className="gap-val">10mm standard board noted</span></div>
+                <div className="gap-row"><span className="gap-doc">Fire report</span><span className="gap-val">System requires 1× 13mm min.</span></div>
+                <div className="flagrow"><span className="flagpill">Conflict</span><p>Drawing understates the spec and the fire report. Raise before lining, or it fails the fire inspection.</p></div>
+              </div>
             </div>
           </div>
         </div>
 
-        <ul className="bullets rv">
-          {DO_NOW.map((b, i) => (
-            <li key={i}><span className="bx">✓</span>{b}</li>
-          ))}
-        </ul>
-      </section>
-
-      {/* ─── LAYER 2 — the learning engine (the vision) ─── */}
-      <section className="vision" id="vision">
-        <div className="vhead rv">
-          <div className="lbadge pb"><span>Layer 2</span> The learning engine</div>
-          <h2>It learns your history to predict and prevent mistakes <span className="g">before they happen.</span></h2>
-          <p>Soterra learns from your previous projects, using the project data you already have, reliable council and consultant QA, to prevent rework and delays before they repeat.</p>
-        </div>
-
-        <div className="insights rv">
-          {INSIGHTS.map((it, i) => (
-            <div key={i} className="ins" style={cvar({ "--d": `${i * 110}ms` })}>
-              <div className="ins-tag">{it.tag}</div>
-              <p className="ins-q">&ldquo;{it.quote}&rdquo;</p>
-            </div>
-          ))}
-        </div>
-
-      </section>
-
-      {/* ─── LAYER 3 — plans + code + history in one model ─── */}
-      <section className="layer3" id="together">
-        <div className="l3-copy rv">
-          <div className="lbadge pb"><span>Layer 3</span> One connected model</div>
-          <h2>Your history, your live plans and the Building Code, <span className="g">together in one AI.</span></h2>
-          <p>This is where Soterra is heading: everything it knows becomes one model your whole crew can question. It answers from your live drawings, checks against the Building Code, and warns you with what every past project has taught it.</p>
-          <div className="rnd"><span className="rnd-dot" /> In active development with AUT&apos;s research centre · 2 masters theses in progress</div>
-        </div>
-        <div className="l3-vis rv">
-          <AnswerCard />
-        </div>
-      </section>
-
-      {/* ─── SAFE ─── */}
-      <section className="safe" id="safe">
-        <div className="rv">
-          <div className="safe-tick" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        <div className="frow rev">
+          <div className="ftext">
+            <div className="fk">During · answer anything</div>
+            <h3>Ask about any detail and get an answer cited to the exact page.</h3>
+            <p>Your plans, the Building Code, a Standard or the manufacturer&apos;s manual: Soterra answers from whichever one governs, and links straight to the page it came from. No hunting through the drawing set.</p>
           </div>
-          <div className="fk center">Safe to use on site</div>
-          <h2>Every answer is backed by your project.</h2>
-          <p>Soterra only answers using your drawings, specifications and approved references. Every response links back to the exact document, so you always know where the information came from.</p>
+          <div className="fvis">
+            <div className="phone">
+              <div className="pbar"><span className="pmark" /><b>43 Kauri Road</b></div>
+              <div className="pbody">
+                <div className="q">Do we need a cavity behind the cladding on the west wall?</div>
+                <div className="a">
+                  <div className="asrc">From your spec + E2/AS1</div>
+                  <p><b>Yes</b>, a 20mm drained cavity on battens. Direct-fix isn&apos;t permitted in this wind zone.</p>
+                  <div className="cite"><span className="ci">▦</span><span><b>Spec §8.2 · Cladding</b><small>Weathertightness · west elevation</small></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="frow">
+          <div className="ftext">
+            <div className="fk">During · generate the QA that matters</div>
+            <h3>Not a generic checklist. The exact checks that fail on <em>this</em> job.</h3>
+            <p>Anyone can hand you a generic QA sheet and off you go. Soterra builds the sheet from this project&apos;s specs, plans and the Code, weighted by what your crew has failed before. You check what actually matters on this job, and every item says where it came from. H&amp;S plans work the same way.</p>
+          </div>
+          <div className="fvis">
+            <div className="card qacard">
+              <div className="card-h">✅ Pre-line QA · 43 Kauri Road · auto-generated</div>
+              <div className="card-b qa">
+                <div className="qi"><span className="qk" /><div><div className="qt">Insulation fitted tight, no gaps at dwangs</div><div className="qs hist">you failed this 6×</div></div></div>
+                <div className="qi"><span className="qk" /><div><div className="qt">Building wrap lapped and taped at openings</div><div className="qs code">E2/AS1</div></div></div>
+                <div className="qi"><span className="qk" /><div><div className="qt">Penetrations fire-stopped before lining</div><div className="qs code">C/AS2</div></div></div>
+                <div className="qi"><span className="qk" /><div><div className="qt">Nogs in for all sheet edges and fixings</div><div className="qs">from your framing plan</div></div></div>
+                <div className="qi"><span className="qk" /><div><div className="qt">Plumbing pre-line signed off</div><div className="qs">AC1229</div></div></div>
+              </div>
+              <div className="qafoot"><b>Every item traces to this job:</b> its specs, plans, Code or your history. Not a generic list.</div>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* ─── FINAL ─── */}
-      <section className="final rv">
-        <h2>Put your whole project to work.</h2>
-        <p>Set up your company and get the crew asking in minutes.</p>
-        <Cta kind="solid" big label="Get set up →" onAct={onGetStarted} />
+      {/* HOW IT WORKS — convergence */}
+      <section className="band cv" id="how">
+        <div className="center">
+          <div className="kick">How it works</div>
+          <h2>Three sources of knowledge. <span className="g">One private AI.</span></h2>
+          <p className="lead">Soterra brings three worlds together and seals them into an assistant that only your company can reach.</p>
+        </div>
+        <div className="cvgrid">
+          <div className="src s1"><div className="st"><span className="sd" />Soterra base knowledge</div>
+            <ul><li>NZ Building Code</li><li>Standards &amp; determinations</li><li>Manufacturer manuals</li><li>Industry best practice</li></ul></div>
+          <div className="src s2"><div className="st"><span className="sd" />Your company knowledge</div>
+            <ul><li>Every past project</li><li>Council inspections</li><li>Consultant inspections</li><li>Site reports</li></ul></div>
+          <div className="src s3"><div className="st"><span className="sd" />This project</div>
+            <ul><li>Drawings</li><li>Specifications</li><li>Schedules</li><li>PS1s, scopes &amp; reports</li></ul></div>
+        </div>
+        <div className="beams"><div className="beam" /><div className="beam" /><div className="beam" /></div>
+        <div className="core">
+          <span className="cl"><span className="lock">🔒</span> Your company&apos;s private assistant</span>
+          <h3>One place to ask, check and prove.</h3>
+          <p>Sealed to your company by the system. A separate space per project, access-gated, scoped to you. Your data never reaches another company.</p>
+        </div>
+        <p className="sec-note"><b>Your data is yours.</b> It never trains anyone else&apos;s assistant and never lands in a shared pool.</p>
+      </section>
+
+      {/* THE PROOF — trackers */}
+      <section className="band pf">
+        <div className="center">
+          <div className="kick">The proof</div>
+          <h2>It doesn&apos;t just help. <span className="g">It keeps score.</span></h2>
+        </div>
+        <div className="tk3">
+          <div className="trk">
+            <h4>RFI tracker</h4>
+            <div className="tsub">Who holds the ball, and for how long.</div>
+            <div className="tiles">
+              <div className="tile"><b>7</b><span>open</span></div>
+              <div className="tile"><b className="red">3</b><span>overdue</span></div>
+              <div className="tile"><b>9 wd</b><span>avg answer</span></div>
+            </div>
+            <div className="scbar">
+              <div className="scrow"><span className="nm">Structural</span><span className="bar"><span className="fill bad" style={{ width: "82%" }} /></span><span className="v">12 wd</span></div>
+              <div className="scrow"><span className="nm">Fire</span><span className="bar"><span className="fill warn" style={{ width: "56%" }} /></span><span className="v">8 wd</span></div>
+              <div className="scrow"><span className="nm">Services</span><span className="bar"><span className="fill" style={{ width: "34%" }} /></span><span className="v">5 wd</span></div>
+            </div>
+          </div>
+          <div className="trk">
+            <h4>QA close-out</h4>
+            <div className="tsub">Every defect, from raised to signed off.</div>
+            <div className="tiles">
+              <div className="tile"><b>8</b><span>open</span></div>
+              <div className="tile"><b className="grn">14</b><span>closed</span></div>
+              <div className="tile"><b>6 wd</b><span>avg close</span></div>
+            </div>
+            <div className="scbar">
+              <div className="scrow"><span className="nm">Interiors</span><span className="bar"><span className="fill bad" style={{ width: "70%" }} /></span><span className="v">6/10</span></div>
+              <div className="scrow"><span className="nm">Fire sub</span><span className="bar"><span className="fill warn" style={{ width: "57%" }} /></span><span className="v">4/7</span></div>
+              <div className="scrow"><span className="nm">Waterproof</span><span className="bar"><span className="fill" style={{ width: "83%" }} /></span><span className="v">5/6</span></div>
+            </div>
+          </div>
+          <div className="trk">
+            <h4>Internal QA</h4>
+            <div className="tsub">Your own pre-checks, and what keeps failing.</div>
+            <div className="tiles">
+              <div className="tile"><b className="grn">71%</b><span>clean pass</span></div>
+              <div className="tile"><b>14</b><span>checks</span></div>
+              <div className="tile"><b>143</b><span>flagged</span></div>
+            </div>
+            <div className="scbar">
+              <div className="scrow"><span className="nm">Plasterboard</span><span className="bar"><span className="fill bad" style={{ width: "90%" }} /></span><span className="v">22</span></div>
+              <div className="scrow"><span className="nm">Fire-stop</span><span className="bar"><span className="fill warn" style={{ width: "58%" }} /></span><span className="v">14</span></div>
+              <div className="scrow"><span className="nm">Weathertight</span><span className="bar"><span className="fill" style={{ width: "30%" }} /></span><span className="v">6</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* WHY NOW — the closer */}
+      <section className="band why" id="why">
+        <div className="center">
+          <div className="kick">Why now</div>
+          <h2>QA has never mattered <span className="g">more.</span></h2>
+          <p className="lead">New Zealand is shifting more liability onto the people who build. When something fails, the only protection is proof you did it right. Soterra builds each QA check from this job&apos;s own specs, plans, Code and history, to make sure you check the things that actually matter.</p>
+        </div>
+        <div className="stats">
+          <div className="stat"><b className="g">$2.5B</b><span>a year lost to defects in NZ residential construction</span></div>
+          <div className="stat"><b>90%+</b><span>of NZ construction firms have hit project delays</span></div>
+          <div className="stat"><b>~30%</b><span>of construction work can be rework</span></div>
+        </div>
+      </section>
+
+      {/* TEAM strip */}
+      <section className="band tight team center" id="team">
+        <div className="kick">The team</div>
+        <h2 className="th">Built in Aotearoa, with AUT.</h2>
+        <div className="tstrip"><div className="tavs">
+          <div className="tav">AD</div><div className="tav">ML</div><div className="tav">FM</div><div className="tav">FK</div><div className="tav">KM</div>
+        </div></div>
+        <a className="tlink" href="/team">Meet the team →</a>
+      </section>
+
+      {/* FINAL CTA */}
+      <section className="final">
+        <h2>Put your whole project <span className="g">to work.</span></h2>
+        <p className="lead">Set up your company and get the crew asking in minutes.</p>
+        <div className="cta" style={{ justifyContent: "center" }}>
+          <button className="solid" onClick={go}>Get set up →</button>
+          <button className="ghost" onClick={go}>Ask it 5 questions free</button>
+        </div>
       </section>
 
       <footer className="foot">
@@ -379,212 +270,195 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-mark.png" alt="" /><span>Soterra</span>
         </div>
-        <span>Turning construction data into company intelligence.</span>
+        <div className="fl"><a href="#assistant">What it does</a><a href="#how">How it works</a><a href="#why">Why now</a><a href="/team">Team</a></div>
+        <div className="fcopy">Turning construction data into company intelligence.</div>
       </footer>
     </div>
   );
 }
 
 const CSS = `
-.lp{--brand:#0E8FE6;--brand-d:#0A78C8;--navy:#0C2A47;--ink:#0C2A47;--slate:#52698A;--mut:#94A6BE;--bg:#F6FAFF;--line:#E7EFF9;--line2:#EEF4FB;--grad:linear-gradient(135deg,#41C3FF 0%,#0A8DED 100%);--green:#10B981;--amber:#F59E0B;--purple:#8B5CF6;color:var(--ink);font-family:var(--font);min-height:100vh;overflow-x:hidden;background:
-  radial-gradient(760px 420px at 82% -6%,rgba(65,195,255,.12),transparent 62%),
-  radial-gradient(680px 420px at 0% 0%,rgba(10,141,237,.05),transparent 55%),var(--bg)}
-.lp *{box-sizing:border-box}
+.lp{--brand:#0E8FE6;--brand-d:#0A78C8;--navy:#0C2A47;--ink:#0C2A47;--slate:#52698A;--mut:#94A6BE;--bg:#F6FAFF;--line:#E7EFF9;--line2:#EEF4FB;--grad:linear-gradient(135deg,#41C3FF 0%,#0A8DED 100%);--green:#10B981;--amber:#F59E0B;--purple:#8B5CF6;--red:#EF4444;
+  font-family:var(--font,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif);color:var(--ink);line-height:1.5;min-height:100vh;overflow-x:hidden;
+  background:radial-gradient(760px 420px at 82% -6%,rgba(65,195,255,.12),transparent 62%),radial-gradient(680px 420px at 0% 0%,rgba(10,141,237,.05),transparent 55%),var(--bg)}
+.lp *{box-sizing:border-box;margin:0;padding:0}
+.lp a{text-decoration:none;color:inherit}
+.lp button{font-family:inherit;cursor:pointer;border:none;background:transparent;color:inherit}
 .lp .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-.lp a{text-decoration:none}
-.lp button{font-family:var(--font);cursor:pointer;border:none;background:transparent;color:inherit}
-.lp .rv{opacity:0;transform:translateY(22px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
-.lp .rv.in{opacity:1;transform:none}
-.lp .dotlive{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;box-shadow:0 0 0 0 rgba(16,185,129,.5);animation:lpp 2s infinite}
-@keyframes lpp{0%{box-shadow:0 0 0 0 rgba(16,185,129,.45)}70%{box-shadow:0 0 0 7px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+.lp h1,.lp h2,.lp h3{color:var(--navy);text-wrap:balance}
+.lp .kick{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--brand-d)}
+.lp .lead{color:var(--slate)}
 /* nav */
-.lp .nav{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:30px;padding:16px 7vw;background:rgba(246,250,255,.75);backdrop-filter:blur(14px);border-bottom:1px solid var(--line2)}
-.lp .brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:700;letter-spacing:-.01em}
-.lp .brand img{height:28px;width:auto}
-.lp .links{display:flex;gap:26px;flex:1}
-.lp .links a{color:var(--slate);font-size:14px;font-weight:500}
+.lp .nav{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:28px;padding:14px 7vw;background:rgba(246,250,255,.8);backdrop-filter:blur(14px);border-bottom:1px solid var(--line2)}
+.lp .brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:700;color:var(--navy);letter-spacing:-.01em}
+.lp .brand img{height:29px;width:auto;display:block}
+.lp .links{display:flex;gap:24px;flex:1;font-size:14px;color:var(--slate);font-weight:500}
 .lp .links a:hover{color:var(--navy)}
 .lp .navcta{display:flex;gap:10px}
-.lp .burger{display:none;margin-left:auto;color:var(--navy);background:transparent;border:none;padding:6px;cursor:pointer}
+.lp .burger{display:none;color:var(--navy);padding:6px}
 .lp .msheet{display:none}
-.lp .ghost{color:var(--navy);font-size:14px;font-weight:600;padding:9px 17px;border:1px solid var(--line);border-radius:11px;background:#fff}
+.lp .ghost{color:var(--navy);font-size:13.5px;font-weight:600;padding:9px 16px;border:1px solid var(--line);border-radius:11px;background:#fff}
 .lp .ghost:hover{border-color:var(--brand)}
-.lp .solid{background:var(--grad);color:#fff;font-size:14px;font-weight:600;padding:10px 18px;border-radius:11px;box-shadow:0 10px 26px rgba(10,141,237,.28)}
+.lp .solid{background:var(--grad);color:#fff;font-size:13.5px;font-weight:600;padding:10px 17px;border-radius:11px;box-shadow:0 10px 24px rgba(10,141,237,.28)}
 .lp .solid:hover{filter:brightness(1.05)}
-.lp .big{padding:15px 28px;font-size:15px;border-radius:13px}
-/* hero - simple, centered */
-.lp .hero{max-width:900px;margin:0 auto;padding:30px 7vw 34px;text-align:center;display:flex;flex-direction:column;align-items:center}
-.lp .pill{display:inline-flex;align-items:center;gap:9px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--brand-d);background:rgba(14,143,230,.07);border:1px solid rgba(14,143,230,.16);padding:8px 15px;border-radius:30px;margin-bottom:26px}
-.lp h1{font-size:clamp(38px,6vw,68px);line-height:1.04;letter-spacing:-.038em;font-weight:300;margin-bottom:24px;max-width:14ch}
-.lp h1 .g{font-weight:700}
-.lp .lead{font-size:19px;line-height:1.6;color:var(--slate);max-width:620px;margin-bottom:32px}
-.lp .lead b{color:var(--navy);font-weight:600}
-.lp .cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:0}
-.lp .cta3{gap:10px}
-.lp .getapp3{display:inline-flex;align-items:center;gap:6px;color:var(--brand-d);border-color:rgba(14,143,230,.32)}
-.lp .getapp3:hover{border-color:var(--brand)}
-.lp .trust{font-size:13.5px;color:var(--mut);font-weight:500}
+/* hero */
+.lp .hero{position:relative;min-height:82vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 7vw 46px;overflow:hidden}
+.lp .hero .mesh{position:absolute;inset:0;z-index:0;background:radial-gradient(460px 320px at 22% 34%,rgba(65,195,255,.14),transparent 60%),radial-gradient(500px 340px at 80% 66%,rgba(10,141,237,.10),transparent 60%);animation:lpmesh 14s ease-in-out infinite}
+@keyframes lpmesh{0%,100%{transform:translate(0,0)}50%{transform:translate(-16px,-12px)}}
+.lp .hero .grid{position:absolute;inset:-2px;z-index:0;opacity:.42;background-image:linear-gradient(rgba(14,143,230,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(14,143,230,.08) 1px,transparent 1px);background-size:42px 42px;animation:lpgrid 22s linear infinite;-webkit-mask-image:radial-gradient(circle at 50% 42%,#000 60%,transparent 100%);mask-image:radial-gradient(circle at 50% 42%,#000 60%,transparent 100%)}
+@keyframes lpgrid{to{background-position:42px 42px}}
+.lp .hero h1{position:relative;z-index:2;font-weight:300;font-size:clamp(38px,6vw,70px);line-height:1.03;letter-spacing:-.04em;max-width:15ch}
+.lp .hero h1 .g{font-weight:700}
+.lp .cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;position:relative;z-index:2;margin-top:34px}
+.lp .cta .solid,.lp .cta .ghost{padding:12px 20px;font-size:14.5px;border-radius:12px}
+.lp .cta .inst{color:var(--brand-d);border-color:rgba(14,143,230,.32);display:inline-flex;align-items:center;gap:7px;background:#fff}
+.lp .tryfree{position:relative;z-index:2;margin-top:16px;font-size:13.5px;color:var(--slate)}
+.lp .linkbtn{color:var(--brand-d);font-weight:600;font-size:13.5px;border-bottom:1px solid rgba(14,143,230,.4);border-radius:0;padding:0}
 /* partners */
-.lp .partners{max-width:1000px;margin:0 auto;padding:24px 7vw 52px;text-align:center}
-.lp .pk{font-size:11.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-bottom:20px}
-.lp .prow{display:flex;gap:16px;justify-content:center;align-items:stretch;flex-wrap:wrap}
-.lp .plate{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 24px;min-height:78px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(12,42,71,.05)}
+.lp .partners{position:relative;z-index:2;margin-top:44px;display:flex;flex-direction:column;align-items:center;gap:16px}
+.lp .pk{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.lp .prow{display:flex;gap:14px;justify-content:center;align-items:stretch;flex-wrap:wrap}
+.lp .plate{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 22px;min-height:76px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(12,42,71,.05)}
+.lp .plate .autimg{height:46px;width:auto;display:block}
+.lp .plate.cisp img{height:42px;width:auto;display:block}
 .lp .lg{display:flex;align-items:center;gap:12px}
 .lp .av-mark{width:46px;height:40px;flex-shrink:0}
-.lp .av-txt{font-size:14px;line-height:1.16;font-weight:800;color:#4D5F6E;letter-spacing:.07em;text-align:left;align-self:flex-end;padding-bottom:2px}
-.lp .aut-img{height:48px;width:auto;display:block}
-.lp .cis-img{width:42px;height:42px;flex-shrink:0}
-.lp .cis-txt{font-size:10.5px;line-height:1.35;color:#243B4A;text-align:left;font-weight:800;letter-spacing:.02em}
-/* layer sections */
-.lp .layer{max-width:1120px;margin:0 auto;padding:40px 7vw 20px}
-.lp .lhead{text-align:center;max-width:840px;margin:0 auto 48px}
-.lp .lhead h2{font-size:clamp(27px,3.6vw,42px);font-weight:600;letter-spacing:-.028em;line-height:1.14;margin-bottom:0}
-.lp .lbadge{display:inline-flex;align-items:center;gap:14px;font-size:24px;font-weight:700;color:var(--navy);margin-bottom:20px;letter-spacing:-.015em}
-.lp .lbadge span{font-size:16px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--grad);padding:10px 19px;border-radius:24px;box-shadow:0 9px 22px rgba(10,141,237,.32)}
-.lp .lbadge.dark span{background:var(--navy);box-shadow:0 9px 22px rgba(12,42,71,.34)}
-/* Pill option A (trialling on Layer 1) — the whole line is one blue chip, label included */
-.lp .lbadge.pa{background:var(--grad);color:#fff;border-radius:32px;padding:11px 22px;gap:10px;font-size:16px;font-weight:600;letter-spacing:0;box-shadow:0 9px 22px rgba(10,141,237,.3)}
-.lp .lbadge.pa span{background:transparent;box-shadow:none;padding:0;font-size:16px;font-weight:800;letter-spacing:.07em;color:#fff}
-.lp .lbadge.pa span::after{content:"·";margin-left:10px;opacity:.55;font-weight:400}
-/* Pill option B (trialling on Layer 2) — one chip, dark inset for the layer number */
-.lp .lbadge.pb{background:rgba(14,143,230,.1);border:1px solid rgba(14,143,230,.2);color:var(--brand-d);border-radius:32px;padding:6px 20px 6px 6px;gap:11px;font-size:16px;font-weight:600;letter-spacing:0}
-.lp .lbadge.pb span{background:var(--navy);color:#fff;font-size:13px;padding:8px 14px;border-radius:24px;box-shadow:none}
-.lp .vhead h2,.lp .safe h2{font-size:clamp(27px,3.6vw,42px);font-weight:600;letter-spacing:-.028em;line-height:1.13;margin-bottom:15px}
-.lp .lhead>p,.lp .vhead>p{font-size:17px;line-height:1.62;color:var(--slate)}
-.lp .frow{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;margin-bottom:56px}
+.lp .av-txt{font-size:14px;line-height:1.16;font-weight:800;color:#4D5F6E;letter-spacing:.07em;text-align:left}
+.lp .cis-txt{font-size:10.5px;line-height:1.35;color:#243B4A;text-align:left;font-weight:800;letter-spacing:.02em;max-width:150px}
+/* section shell */
+.lp .band{position:relative;max-width:1120px;margin:0 auto;padding:74px 7vw}
+.lp .band.tight{padding:56px 7vw}
+.lp .center{text-align:center;max-width:760px;margin:0 auto}
+.lp .center h2{font-size:clamp(27px,3.6vw,42px);font-weight:600;letter-spacing:-.028em;line-height:1.14;margin:14px 0 14px}
+.lp .center .lead{font-size:17px;line-height:1.62}
+/* why + stats */
+.lp .why{background:linear-gradient(180deg,#fff,rgba(246,250,255,0))}
+.lp .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:960px;margin:34px auto 0}
+.lp .stat{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px 22px;text-align:center;box-shadow:0 10px 30px rgba(12,42,71,.05)}
+.lp .stat b{display:block;font-size:clamp(28px,4vw,42px);font-weight:800;letter-spacing:-.03em;color:var(--navy);line-height:1}
+.lp .stat span{display:block;margin-top:10px;font-size:13.5px;color:var(--slate);line-height:1.4}
+/* feature rows */
+.lp .frow{display:grid;grid-template-columns:1fr 1fr;gap:52px;align-items:center;margin-top:44px}
 .lp .frow.rev .ftext{order:2}
-.lp .fk{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brand-d);margin-bottom:14px}
-.lp .fk.center{text-align:center}
-.lp .ftext h3{font-size:clamp(22px,2.6vw,30px);font-weight:600;letter-spacing:-.022em;line-height:1.18;margin-bottom:14px}
-.lp .ftext>p{font-size:16px;line-height:1.64;color:var(--slate)}
+.lp .fk{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brand-d);margin-bottom:12px}
+.lp .ftext h3{font-size:clamp(21px,2.6vw,29px);font-weight:600;letter-spacing:-.022em;line-height:1.2;margin-bottom:12px}
+.lp .ftext p{font-size:16px;line-height:1.62;color:var(--slate)}
 .lp .fvis{display:flex;justify-content:center}
+/* cards */
+.lp .card{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 60px rgba(12,42,71,.10);width:100%;max-width:400px;overflow:hidden}
+.lp .card.qacard{max-width:420px}
+.lp .card-h{padding:13px 16px;border-bottom:1px solid var(--line2);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);display:flex;align-items:center;gap:8px}
+.lp .card-b{padding:16px}
+.lp .gap-row{display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--line2)}
+.lp .gap-row:first-child{border-top:none}
+.lp .gap-doc{font-size:11px;font-weight:700;color:var(--slate);width:88px;flex-shrink:0}
+.lp .gap-val{font-size:13.5px;color:var(--navy)}
+.lp .flagrow{margin-top:12px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:12px;padding:11px 13px;display:flex;gap:10px;align-items:center}
+.lp .flagpill{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:var(--red);padding:4px 9px;border-radius:20px;flex-shrink:0}
+.lp .flagrow p{font-size:12.5px;color:#7f1d1d}
+/* generated QA sheet */
+.lp .qa{display:flex;flex-direction:column;gap:0}
+.lp .qi{display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line2)}
+.lp .qi:first-child{border-top:none;padding-top:2px}
+.lp .qk{width:17px;height:17px;border:2px solid var(--brand);border-radius:5px;flex-shrink:0;margin-top:1px}
+.lp .qt{font-size:13px;color:var(--navy);font-weight:500;line-height:1.3}
+.lp .qs{font-size:10.5px;color:var(--brand-d);margin-top:3px;font-weight:700;letter-spacing:.02em}
+.lp .qs.hist{color:var(--purple)}.lp .qs.code{color:var(--green)}
+.lp .qafoot{padding:13px 16px;border-top:1px solid var(--line2);font-size:11.5px;color:var(--slate);line-height:1.45}
+.lp .qafoot b{color:var(--navy)}
 /* phone */
-.lp .phone{width:270px;background:#fff;border:1px solid var(--line);border-radius:34px;box-shadow:0 40px 80px rgba(12,42,71,.16),0 8px 22px rgba(12,42,71,.06);padding:12px 12px 20px;animation:lpfloat 6s ease-in-out infinite}
-.lp .ph-top{display:flex;justify-content:center;padding:4px 0 12px}
-.lp .ph-cam{width:52px;height:6px;border-radius:6px;background:#E4ECF6}
-.lp .ph-screen{background:var(--bg);border-radius:22px;padding:14px 13px;min-height:390px}
-.lp .ph-bar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--slate);margin-bottom:16px}
-.lp .ph-bar img{height:18px}.lp .ph-bar b{color:var(--navy)}
-.lp .q{margin-left:auto;width:fit-content;max-width:88%;background:var(--grad);color:#fff;font-size:12.5px;font-weight:500;padding:10px 13px;border-radius:14px 14px 4px 14px;box-shadow:0 8px 18px rgba(10,141,237,.28)}
-.lp .dots{margin-top:12px;width:fit-content;display:inline-flex;gap:5px;background:#fff;border:1px solid var(--line);padding:10px 13px;border-radius:12px}
-.lp .dots i{width:6px;height:6px;border-radius:50%;background:#A9C9E8;animation:lpb 1.2s infinite}
-.lp .dots i:nth-child(2){animation-delay:.15s}.lp .dots i:nth-child(3){animation-delay:.3s}
-@keyframes lpb{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
-.lp .a{margin-top:12px;background:#fff;border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:13px 14px;box-shadow:0 6px 18px rgba(12,42,71,.06)}
-.lp .a-src{font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--brand-d);margin-bottom:7px}
-.lp .a p{font-size:12.5px;line-height:1.5;color:var(--slate)}.lp .a p b{color:var(--navy)}
-.lp .cite{margin-top:11px;display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:11px;padding:9px 10px;background:linear-gradient(180deg,rgba(65,195,255,.05),transparent)}
-.lp .cite .ci{width:30px;height:30px;border-radius:8px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--brand);font-size:14px;flex-shrink:0}
-.lp .cite .ct{min-width:0}.lp .cite .ct b{display:block;font-size:11.5px;color:var(--navy)}.lp .cite .ct small{font-size:10.5px;color:var(--mut)}
-@keyframes lpfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
-.lp .chat{min-height:312px}
-.lp .pop{animation:lppop .38s cubic-bezier(.2,.7,.2,1)}
-@keyframes lppop{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
-.lp .cal-ok{margin-top:11px;font-size:11.5px;font-weight:600;color:var(--green);background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.22);border-radius:10px;padding:8px 11px}
-/* tablet / calendar */
-.lp .tablet{width:100%;max-width:400px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:0 30px 66px rgba(12,42,71,.1)}
-.lp .tablet.cal{padding:20px 20px 8px}
-.lp .cal-h{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:14px}
-.lp .cal-row{display:flex;align-items:center;gap:14px;padding:7px 0}
-.lp .cal-d{font-size:11px;font-weight:700;color:var(--slate);width:32px;text-transform:uppercase}
-.lp .cal-ev{flex:1;min-height:34px;display:flex;align-items:center;padding:0 13px;font-size:13px;color:var(--navy);background:var(--bg);border:1px solid var(--line);border-radius:9px}
-.lp .cal-ev.b{border-left:3px solid var(--brand)}.lp .cal-ev.a{border-left:3px solid var(--amber)}.lp .cal-ev.g{border-left:3px solid var(--green)}.lp .cal-ev.p{border-left:3px solid var(--purple)}
-/* bullets */
-.lp .bullets{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:14px 34px;max-width:900px;margin:8px auto 0;padding:0}
-.lp .bullets li{display:flex;gap:12px;font-size:15.5px;line-height:1.5;color:var(--navy);align-items:flex-start}
-.lp .bx{flex-shrink:0;width:22px;height:22px;border-radius:7px;background:rgba(14,143,230,.1);color:var(--brand-d);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
-/* vision / layer 2 */
-.lp .vision{max-width:1120px;margin:0 auto;padding:60px 7vw}
-.lp .vhead{text-align:center;max-width:700px;margin:0 auto 40px}
-.lp .insights{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:26px}
-.lp .ins{background:linear-gradient(180deg,#0C2A47,#0A2038);color:#fff;border-radius:18px;padding:24px 22px;box-shadow:0 20px 50px rgba(12,42,71,.22);opacity:0;transform:translateY(16px)}
-.lp .rv.in .ins{animation:lprise .7s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:var(--d)}
-.lp .ins-tag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5FD0FF;margin-bottom:14px}
-.lp .ins-q{font-size:16.5px;line-height:1.5;font-weight:500;color:#EAF4FF}
-.lp .vnote{text-align:center;font-size:16px;color:var(--slate);max-width:620px;margin:0 auto 20px}
-.lp .vnote{font-weight:500}
-/* bim */
-.lp .bim{display:grid;grid-template-columns:1fr 1fr;gap:50px;align-items:center;margin-top:40px}
-.lp .bim-copy h3{font-size:clamp(22px,2.6vw,30px);font-weight:600;letter-spacing:-.022em;line-height:1.18;margin-bottom:14px}
-.lp .bim-copy>p{font-size:16px;line-height:1.64;color:var(--slate);margin-bottom:20px}
-.lp .rnd{display:inline-flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--brand-d);background:rgba(14,143,230,.06);border:1px solid rgba(14,143,230,.14);padding:9px 14px;border-radius:11px;line-height:1.4}
-.lp .rnd-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;box-shadow:0 0 0 0 rgba(16,185,129,.5);animation:lpp 2s infinite}
-.lp .bim-vis{position:relative}
-.lp .iso{display:block;width:100%;height:auto;overflow:visible}
-.lp .floor-shadow{position:absolute;left:50%;bottom:8%;width:60%;height:40px;transform:translateX(-50%);background:radial-gradient(ellipse,rgba(12,42,71,.14),transparent 70%);filter:blur(3px)}
-.lp .bld{opacity:0}
-.lp .rv.in .bld{animation:lprise2 1s ease .15s forwards}
-@keyframes lprise{to{opacity:1;transform:none}}
-@keyframes lprise2{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
-.lp .face{stroke:#fff;stroke-width:1;stroke-linejoin:round}
-.lp .ft{fill:#BFE2FF}.lp .fl{fill:#1683DC}.lp .fr{fill:#3FA7F0}
-.lp .fln{stroke:rgba(255,255,255,.5);stroke-width:1;opacity:0}
-.lp .rv.in .fln{animation:lpshow .5s ease forwards}
-.lp .rv.in .fln.f1{animation-delay:.7s}.lp .rv.in .fln.f2{animation-delay:.85s}.lp .rv.in .fln.f3{animation-delay:1s}
-.lp .mul{stroke:rgba(255,255,255,.28);stroke-width:1}
-@keyframes lpshow{to{opacity:1}}
-.lp .pin{opacity:0}.lp .rv.in .pin{animation:lpshow .4s ease forwards}
-.lp .rv.in .pin.p1{animation-delay:1.2s}.lp .rv.in .pin.p2{animation-delay:1.4s}.lp .rv.in .pin.p3{animation-delay:1.6s}
-.lp .pin .dot{fill:#0A8DED;stroke:#fff;stroke-width:2}
-.lp .pin .halo{fill:rgba(10,141,237,.22);transform-box:fill-box;transform-origin:center;animation:lphalo 2.2s ease-out infinite}
-@keyframes lphalo{0%{transform:scale(.5);opacity:.6}80%{transform:scale(1.7);opacity:0}100%{opacity:0}}
-.lp .bim-tip{position:absolute;right:4%;top:16%;width:185px;background:#fff;border:1px solid var(--line);border-radius:13px;padding:12px 14px;box-shadow:0 18px 44px rgba(12,42,71,.16);opacity:0}
-.lp .rv.in .bim-tip{animation:lptip .6s ease 1.5s forwards,lpfloat 5s ease-in-out 2s infinite}
-.lp .bim-tip p{font-size:14px;color:var(--slate)}.lp .bim-tip p b{color:var(--navy);font-weight:700}
-.lp .bim-tip small{font-size:11.5px;color:var(--mut);font-family:ui-monospace,'SF Mono',Menlo,monospace}
-@keyframes lptip{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-/* layer 3 */
-.lp .l3a{padding:14px}
-.lp .srcb{padding:11px 0;border-top:1px solid var(--line2)}
-.lp .srcb:first-child{border-top:none;padding-top:2px}
-.lp .a-src.grn{color:var(--green)}
-.lp .a-src.pur{color:#7C3AED}
-.lp .cref{display:block;margin-top:6px;font-size:10.5px;color:var(--mut);font-family:ui-monospace,'SF Mono',Menlo,monospace}
-.lp .l3act{margin-top:12px;padding-top:11px;border-top:1px solid var(--line2);font-size:12.5px;font-style:italic;color:var(--brand-d)}
-.lp .l3-vis .phone{margin:0 auto}
-.lp .layer3{display:grid;grid-template-columns:1fr 1.05fr;gap:50px;align-items:center;max-width:1120px;margin:0 auto;padding:20px 7vw 60px}
-.lp .l3-copy h2{font-size:clamp(24px,3vw,34px);font-weight:600;letter-spacing:-.025em;line-height:1.16;margin-bottom:15px}
-.lp .l3-copy>p{font-size:16px;line-height:1.64;color:var(--slate);margin-bottom:20px}
-.lp .l3-vis{position:relative}
-.lp .l3wire line{stroke:var(--mut);stroke-width:1.4;stroke-dasharray:3 3}
-.lp .l3pindot circle{fill:#fff;stroke:var(--brand);stroke-width:2}
-.lp .l3chip rect{fill:#fff;stroke:var(--line);stroke-width:1}
-.lp .l3chip text{font-size:13px;font-weight:600;fill:var(--navy);font-family:var(--font)}
-/* safe */
-.lp .safe{max-width:760px;margin:0 auto;padding:40px 7vw 30px;text-align:center}
-.lp .safe-tick{width:58px;height:58px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;margin:0 auto 22px;box-shadow:0 12px 30px rgba(10,141,237,.32)}
-.lp .safe-tick svg{width:30px;height:30px}
-.lp .safe p{font-size:17px;line-height:1.7;color:var(--slate);max-width:600px;margin:0 auto}
+.lp .phone{width:264px;background:#fff;border:1px solid var(--line);border-radius:30px;box-shadow:0 40px 80px rgba(12,42,71,.16);padding:12px;animation:lpfloat 6s ease-in-out infinite}
+@keyframes lpfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+.lp .pbar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--slate);padding:5px 4px 12px;border-bottom:1px solid var(--line2)}
+.lp .pmark{width:18px;height:18px;border-radius:5px;background:var(--grad)}.lp .pbar b{color:var(--navy)}
+.lp .pbody{padding:14px 6px 6px;min-height:250px}
+.lp .q{margin-left:auto;width:fit-content;max-width:86%;background:var(--grad);color:#fff;font-size:12px;font-weight:500;padding:9px 12px;border-radius:14px 14px 4px 14px}
+.lp .a{margin-top:12px;background:#fff;border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:11px 12px;box-shadow:0 6px 18px rgba(12,42,71,.06)}
+.lp .asrc{font-size:9px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--brand-d);margin-bottom:6px}
+.lp .a p{font-size:11.5px;line-height:1.45;color:var(--slate)}.lp .a p b{color:var(--navy)}
+.lp .cite{margin-top:10px;display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:11px;padding:8px 10px;background:linear-gradient(180deg,rgba(65,195,255,.05),transparent)}
+.lp .cite .ci{width:28px;height:28px;border-radius:7px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--brand);font-size:13px}
+.lp .cite b{display:block;font-size:11px;color:var(--navy)}.lp .cite small{font-size:10px;color:var(--mut)}
+/* convergence */
+.lp .cv{background:linear-gradient(180deg,rgba(246,250,255,0),#fff)}
+.lp .cvgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:940px;margin:40px auto 0}
+.lp .src{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(12,42,71,.05)}
+.lp .src .st{font-size:14px;font-weight:700;color:var(--navy);margin-bottom:12px;display:flex;align-items:center;gap:9px}
+.lp .src .sd{width:10px;height:10px;border-radius:3px}
+.lp .src.s1 .sd{background:var(--brand)}.lp .src.s2 .sd{background:var(--purple)}.lp .src.s3 .sd{background:var(--amber)}
+.lp .src ul{list-style:none;display:flex;flex-direction:column;gap:7px}
+.lp .src li{font-size:12.5px;color:var(--slate);display:flex;gap:8px;align-items:center}
+.lp .src li::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--mut);flex-shrink:0}
+.lp .beams{display:flex;justify-content:center;gap:80px;margin:8px auto 0;max-width:600px;height:44px}
+.lp .beam{width:2px;background:linear-gradient(180deg,rgba(14,143,230,.1),var(--brand),rgba(14,143,230,.1));background-size:100% 220%;animation:lpbeam 1.8s linear infinite}
+@keyframes lpbeam{0%{background-position:0 130%}100%{background-position:0 -130%}}
+.lp .beam:nth-child(2){animation-delay:.4s}.lp .beam:nth-child(3){animation-delay:.8s}
+.lp .core{max-width:520px;margin:0 auto;background:linear-gradient(180deg,#0C2A47,#0A2038);color:#fff;border-radius:20px;padding:24px 26px;text-align:center;box-shadow:0 26px 60px rgba(12,42,71,.28)}
+.lp .core .cl{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5FD0FF}
+.lp .core h3{color:#fff;font-size:21px;font-weight:700;margin:10px 0 6px}
+.lp .core p{font-size:13.5px;color:#B7CCE4;line-height:1.5}
+.lp .lock{width:34px;height:34px;border-radius:10px;background:rgba(95,208,255,.16);display:inline-flex;align-items:center;justify-content:center;color:#5FD0FF;font-size:16px}
+.lp .sec-note{max-width:640px;margin:26px auto 0;text-align:center;font-size:14.5px;color:var(--slate)}
+.lp .sec-note b{color:var(--navy)}
+/* proof */
+.lp .pf{background:#fff}
+.lp .tk3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;max-width:1000px;margin:40px auto 0}
+.lp .trk{background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 14px 40px rgba(12,42,71,.06)}
+.lp .trk h4{font-size:15px;color:var(--navy);margin-bottom:4px}
+.lp .trk .tsub{font-size:12.5px;color:var(--slate);margin-bottom:14px}
+.lp .tiles{display:flex;gap:8px;flex-wrap:wrap}
+.lp .tile{flex:1;min-width:74px;background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:9px 10px}
+.lp .tile b{display:block;font-size:17px;font-weight:800;color:var(--navy)}
+.lp .tile b.red{color:var(--red)}.lp .tile b.grn{color:var(--green)}
+.lp .tile span{font-size:10px;color:var(--slate);font-weight:600}
+.lp .scbar{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.lp .scrow{display:flex;align-items:center;gap:8px;font-size:11.5px}
+.lp .scrow .nm{width:74px;color:var(--navy);font-weight:600;flex-shrink:0}
+.lp .scrow .bar{flex:1;height:7px;border-radius:4px;background:var(--line2);overflow:hidden}
+.lp .scrow .fill{display:block;height:100%;background:var(--grad)}
+.lp .scrow .fill.warn{background:var(--amber)}.lp .scrow .fill.bad{background:var(--red)}
+.lp .scrow .v{width:42px;text-align:right;color:var(--slate);font-variant-numeric:tabular-nums}
+/* team */
+.lp .team{background:linear-gradient(180deg,rgba(246,250,255,0),#fff)}
+.lp .team .th{font-size:clamp(24px,3.2vw,36px);font-weight:600;letter-spacing:-.025em;margin:12px 0 6px}
+.lp .tstrip{display:flex;align-items:center;justify-content:center;margin:24px 0 18px}
+.lp .tavs{display:flex}
+.lp .tav{width:60px;height:60px;border-radius:50%;background:var(--grad);border:3px solid #fff;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:17px;margin-left:-12px;box-shadow:0 8px 20px rgba(10,141,237,.24)}
+.lp .tav:first-child{margin-left:0}
+.lp .tlink{display:inline-flex;align-items:center;gap:7px;font-size:14.5px;font-weight:600;color:var(--brand-d)}
 /* final */
-.lp .final{text-align:center;max-width:720px;margin:0 auto;padding:50px 7vw 90px}
+.lp .final{position:relative;text-align:center;max-width:720px;margin:0 auto;padding:70px 7vw 40px}
 .lp .final h2{font-size:clamp(28px,3.8vw,44px);font-weight:300;letter-spacing:-.03em;margin-bottom:14px}
-.lp .final p{font-size:17px;color:var(--slate);margin-bottom:28px}
-.lp .foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;max-width:1240px;margin:0 auto;padding:28px 7vw;border-top:1px solid var(--line)}
+.lp .final .lead{font-size:17px;margin-bottom:26px}
+.lp .foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;max-width:1240px;margin:0 auto;padding:26px 7vw;border-top:1px solid var(--line)}
 .lp .foot .brand{font-size:16px}.lp .foot .brand img{height:22px}
-.lp .foot>span{font-size:13px;color:var(--mut)}
+.lp .foot .fl{display:flex;gap:18px;font-size:13px;color:var(--slate)}
+.lp .foot .fl a:hover{color:var(--navy)}
+.lp .foot .fcopy{font-size:12.5px;color:var(--mut)}
 @media(max-width:900px){
   .lp .links{display:none}
-  /* phone header: brand + hamburger only, and noticeably shorter */
   .lp .navcta{display:none}
   .lp .burger{display:flex;align-items:center}
   .lp .nav{padding:9px 6vw;gap:10px}
-  .lp .brand{font-size:18px;gap:8px}
-  .lp .brand img{height:23px}
-  .lp .msheet{display:flex;flex-direction:column;position:sticky;top:49px;z-index:29;background:#fff;border-bottom:1px solid var(--line);padding:6px 6vw 16px;box-shadow:0 16px 34px rgba(12,42,71,.1)}
+  .lp .msheet{display:flex;flex-direction:column;position:sticky;top:47px;z-index:39;background:#fff;border-bottom:1px solid var(--line);padding:6px 6vw 16px;box-shadow:0 16px 34px rgba(12,42,71,.1)}
   .lp .msheet a{padding:13px 2px;font-size:15.5px;font-weight:600;color:var(--navy);border-bottom:1px solid var(--line2)}
   .lp .msheet-cta{display:flex;gap:10px;margin-top:14px}
   .lp .msheet-cta button{flex:1;text-align:center;padding:13px 0;border-radius:12px;font-size:15px;font-weight:600}
-  .lp .frow{grid-template-columns:1fr;gap:32px;margin-bottom:44px}
+  .lp .frow{grid-template-columns:1fr;gap:26px}
   .lp .frow.rev .ftext{order:0}
-  .lp .bullets{grid-template-columns:1fr;gap:12px}
-  .lp .insights{grid-template-columns:1fr}
-  .lp .bim{grid-template-columns:1fr;gap:32px}
-  .lp .layer3{grid-template-columns:1fr;gap:28px}
-  .lp .prow{gap:12px}
-  /* three CTAs share the row evenly on a phone */
-  .lp .cta3{width:100%;gap:8px;flex-wrap:nowrap}
-  .lp .cta3 .solid,.lp .cta3 .ghost{flex:1;padding:12px 4px;font-size:12.5px;justify-content:center;text-align:center}
-  /* phone only: stop "LAYER 1" wrapping inside the pill and going tall+odd */
-  .lp .lbadge span{white-space:nowrap}
+  .lp .stats,.lp .cvgrid,.lp .tk3{grid-template-columns:1fr}
+  .lp .beams{display:none}
 }
+@media(max-width:560px){
+  .lp .band{padding:52px 6vw}
+  .lp .hero{min-height:auto;padding:46px 6vw 40px}
+  .lp .foot{padding:22px 6vw}
+  .lp .foot .fl{order:3;flex-basis:100%}
+  .lp .partners{margin-top:32px}
+  .lp .prow{gap:10px}
+  .lp .plate{padding:11px 15px;min-height:64px}
+  .lp .core{padding:20px 18px}
+  .lp .card,.lp .card.qacard{max-width:100%}
+}
+@media(prefers-reduced-motion:reduce){.lp *{animation:none!important}}
 `;
