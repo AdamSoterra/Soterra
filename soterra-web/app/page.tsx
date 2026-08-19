@@ -3606,8 +3606,8 @@ export default function Page() {
                 <div className="page-h">Inspections</div>
                 <div className="page-sub" style={{ marginBottom: 0 }}>
                   {inspPocket === "external"
-                    ? `Council and consultant reports filed on ${projName} — and what they keep pulling you up on.`
-                    : `Your crew's own pre-inspection checks on ${projName} — catch it before the inspector does.`}
+                    ? `Council and consultant reports filed on ${projName}, and what they keep pulling you up on.`
+                    : `Your crew's own pre-inspection checks on ${projName}. Catch it before the inspector does.`}
                 </div>
               </div>
               {inspPocket === "internal"
@@ -4292,7 +4292,7 @@ export default function Page() {
                 <div className="page-h">Insights</div>
                 <div className="page-sub" style={{ marginBottom: 0 }}>
                   {insights?.company.name ? `${insights.company.name} · ` : ""}
-                  every report filed, newest first{insights && insights.company.sites > 1 ? ` — across all ${insights.company.sites} sites` : ""}
+                  every report filed, newest first{insights && insights.company.sites > 1 ? `, across all ${insights.company.sites} sites` : ""}
                 </div>
               </div>
             </div>
@@ -4302,7 +4302,7 @@ export default function Page() {
             ) : (insights?.summary.inspections ?? 0) === 0 ? (
               <div className="cal-card" style={{ marginTop: 18 }}>
                 <b style={{ color: "var(--navy)" }}>No history yet.</b>
-                <p className="page-sub" style={{ margin: "6px 0 12px" }}>As you file council and consultant reports on the Inspections tab, every one lands here as a running record — newest first.</p>
+                <p className="page-sub" style={{ margin: "6px 0 12px" }}>As you file council and consultant reports on the Inspections tab, every one lands here as a running record, newest first.</p>
                 <button className="lg-btn primary" style={{ height: 42, margin: 0, width: "auto", padding: "0 18px" }} onClick={() => setTab("inspections")}>Go to Inspections</button>
               </div>
             ) : (
