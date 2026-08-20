@@ -86,6 +86,30 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         </div>
       </section>
 
+      {/* HOW IT WORKS — convergence (moved up, directly under the hero) */}
+      <section className="band cv" id="how">
+        <div className="center">
+          <div className="kick">How it works</div>
+          <h2>Three sources of knowledge. <span className="g">One private AI.</span></h2>
+          <p className="lead">Soterra brings three worlds together and seals them into an assistant that only your company can reach.</p>
+        </div>
+        <div className="cvgrid">
+          <div className="src s1"><div className="st"><span className="sd" />Soterra base knowledge</div>
+            <ul><li>NZ Building Code</li><li>Standards &amp; determinations</li><li>Manufacturer manuals</li><li>Industry best practice</li></ul></div>
+          <div className="src s2"><div className="st"><span className="sd" />Your company knowledge</div>
+            <ul><li>Every past project</li><li>Council inspections</li><li>Consultant inspections</li><li>Site reports</li></ul></div>
+          <div className="src s3"><div className="st"><span className="sd" />This project</div>
+            <ul><li>Drawings</li><li>Specifications</li><li>Schedules</li><li>PS1s, scopes &amp; reports</li></ul></div>
+        </div>
+        <div className="beams"><div className="beam" /><div className="beam" /><div className="beam" /></div>
+        <div className="core">
+          <span className="cl"><span className="lock">🔒</span> Your company&apos;s private assistant</span>
+          <h3>One place to ask, check and prove.</h3>
+          <p>Sealed to your company by the system. A separate space per project, access-gated, scoped to you. Your data never reaches another company.</p>
+        </div>
+        <p className="sec-note"><b>Your data is yours.</b> It never trains anyone else&apos;s assistant and never lands in a shared pool.</p>
+      </section>
+
       {/* WHAT IT DOES — the assistant */}
       <section className="band" id="assistant">
         <div className="center">
@@ -154,30 +178,6 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
             </div>
           </div>
         </div>
-      </section>
-
-      {/* HOW IT WORKS — convergence */}
-      <section className="band cv" id="how">
-        <div className="center">
-          <div className="kick">How it works</div>
-          <h2>Three sources of knowledge. <span className="g">One private AI.</span></h2>
-          <p className="lead">Soterra brings three worlds together and seals them into an assistant that only your company can reach.</p>
-        </div>
-        <div className="cvgrid">
-          <div className="src s1"><div className="st"><span className="sd" />Soterra base knowledge</div>
-            <ul><li>NZ Building Code</li><li>Standards &amp; determinations</li><li>Manufacturer manuals</li><li>Industry best practice</li></ul></div>
-          <div className="src s2"><div className="st"><span className="sd" />Your company knowledge</div>
-            <ul><li>Every past project</li><li>Council inspections</li><li>Consultant inspections</li><li>Site reports</li></ul></div>
-          <div className="src s3"><div className="st"><span className="sd" />This project</div>
-            <ul><li>Drawings</li><li>Specifications</li><li>Schedules</li><li>PS1s, scopes &amp; reports</li></ul></div>
-        </div>
-        <div className="beams"><div className="beam" /><div className="beam" /><div className="beam" /></div>
-        <div className="core">
-          <span className="cl"><span className="lock">🔒</span> Your company&apos;s private assistant</span>
-          <h3>One place to ask, check and prove.</h3>
-          <p>Sealed to your company by the system. A separate space per project, access-gated, scoped to you. Your data never reaches another company.</p>
-        </div>
-        <p className="sec-note"><b>Your data is yours.</b> It never trains anyone else&apos;s assistant and never lands in a shared pool.</p>
       </section>
 
       {/* THE PROOF — trackers */}
