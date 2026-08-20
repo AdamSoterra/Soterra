@@ -112,12 +112,22 @@ export type TopItem = {
 const TITLE_GROUP = (col: unknown) =>
   sql<string>`lower(array_to_string((string_to_array(trim(regexp_replace(${col}, '[^a-zA-Z0-9]+', ' ', 'g')), ' '))[1:5], ' '))`;
 
-/** Failed items per category, company-wide. This IS the Insights page. */
-export async function categoryCounts(scope: Scope): Promise<CategoryCount[]> {
+/** Insights run at one of two levels: the whole company (the Insights tab —
+ *  the learning, the moat) or just this site (the Inspections tab's External
+ *  pocket — what's happening on THIS job). Company isolation is identical
+ *  either way; "project" only narrows further within the proven company. */
+export type InsightLevel = "project" | "company";
+
+/** Failed items per category. Company-wide by default; this IS the Insights page. */
+export async function categoryCounts(scope: Scope, opts: { level?: InsightLevel } = {}): Promise<CategoryCount[]> {
+  const where =
+    opts.level === "project"
+      ? and(eq(inspectionItems.companyId, scope.companyId), eq(inspectionItems.projectId, scope.projectId))
+      : eq(inspectionItems.companyId, scope.companyId);
   const rows = await db
     .select({ category: inspectionItems.category, count: sql<number>`count(*)::int` })
     .from(inspectionItems)
-    .where(eq(inspectionItems.companyId, scope.companyId))
+    .where(where)
     .groupBy(inspectionItems.category);
   const byName = new Map(rows.map((r) => [r.category, r.count]));
   return CATEGORIES.map((c) => ({ category: c, count: byName.get(c) ?? 0 })).filter((c) => c.count > 0).sort((a, b) => b.count - a.count);
@@ -127,11 +137,12 @@ export async function categoryCounts(scope: Scope): Promise<CategoryCount[]> {
  *  Grouped on the normalised title (see TITLE_GROUP) and counted by DISTINCT
  *  INSPECTION, so a rolling carried-forward register can't inflate one open
  *  item into a pile of "failures". */
-export async function topItems(scope: Scope, opts: { category?: string | null; limit?: number } = {}): Promise<TopItem[]> {
+export async function topItems(scope: Scope, opts: { category?: string | null; limit?: number; level?: InsightLevel } = {}): Promise<TopItem[]> {
   const limit = Math.min(Math.max(opts.limit ?? 12, 1), 100);
-  const where = opts.category
-    ? and(eq(inspectionItems.companyId, scope.companyId), eq(inspectionItems.category, opts.category))
-    : eq(inspectionItems.companyId, scope.companyId);
+  const conds = [eq(inspectionItems.companyId, scope.companyId)];
+  if (opts.level === "project") conds.push(eq(inspectionItems.projectId, scope.projectId));
+  if (opts.category) conds.push(eq(inspectionItems.category, opts.category));
+  const where = and(...conds);
 
   const rows = await db
     .select({
@@ -344,14 +355,18 @@ export async function historyForCode(scope: Scope, code: string, limit = 12): Pr
  *  reports that were never graded in the first place — a made-up number in the
  *  largest text on the page. The pass rate is now only ever computed over
  *  inspections that actually have a verdict. */
-export async function historySummary(scope: Scope) {
+export async function historySummary(scope: Scope, opts: { level?: InsightLevel } = {}) {
+  // level "project" narrows every count to this site; the company filter
+  // stays on regardless, so a bad projectId can never widen the read.
+  const insp = opts.level === "project" ? sql` and ${inspections.projectId} = ${scope.projectId}` : sql``;
+  const item = opts.level === "project" ? sql` and ${inspectionItems.projectId} = ${scope.projectId}` : sql``;
   const [row] = await db
     .select({
-      inspections: sql<number>`(select count(*)::int from ${inspections} where ${inspections.companyId} = ${scope.companyId})`,
-      failedItems: sql<number>`(select count(*)::int from ${inspectionItems} where ${inspectionItems.companyId} = ${scope.companyId})`,
-      graded: sql<number>`(select count(*)::int from ${inspections} where ${inspections.companyId} = ${scope.companyId} and ${inspections.outcome} in ('pass','partial','fail'))`,
-      cleanPasses: sql<number>`(select count(*)::int from ${inspections} where ${inspections.companyId} = ${scope.companyId} and ${inspections.outcome} = 'pass')`,
-      returnVisits: sql<number>`(select count(*)::int from ${inspections} where ${inspections.companyId} = ${scope.companyId} and ${inspections.outcome} in ('fail','partial'))`,
+      inspections: sql<number>`(select count(*)::int from ${inspections} where ${inspections.companyId} = ${scope.companyId}${insp})`,
+      failedItems: sql<number>`(select count(*)::int from ${inspectionItems} where ${inspectionItems.companyId} = ${scope.companyId}${item})`,
+      graded: sql<number>`(select count(*)::int from ${inspections} where ${inspections.companyId} = ${scope.companyId}${insp} and ${inspections.outcome} in ('pass','partial','fail'))`,
+      cleanPasses: sql<number>`(select count(*)::int from ${inspections} where ${inspections.companyId} = ${scope.companyId}${insp} and ${inspections.outcome} = 'pass')`,
+      returnVisits: sql<number>`(select count(*)::int from ${inspections} where ${inspections.companyId} = ${scope.companyId}${insp} and ${inspections.outcome} in ('fail','partial'))`,
     })
     .from(sql`(select 1) as _`);
   return row ?? { inspections: 0, failedItems: 0, graded: 0, cleanPasses: 0, returnVisits: 0 };

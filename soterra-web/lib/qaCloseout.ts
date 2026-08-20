@@ -514,12 +514,23 @@ export async function fixUploadTarget(
 
 type Agg = { sub: string; status: string; sentAt: Date | null; readyAt: Date | null; closedAt: Date | null };
 
-export async function analytics(scope: Scope) {
+export async function analytics(scope: Scope, opts: { level?: "project" | "company" } = {}) {
   // Only defects that actually ENTERED the loop (were sent to a sub) count -
   // a never-sent 'open' item is backlog, not close-out tracking, and would
   // otherwise pile up under "Unassigned" and swamp the scorecard.
-  const flags = await db.select().from(qaFlags).where(and(eq(qaFlags.projectId, scope.projectId), isNotNull(qaFlags.sentAt)));
-  const items = await db.select().from(inspectionItems).where(and(eq(inspectionItems.projectId, scope.projectId), isNotNull(inspectionItems.sentAt)));
+  // Default level is "project" — the scorecard lives on the site's own
+  // Inspections tab. Both levels carry the companyId filter, so this read can
+  // never widen past the proven company no matter what projectId says.
+  const flagWhere =
+    opts.level === "company"
+      ? and(eq(qaFlags.companyId, scope.companyId), isNotNull(qaFlags.sentAt))
+      : and(eq(qaFlags.companyId, scope.companyId), eq(qaFlags.projectId, scope.projectId), isNotNull(qaFlags.sentAt));
+  const itemWhere =
+    opts.level === "company"
+      ? and(eq(inspectionItems.companyId, scope.companyId), isNotNull(inspectionItems.sentAt))
+      : and(eq(inspectionItems.companyId, scope.companyId), eq(inspectionItems.projectId, scope.projectId), isNotNull(inspectionItems.sentAt));
+  const flags = await db.select().from(qaFlags).where(flagWhere);
+  const items = await db.select().from(inspectionItems).where(itemWhere);
   const now = new Date();
 
   const rows: Agg[] = [

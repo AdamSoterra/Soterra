@@ -848,6 +848,12 @@ export default function Page() {
   // ─── Insights (company-wide inspection history) ───
   const [insights, setInsights] = useState<Insights | null>(null);
   const [insightsLoaded, setInsightsLoaded] = useState(false);
+  // The same payload narrowed to THIS site, for the Inspections tab's External
+  // pocket. Kept apart from the company-wide `insights` on purpose: the two
+  // tabs answer different questions ("this job" vs "the whole company"), and
+  // sharing one state made the pocket silently show every site's numbers.
+  const [projInsights, setProjInsights] = useState<Insights | null>(null);
+  const [projInsightsLoaded, setProjInsightsLoaded] = useState(false);
   const [catFilter, setCatFilter] = useState<string | null>(null);
   // Which Insights sections are collapsed. Empty = all open; a section is
   // closed when its key is true. Lets a manager fold away the long lists.
@@ -1082,6 +1088,17 @@ export default function Page() {
       setInsightsLoaded(true);
     }
   };
+  const loadProjInsights = async () => {
+    try {
+      const res = await apiFetch("/api/insights?level=project");
+      const data = await res.json();
+      if (data && data.summary) setProjInsights(data);
+    } catch {
+      /* leave as-is on failure */
+    } finally {
+      setProjInsightsLoaded(true);
+    }
+  };
   const loadChecklists = async () => {
     try {
       const res = await apiFetch("/api/checklists");
@@ -1106,7 +1123,7 @@ export default function Page() {
     // Insights are company-wide, but the fetch is authorised through the current
     // site — so a switch still has to re-fetch, and must not leave the old
     // site's checklists on screen.
-    setInsights(null); setInsightsLoaded(false); setCatFilter(null); setOpenInspection(null);
+    setInsights(null); setInsightsLoaded(false); setProjInsights(null); setProjInsightsLoaded(false); setCatFilter(null); setOpenInspection(null);
     setChecklists([]); setClCatches([]); setIntCat(null); setOpenChecklist(null); setRepItems([]);
     loadThreads();
     loadMembers();
@@ -1191,6 +1208,8 @@ export default function Page() {
     // Both tabs need the filed reports now: Insights derives its analytics from
     // them, and the Inspections tab lists them beneath the QA checks.
     if ((tab === "insights" || tab === "inspections") && !insightsLoaded) loadInsights();
+    // The External pocket shows THIS site only, so it gets its own narrowed fetch.
+    if (tab === "inspections" && !projInsightsLoaded) loadProjInsights();
     // The Inspections tab (and Insights, for the failure counts) needs the
     // checklists — the pre-inspection QA checks and the safety plans.
     if ((tab === "inspections" || tab === "insights") && !checklists.length) loadChecklists();
@@ -1199,7 +1218,7 @@ export default function Page() {
     // coLoaded, so it fetches once. Insights is now just history — no analytics.
     if (tab === "inspections") loadCoAna();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, evLoaded, taskLoaded, docsLoaded, insightsLoaded, projectId]);
+  }, [tab, evLoaded, taskLoaded, docsLoaded, insightsLoaded, projInsightsLoaded, projectId]);
 
   // Manual delete — so a wrong booking can be fixed in one tap instead of going
   // through the assistant. Optimistic; resyncs from the server on failure.
@@ -2073,7 +2092,7 @@ export default function Page() {
         setRepCurrent({ name: `${done} of ${total} read`, phase: "Reading", pct: Math.round((done / total) * 100) });
         // Fill the page in as results land, rather than making them wait for
         // the whole batch to finish before anything appears.
-        if (done % LANES === 0 || done === total) loadInsights(catFilter);
+        if (done % LANES === 0 || done === total) { loadInsights(catFilter); loadProjInsights(); }
       }
     };
 
@@ -2093,6 +2112,8 @@ export default function Page() {
     setRepCurrent(null);
     setInsightsLoaded(false);
     loadInsights(catFilter);
+    setProjInsightsLoaded(false);
+    loadProjInsights();
   };
 
   // Drag-and-drop for the report zones, same as the plan uploader. Worth having
@@ -3752,18 +3773,19 @@ export default function Page() {
             </>)}
 
             {inspPocket === "external" && (<>
-            {/* ── External outcomes: the story the council + consultant reports tell ── */}
-            {insightsLoaded && (insights?.summary.inspections ?? 0) > 0 && (
+            {/* ── External outcomes: the story THIS SITE's council + consultant
+                   reports tell. Company-wide learning lives on Insights. ── */}
+            {projInsightsLoaded && (projInsights?.summary.inspections ?? 0) > 0 && (
               <div className="rf-strip" style={{ marginTop: 12 }}>
-                <div className="rf-tile"><b>{insights!.summary.inspections}</b><span>reports read</span><small>council + consultant</small></div>
-                <div className="rf-tile"><b>{insights!.summary.graded ? Math.round((insights!.summary.cleanPasses / insights!.summary.graded) * 100) : 0}%</b><span>clean pass</span><small>of {insights!.summary.graded} graded</small></div>
-                <div className="rf-tile"><b className={insights!.summary.returnVisits > 0 ? "red" : ""}>{insights!.summary.returnVisits}</b><span>return visits</span><small>partial or failed</small></div>
-                <div className="rf-tile"><b>{insights!.summary.failedItems}</b><span>items flagged</span><small>across all reports</small></div>
+                <div className="rf-tile"><b>{projInsights!.summary.inspections}</b><span>reports read</span><small>council + consultant</small></div>
+                <div className="rf-tile"><b>{projInsights!.summary.graded ? Math.round((projInsights!.summary.cleanPasses / projInsights!.summary.graded) * 100) : 0}%</b><span>clean pass</span><small>of {projInsights!.summary.graded} graded</small></div>
+                <div className="rf-tile"><b className={projInsights!.summary.returnVisits > 0 ? "red" : ""}>{projInsights!.summary.returnVisits}</b><span>return visits</span><small>partial or failed</small></div>
+                <div className="rf-tile"><b>{projInsights!.summary.failedItems}</b><span>items flagged</span><small>across this site's reports</small></div>
               </div>
             )}
 
             {/* Subcontractor close-out — moved from the old Insights tab. */}
-            {insightsLoaded && (insights?.summary.inspections ?? 0) > 0 && (
+            {projInsightsLoaded && (projInsights?.summary.inspections ?? 0) > 0 && (
               <>
                 <IzToggle label="Subcontractor close-out" open={!izClosed.closeout} onClick={() => izToggle("closeout")} />
                 {!izClosed.closeout && (
@@ -3823,10 +3845,10 @@ export default function Page() {
             {/* ── Section 2: the filed council + consultant inspection reports ── */}
             <input ref={reportFileRef} type="file" accept="application/pdf" multiple style={HIDDEN_INPUT}
               onChange={(e) => { const fs = filesFrom(e.target); if (reportFileRef.current) reportFileRef.current.value = ""; if (fs.length) onReportFiles(fs); }} />
-            <div className="sub-k" style={{ marginTop: 26 }}>Inspection reports<span>{insights?.inspections.length ?? 0}</span></div>
-            {!insightsLoaded ? (
+            <div className="sub-k" style={{ marginTop: 26 }}>Inspection reports<span>{projInsights?.inspections.length ?? 0}</span></div>
+            {!projInsightsLoaded ? (
               <div className="page-sub" style={{ marginTop: 4 }}>Loading…</div>
-            ) : (insights?.inspections.length ?? 0) === 0 ? (
+            ) : (projInsights?.inspections.length ?? 0) === 0 ? (
               <div
                 className="drop"
                 style={{ marginTop: 4, cursor: repCurrent ? "default" : "pointer", outline: repDragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
@@ -3839,7 +3861,7 @@ export default function Page() {
                 {repCurrent ? <div className="upbar"><div className="upbar-fill" style={{ width: `${Math.max(repCurrent.pct, 4)}%` }} /></div> : <span className="soon">Choose reports</span>}
               </div>
             ) : (() => {
-              const all = insights!.inspections;
+              const all = projInsights!.inspections;
               const discOpts = groupInspections(all).map((g) => ({ key: g.key, label: g.label, count: g.rows.length }));
               const q = izSearch.trim().toLowerCase();
               const filtered = all.filter((r) => {
@@ -5518,6 +5540,7 @@ export default function Page() {
                     if (res.ok) {
                       setOpenInspection(null);
                       loadInsights(catFilter);
+                      loadProjInsights();
                     } else {
                       // Every other mutation surfaces its failure; a delete that
                       // silently does nothing reads as a broken button.
