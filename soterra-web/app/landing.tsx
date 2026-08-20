@@ -138,7 +138,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         <div className="frow">
           <div className="ftext">
             <div className="fk">During · generate the QA that matters</div>
-            <h3>Not a generic checklist. The exact checks that fail on <em>this</em> job.</h3>
+            <h3>Not a generic checklist. The checks that matter on <em>this</em> job.</h3>
             <p>Anyone can hand you a generic QA sheet and off you go. Soterra builds the sheet from this project&apos;s specs, plans and the Code, weighted by what your crew has failed before. You check what actually matters on this job, and every item says where it came from. H&amp;S plans work the same way.</p>
           </div>
           <div className="fvis">
