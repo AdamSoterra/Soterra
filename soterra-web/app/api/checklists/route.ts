@@ -9,6 +9,7 @@ import {
   addChecklistPhoto,
   createChecklist,
   deleteChecklist,
+  flaggedChecklistItems,
   generateChecklistItems,
   getChecklist,
   isItemStatus,
@@ -48,7 +49,10 @@ export async function GET(req: Request) {
 
   const eventId = url.searchParams.get("eventId");
   const rows = await listChecklists(scope, { eventId });
-  return Response.json({ checklists: rows, types: CHECKLIST_TYPES });
+  // The site-wide list also carries every flagged item, so the Internal pocket
+  // can show what the crew's own pre-checks catch without a request per check.
+  const flagged = eventId ? [] : await flaggedChecklistItems(scope);
+  return Response.json({ checklists: rows, flagged, types: CHECKLIST_TYPES });
 }
 
 // POST /api/checklists

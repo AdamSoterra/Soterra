@@ -155,6 +155,9 @@ type ChecklistHead = {
   status: string; createdByName: string | null; createdAt: string;
   total?: number; done?: number; issues?: number;
 };
+// One flagged item off an internal pre-inspection check — the "what your
+// pre-checks catch" panel is built from these.
+type ClCatch = { title: string; category: string | null; source: string; sourceRef: string | null; checklistTitle: string; checkedAt: string | null };
 // A QA-scope location (Feature 4): extracted from drawing titles, or user-typed.
 type QaLoc = { label: string; kind: string; drawings: string[]; source: "extracted" | "user" };
 type ChecklistFull = { checklist: ChecklistHead; items: ChecklistItem[] };
@@ -866,6 +869,10 @@ export default function Page() {
 
   // ─── Checklists (attached to a calendar event) ───
   const [checklists, setChecklists] = useState<ChecklistHead[]>([]);
+  // Every flagged item off this site's own checks + which trade is selected in
+  // the "what your pre-checks catch" panel (null = the biggest one).
+  const [clCatches, setClCatches] = useState<ClCatch[]>([]);
+  const [intCat, setIntCat] = useState<string | null>(null);
   // Inspections-tab QA-check filters: free-text + status (open/done).
   const [clSearch, setClSearch] = useState("");
   const [clStatus, setClStatus] = useState(""); // "" = all
@@ -1080,6 +1087,7 @@ export default function Page() {
       const res = await apiFetch("/api/checklists");
       const data = await res.json();
       if (Array.isArray(data.checklists)) setChecklists(data.checklists);
+      if (Array.isArray(data.flagged)) setClCatches(data.flagged);
       if (data.types && Array.isArray(data.types.council)) setClTypes(data.types);
     } catch {
       /* ignore */
@@ -1099,7 +1107,7 @@ export default function Page() {
     // site — so a switch still has to re-fetch, and must not leave the old
     // site's checklists on screen.
     setInsights(null); setInsightsLoaded(false); setCatFilter(null); setOpenInspection(null);
-    setChecklists([]); setOpenChecklist(null); setRepItems([]);
+    setChecklists([]); setClCatches([]); setIntCat(null); setOpenChecklist(null); setRepItems([]);
     loadThreads();
     loadMembers();
   };
@@ -3626,13 +3634,85 @@ export default function Page() {
             {inspPocket === "internal" && (<>
             {/* ── Internal: the pre-inspection QA checks we generate ── */}
             {checklists.length > 0 && (() => {
-              const done = checklists.filter((c) => c.status === "done").length;
+              const doneChecks = checklists.filter((c) => c.status === "done");
+              const itemsChecked = checklists.reduce((s, c) => s + (c.done ?? 0), 0);
+              const flagged = checklists.reduce((s, c) => s + (c.issues ?? 0), 0);
+              // Clean pass = a check that CLOSED with nothing flagged. Open
+              // checks stay out of the rate — they haven't finished the walk.
+              const cleanPct = doneChecks.length ? Math.round((doneChecks.filter((c) => !(c.issues ?? 0)).length / doneChecks.length) * 100) : null;
+              const avgFix = Math.round((flagged / checklists.length) * 10) / 10;
               return (
                 <div className="rf-strip" style={{ marginTop: 12 }}>
-                  <div className="rf-tile"><b>{checklists.length}</b><span>checks run</span><small>pre-inspection checks</small></div>
-                  <div className="rf-tile"><b>{done}</b><span>done</span><small>ticked off on site</small></div>
-                  <div className="rf-tile"><b>{checklists.length - done}</b><span>open</span><small>still to close</small></div>
+                  <div className="rf-tile"><b>{checklists.length}</b><span>checks run</span><small>{doneChecks.length} done · {checklists.length - doneChecks.length} open</small></div>
+                  <div className="rf-tile"><b>{itemsChecked}</b><span>items checked</span><small>ticked off on site</small></div>
+                  <div className="rf-tile"><b>{flagged}</b><span>items flagged</span><small>caught before the inspector</small></div>
+                  <div className="rf-tile"><b>{cleanPct == null ? "—" : `${cleanPct}%`}</b><span>clean pass</span><small>closed checks, nothing to fix</small></div>
+                  <div className="rf-tile"><b>{avgFix}</b><span>avg to fix</span><small>flagged items per check</small></div>
                 </div>
+              );
+            })()}
+
+            {/* ── What your pre-checks catch: the internal-QA story, by trade.
+                   Same read as Insights, but every item here was flagged by our
+                   own crew BEFORE the inspector arrived. ── */}
+            {clCatches.length > 0 && (() => {
+              const byCat = new Map<string, ClCatch[]>();
+              for (const f of clCatches) {
+                const k = f.category || "Other";
+                if (!byCat.has(k)) byCat.set(k, []);
+                byCat.get(k)!.push(f);
+              }
+              const cats = [...byCat.entries()].map(([category, rows]) => ({ category, rows })).sort((a, b) => b.rows.length - a.rows.length);
+              const maxCat = cats[0]?.rows.length || 1;
+              const selCat = intCat && byCat.has(intCat) ? intCat : cats[0].category;
+              const sel = byCat.get(selCat)!;
+              return (
+                <>
+                  <IzToggle label="What your pre-checks catch" count={clCatches.length} open={!izClosed.catches} onClick={() => izToggle("catches")} />
+                  {!izClosed.catches && (
+                    <div className="iz-split" style={{ marginTop: 6 }}>
+                      <div className="iz-card">
+                        <div className="iz-cardh">
+                          <div className="iz-cardt">By trade</div>
+                          <div className="iz-cards">Flagged by your own crew before the inspector. Tap one.</div>
+                        </div>
+                        <div className="iz-bars">
+                          {cats.map((c) => {
+                            const on = c.category === selCat;
+                            return (
+                              <button key={c.category} className={"iz-bar" + (on ? " on" : "")} onClick={() => setIntCat(c.category)} title={`Show ${c.category}`}>
+                                <span className="iz-bl"><span className="rank-dot" style={{ background: catColor(c.category) }} /><span>{c.category}</span></span>
+                                <span className="iz-bt"><span className="iz-bf" style={{ width: `${Math.round((c.rows.length / maxCat) * 100)}%`, background: catColor(c.category) }} /></span>
+                                <span className="iz-bn">{c.rows.length}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="iz-cardf">{clCatches.length} caught early · fixed before it cost a re-book</div>
+                      </div>
+                      <div className="iz-card">
+                        <div className="iz-ddh">
+                          <div className="iz-sw" style={{ background: catColor(selCat) }} />
+                          <div>
+                            <div className="iz-ddn">{selCat}</div>
+                            <div className="iz-ddm">{sel.length} item{sel.length === 1 ? "" : "s"} flagged on your own checks</div>
+                          </div>
+                        </div>
+                        <div className="iz-list">
+                          {sel.slice(0, 8).map((f, i) => (
+                            <div className="iz-item" key={i}>
+                              <div className="iz-im">
+                                <div className="iz-it">{f.title}</div>
+                                <div className="iz-ispan">{f.checklistTitle}{f.sourceRef ? ` · ${f.sourceRef}` : ""}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="iz-ddf"><span className="more">{sel.length > 8 ? `+ ${sel.length - 8} more ${selCat} item${sel.length - 8 === 1 ? "" : "s"}` : "All items shown"}</span><span>every item came off a cited check</span></div>
+                      </div>
+                    </div>
+                  )}
+                </>
               );
             })()}
             <div className="sub-k" style={{ marginTop: 20 }}>Pre-inspection checks<span>{checklists.length}</span></div>

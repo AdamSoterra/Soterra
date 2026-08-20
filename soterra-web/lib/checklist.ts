@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "./db";
 import { checklistItems, checklistPhotos, checklists, planPins } from "./schema";
 import type { Scope } from "./company";
@@ -561,6 +561,33 @@ export async function listChecklists(scope: Scope, opts: { eventId?: string | nu
   }
 
   return rows.map((r) => ({ ...r, ...(tally.get(r.id) ?? { total: 0, done: 0, issues: 0 }) }));
+}
+
+/** Every flagged item on this site's own pre-inspection checks — what the
+ *  crew caught before the inspector did. Feeds the Internal pocket's
+ *  "what your pre-checks catch" panel; kind 'inspection' only, because a
+ *  safety plan's hazard areas aren't trades and the CCC pack is paperwork. */
+export async function flaggedChecklistItems(scope: Scope) {
+  return db
+    .select({
+      title: checklistItems.title,
+      category: checklistItems.category,
+      source: checklistItems.source,
+      sourceRef: checklistItems.sourceRef,
+      checklistTitle: checklists.title,
+      checkedAt: checklistItems.checkedAt,
+    })
+    .from(checklistItems)
+    .innerJoin(checklists, eq(checklistItems.checklistId, checklists.id))
+    .where(
+      and(
+        eq(checklistItems.companyId, scope.companyId),
+        eq(checklistItems.projectId, scope.projectId),
+        eq(checklistItems.status, "issue"),
+        eq(checklists.kind, "inspection")
+      )
+    )
+    .orderBy(desc(checklistItems.checkedAt));
 }
 
 const ITEM_STATUS = ["pending", "ok", "issue", "na"] as const;
