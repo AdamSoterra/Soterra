@@ -60,7 +60,7 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         <div className="cta">
           <button className="solid" onClick={go}>Get set up</button>
           <button className="ghost" onClick={login}>Log in</button>
-          <a className="ghost inst" href="/install">
+          <a className="ghost instbtn" href="/install">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.6" /><line x1="10.5" y1="18.5" x2="13.5" y2="18.5" /></svg>
             Install
           </a>
@@ -311,7 +311,7 @@ const CSS = `
 .lp .hero h1 .g{font-weight:700}
 .lp .cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;position:relative;z-index:2;margin-top:34px}
 .lp .cta .solid,.lp .cta .ghost{padding:12px 20px;font-size:14.5px;border-radius:12px}
-.lp .cta .inst{color:var(--brand-d);border-color:rgba(14,143,230,.32);display:inline-flex;align-items:center;gap:7px;background:#fff}
+.lp .cta .instbtn{color:var(--brand-d);border-color:rgba(14,143,230,.32);display:inline-flex;align-items:center;gap:7px;background:#fff}
 .lp .tryfree{position:relative;z-index:2;margin-top:16px;font-size:13.5px;color:var(--slate)}
 .lp .linkbtn{color:var(--brand-d);font-weight:600;font-size:13.5px;border-bottom:1px solid rgba(14,143,230,.4);border-radius:0;padding:0}
 /* partners */
@@ -382,7 +382,7 @@ const CSS = `
 /* convergence */
 .lp .cv{background:linear-gradient(180deg,rgba(246,250,255,0),#fff)}
 .lp .cvgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:940px;margin:40px auto 0}
-.lp .src{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(12,42,71,.05)}
+.lp .src{display:block;background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(12,42,71,.05)}
 .lp .src .st{font-size:14px;font-weight:700;color:var(--navy);margin-bottom:12px;display:flex;align-items:center;gap:9px}
 .lp .src .sd{width:10px;height:10px;border-radius:3px}
 .lp .src.s1 .sd{background:var(--brand)}.lp .src.s2 .sd{background:var(--purple)}.lp .src.s3 .sd{background:var(--amber)}
