@@ -451,6 +451,7 @@ const CSS = `
   .lp .frow.rev .ftext{order:0}
   .lp .stats,.lp .cvgrid,.lp .tk3{grid-template-columns:1fr}
   .lp .beams{display:none}
+  .lp .core{margin-top:16px}
 }
 @media(max-width:560px){
   .lp .band{padding:52px 6vw}
