@@ -66,7 +66,6 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
               Install
             </a>
           </div>
-          <div className="tryfree">No access code yet? <button className="linkbtn" onClick={go}>Ask it 5 questions free →</button></div>
         </div>
         <div className="partners">
           <div className="pk">Built in partnership with</div>
@@ -263,7 +262,6 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         <p className="lead">Set up your company and get the crew asking in minutes.</p>
         <div className="cta" style={{ justifyContent: "center" }}>
           <button className="solid" onClick={go}>Get set up →</button>
-          <button className="ghost" onClick={go}>Ask it 5 questions free</button>
         </div>
       </section>
 
