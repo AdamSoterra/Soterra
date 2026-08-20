@@ -8,11 +8,11 @@ export const metadata: Metadata = {
 // Standalone team page. Photo, name, LinkedIn — no titles (Adam's brief).
 // Avatars are initials until real headshots are dropped into /public/team.
 const TEAM = [
-  { name: "Adam Domok", initials: "AD", url: "https://www.linkedin.com/in/domok-adam/" },
-  { name: "Maree Lamositele", initials: "ML", url: "https://www.linkedin.com/in/lamositele/" },
-  { name: "Farhaan Mirza", initials: "FM", url: "https://www.linkedin.com/in/farhaanmirza/" },
-  { name: "Felix Philip Kadavil", initials: "FK", url: "https://www.linkedin.com/in/felixphilipkadavil/" },
-  { name: "Kirushnaa Moni", initials: "KM", url: "https://www.linkedin.com/in/kirushnaamoni/" },
+  { name: "Adam Domok", initials: "AD", photo: "adam.jpg", url: "https://www.linkedin.com/in/domok-adam/" },
+  { name: "Maree Lamositele", initials: "ML", photo: "maree.jpg", url: "https://www.linkedin.com/in/lamositele/" },
+  { name: "Farhaan Mirza", initials: "FM", photo: "farhaan.jpg", url: "https://www.linkedin.com/in/farhaanmirza/" },
+  { name: "Felix Philip Kadavil", initials: "FK", photo: "felix.jpg", url: "https://www.linkedin.com/in/felixphilipkadavil/" },
+  { name: "Kirushnaa Moni", initials: "KM", photo: "moni.jpg", url: "https://www.linkedin.com/in/kirushnaamoni/" },
 ];
 
 export default function TeamPage() {
@@ -38,7 +38,10 @@ export default function TeamPage() {
         <div className="tp-grid">
           {TEAM.map((m) => (
             <div className="tp-member" key={m.name}>
-              <div className="tp-ava">{m.initials}</div>
+              <div className="tp-ava">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/team/${m.photo}`} alt={m.name} />
+              </div>
               <div className="tp-name">{m.name}</div>
               <a className="tp-link" href={m.url} target="_blank" rel="noopener noreferrer">
                 <span className="tp-in">in</span>LinkedIn
@@ -77,7 +80,8 @@ const CSS = `
 .tp-head p{font-size:16px;color:var(--slate)}
 .tp-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:22px;margin:44px auto 0}
 .tp-member{display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px}
-.tp-ava{width:112px;height:112px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;font-size:34px;font-weight:700;box-shadow:0 16px 34px rgba(10,141,237,.28);border:3px solid #fff}
+.tp-ava{width:112px;height:112px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;font-size:34px;font-weight:700;box-shadow:0 16px 34px rgba(10,141,237,.28);border:3px solid #fff;overflow:hidden}
+.tp-ava img{width:100%;height:100%;object-fit:cover;display:block}
 .tp-name{font-size:15.5px;font-weight:700;color:var(--navy)}
 .tp-link{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--brand-d);border:1px solid var(--line);border-radius:10px;padding:7px 12px;background:#fff}
 .tp-link:hover{border-color:var(--brand)}
