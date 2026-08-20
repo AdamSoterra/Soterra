@@ -11,7 +11,7 @@ const TEAM = [
   { name: "Adam Domok", initials: "AD", url: "https://www.linkedin.com/in/domok-adam/" },
   { name: "Maree Lamositele", initials: "ML", url: "https://www.linkedin.com/in/lamositele/" },
   { name: "Farhaan Mirza", initials: "FM", url: "https://www.linkedin.com/in/farhaanmirza/" },
-  { name: "Felix Kadavil", initials: "FK", url: "https://www.linkedin.com/in/felixphilipkadavil/" },
+  { name: "Felix Philip Kadavil", initials: "FK", url: "https://www.linkedin.com/in/felixphilipkadavil/" },
   { name: "Kirushnaa Moni", initials: "KM", url: "https://www.linkedin.com/in/kirushnaamoni/" },
 ];
 

@@ -56,16 +56,18 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
       {/* HERO — calm, subtle motion */}
       <section className="hero">
         <div className="mesh" /><div className="grid" />
-        <h1>Turning construction data into <span className="g">company intelligence.</span></h1>
-        <div className="cta">
-          <button className="solid" onClick={go}>Get set up</button>
-          <button className="ghost" onClick={login}>Log in</button>
-          <a className="ghost instbtn" href="/install">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.6" /><line x1="10.5" y1="18.5" x2="13.5" y2="18.5" /></svg>
-            Install
-          </a>
+        <div className="hstack">
+          <h1>Turning construction data into <span className="g">company intelligence.</span></h1>
+          <div className="cta">
+            <button className="solid" onClick={go}>Get set up</button>
+            <button className="ghost" onClick={login}>Log in</button>
+            <a className="ghost instbtn" href="/install">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.6" /><line x1="10.5" y1="18.5" x2="13.5" y2="18.5" /></svg>
+              Install
+            </a>
+          </div>
+          <div className="tryfree">No access code yet? <button className="linkbtn" onClick={go}>Ask it 5 questions free →</button></div>
         </div>
-        <div className="tryfree">No access code yet? <button className="linkbtn" onClick={go}>Ask it 5 questions free →</button></div>
         <div className="partners">
           <div className="pk">Built in partnership with</div>
           <div className="prow">
@@ -302,7 +304,8 @@ const CSS = `
 .lp .solid{background:var(--grad);color:#fff;font-size:13.5px;font-weight:600;padding:10px 17px;border-radius:11px;box-shadow:0 10px 24px rgba(10,141,237,.28)}
 .lp .solid:hover{filter:brightness(1.05)}
 /* hero */
-.lp .hero{position:relative;min-height:82vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 7vw 46px;overflow:hidden}
+.lp .hero{position:relative;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:26px 7vw 30px;overflow:hidden}
+.lp .hstack{display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;z-index:2;width:100%}
 .lp .hero .mesh{position:absolute;inset:0;z-index:0;background:radial-gradient(460px 320px at 22% 34%,rgba(65,195,255,.14),transparent 60%),radial-gradient(500px 340px at 80% 66%,rgba(10,141,237,.10),transparent 60%);animation:lpmesh 14s ease-in-out infinite}
 @keyframes lpmesh{0%,100%{transform:translate(0,0)}50%{transform:translate(-16px,-12px)}}
 .lp .hero .grid{position:absolute;inset:-2px;z-index:0;opacity:.42;background-image:linear-gradient(rgba(14,143,230,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(14,143,230,.08) 1px,transparent 1px);background-size:42px 42px;animation:lpgrid 22s linear infinite;-webkit-mask-image:radial-gradient(circle at 50% 42%,#000 60%,transparent 100%);mask-image:radial-gradient(circle at 50% 42%,#000 60%,transparent 100%)}
@@ -451,7 +454,7 @@ const CSS = `
 }
 @media(max-width:560px){
   .lp .band{padding:52px 6vw}
-  .lp .hero{min-height:auto;padding:46px 6vw 40px}
+  .lp .hero{padding:40px 6vw 30px}
   .lp .foot{padding:22px 6vw}
   .lp .foot .fl{order:3;flex-basis:100%}
   .lp .partners{margin-top:32px}
