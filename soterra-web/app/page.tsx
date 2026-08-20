@@ -3682,80 +3682,6 @@ export default function Page() {
               </div>
             )}
 
-            {/* What keeps failing — moved from the old Insights tab. By-trade
-                chart + drill-down; the headline counts now live in the strip. */}
-            {insightsLoaded && (insights?.summary.inspections ?? 0) > 0 && insights!.categories.length > 0 && (
-              <>
-                <IzToggle label="What keeps failing" open={!izClosed.fails} onClick={() => izToggle("fails")} />
-                {!izClosed.fails && (
-                  <>
-                    <div className="iz-note"><b>●</b> Every item below came off one of your own reports.</div>
-                    {(() => {
-                      const selCat = insights!.selectedCategory ?? insights!.categories[0].category;
-                      const selCount = insights!.categories.find((c) => c.category === selCat)?.count ?? 0;
-                      const items = insights!.topItems;
-                      const maxN = Math.max(1, ...items.map((i) => i.count));
-                      const shown = items.reduce((s, i) => s + i.count, 0);
-                      const more = Math.max(0, selCount - shown);
-                      const maxCat = insights!.categories[0]?.count || 1;
-                      return (
-                        <div className="iz-split">
-                          <div className="iz-card">
-                            <div className="iz-cardh">
-                              <div className="iz-cardt">By trade</div>
-                              <div className="iz-cards">Across every report. Tap one to open it.</div>
-                            </div>
-                            <div className="iz-bars">
-                              {insights!.categories.map((c) => {
-                                const on = c.category === selCat;
-                                return (
-                                  <button key={c.category} className={"iz-bar" + (on ? " on" : "")} onClick={() => { setCatFilter(c.category); loadInsights(c.category); }} title={`Show ${c.category}`}>
-                                    <span className="iz-bl"><span className="rank-dot" style={{ background: catColor(c.category) }} /><span>{c.category}</span></span>
-                                    <span className="iz-bt"><span className="iz-bf" style={{ width: `${Math.round((c.count / maxCat) * 100)}%`, background: catColor(c.category) }} /></span>
-                                    <span className="iz-bn">{c.count}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            <div className="iz-cardf">{insights!.summary.failedItems} items · {insights!.summary.inspections} reports</div>
-                          </div>
-
-                          <div className="iz-card">
-                            <div className="iz-ddh">
-                              <div className="iz-sw" style={{ background: catColor(selCat) }} />
-                              <div>
-                                <div className="iz-ddn">{selCat}</div>
-                                <div className="iz-ddm">{selCount} item{selCount === 1 ? "" : "s"} across your reports · most repeated at the top</div>
-                              </div>
-                            </div>
-                            {items.length === 0 ? (
-                              <div className="page-sub" style={{ padding: "16px 20px", marginBottom: 0 }}>Nothing to show here yet.</div>
-                            ) : (
-                              <div className="iz-list">
-                                {items.map((t, i) => (
-                                  <div className="iz-item" key={i}>
-                                    <div className="iz-im">
-                                      <div className="iz-it">{t.title}</div>
-                                      {t.firstSeen && t.lastSeen && t.firstSeen !== t.lastSeen && (
-                                        <div className="iz-ispan">open {t.firstSeen} → {t.lastSeen}</div>
-                                      )}
-                                      <div className="iz-itk"><div className="iz-itf" style={{ width: `${Math.round((t.count / maxN) * 100)}%`, background: catColor(selCat) }} /></div>
-                                    </div>
-                                    <div className="iz-ic">{t.count}<small>×</small></div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <div className="iz-ddf"><span className="more">{more > 0 ? `+ ${more} more ${selCat} item${more === 1 ? "" : "s"}` : "All items shown"}</span><span>the number is how many inspections it came up on</span></div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </>
-                )}
-              </>
-            )}
-
             {/* Subcontractor close-out — moved from the old Insights tab. */}
             {insightsLoaded && (insights?.summary.inspections ?? 0) > 0 && (
               <>
@@ -4292,7 +4218,7 @@ export default function Page() {
                 <div className="page-h">Insights</div>
                 <div className="page-sub" style={{ marginBottom: 0 }}>
                   {insights?.company.name ? `${insights.company.name} · ` : ""}
-                  every report filed, newest first{insights && insights.company.sites > 1 ? `, across all ${insights.company.sites} sites` : ""}
+                  what you keep getting pulled up on, across {insights?.company.sites === 1 ? "your site" : `all ${insights?.company.sites ?? ""} sites`}
                 </div>
               </div>
             </div>
@@ -4301,32 +4227,100 @@ export default function Page() {
               <div className="page-sub" style={{ marginTop: 18 }}>Loading…</div>
             ) : (insights?.summary.inspections ?? 0) === 0 ? (
               <div className="cal-card" style={{ marginTop: 18 }}>
-                <b style={{ color: "var(--navy)" }}>No history yet.</b>
-                <p className="page-sub" style={{ margin: "6px 0 12px" }}>As you file council and consultant reports on the Inspections tab, every one lands here as a running record, newest first.</p>
+                <b style={{ color: "var(--navy)" }}>Nothing to learn from yet.</b>
+                <p className="page-sub" style={{ margin: "6px 0 12px" }}>Add your council and consultant reports on the Inspections tab. Once a handful are in, this shows what your crew keeps getting pulled up on across every report.</p>
                 <button className="lg-btn primary" style={{ height: 42, margin: 0, width: "auto", padding: "0 18px" }} onClick={() => setTab("inspections")}>Go to Inspections</button>
               </div>
             ) : (
               <>
-                <div className="iz-hist">
-                  {insights!.inspections.map((r) => {
-                    const oc = outcomeChip(r.source, r.outcome, r.itemCount);
-                    return (
-                      <button className="iz-hrow" key={r.id} onClick={async () => {
-                        const res = await apiFetch(`/api/inspections?id=${encodeURIComponent(r.id)}`);
-                        const data = await res.json();
-                        if (res.ok) setOpenInspection({ inspection: r, items: data.items || [] });
-                      }}>
-                        <span className="iz-hdate">{r.inspectedOn || "—"}</span>
-                        <span className="rt-badge" style={{ background: oc.cls === "pass" ? "var(--green)" : oc.cls === "fail" ? "var(--red)" : undefined }}>{r.inspectionCode || (r.source === "council" ? "BCA" : "CON")}</span>
-                        <span className="iz-htype">{r.inspectionType || r.doc}</span>
-                        <span className="iz-hins">{r.inspector || ""}</span>
-                        <span className="iz-hgrow" />
-                        {r.itemCount ? <span className="iz-hnum">{r.itemCount} to fix</span> : null}
-                        <span className={"pill " + oc.cls}>{oc.label}</span>
-                      </button>
-                    );
-                  })}
+                <div className="iz-kpis" style={{ marginTop: 4 }}>
+                  <div className="iz-kpi hero">
+                    <div className="iz-lab">Items flagged</div>
+                    <div className="iz-val">{insights!.summary.failedItems}</div>
+                    <div className="iz-sub">things picked up in your reports</div>
+                  </div>
+                  <div className="iz-kpi">
+                    <div className="iz-lab">Reports read</div>
+                    <div className="iz-val">{insights!.summary.inspections}</div>
+                    <div className="iz-sub">council + consultant inspections</div>
+                  </div>
+                  <div className="iz-kpi">
+                    <div className="iz-lab">Worst trade</div>
+                    {insights!.categories[0] ? (
+                      <>
+                        <div className="iz-trade"><span className="rank-dot" style={{ width: 12, height: 12, background: catColor(insights!.categories[0].category) }} /><span className="iz-val">{insights!.categories[0].category}</span></div>
+                        <div className="iz-sub">{insights!.categories[0].count} item{insights!.categories[0].count === 1 ? "" : "s"}, most of any trade</div>
+                      </>
+                    ) : (
+                      <div className="iz-val">—</div>
+                    )}
+                  </div>
                 </div>
+                <div className="iz-note"><b>●</b> Every item below came off one of your own reports.</div>
+
+                {insights!.categories.length === 0 ? (
+                  <div className="cal-card"><div className="page-sub" style={{ marginBottom: 0 }}>Nothing failed yet across your filed reports. Enjoy it.</div></div>
+                ) : (() => {
+                  const selCat = insights!.selectedCategory ?? insights!.categories[0].category;
+                  const selCount = insights!.categories.find((c) => c.category === selCat)?.count ?? 0;
+                  const items = insights!.topItems;
+                  const maxN = Math.max(1, ...items.map((i) => i.count));
+                  const shown = items.reduce((s, i) => s + i.count, 0);
+                  const more = Math.max(0, selCount - shown);
+                  const maxCat = insights!.categories[0]?.count || 1;
+                  return (
+                    <div className="iz-split">
+                      <div className="iz-card">
+                        <div className="iz-cardh">
+                          <div className="iz-cardt">By trade</div>
+                          <div className="iz-cards">Across every report. Tap one to open it.</div>
+                        </div>
+                        <div className="iz-bars">
+                          {insights!.categories.map((c) => {
+                            const on = c.category === selCat;
+                            return (
+                              <button key={c.category} className={"iz-bar" + (on ? " on" : "")} onClick={() => { setCatFilter(c.category); loadInsights(c.category); }} title={`Show ${c.category}`}>
+                                <span className="iz-bl"><span className="rank-dot" style={{ background: catColor(c.category) }} /><span>{c.category}</span></span>
+                                <span className="iz-bt"><span className="iz-bf" style={{ width: `${Math.round((c.count / maxCat) * 100)}%`, background: catColor(c.category) }} /></span>
+                                <span className="iz-bn">{c.count}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="iz-cardf">{insights!.summary.failedItems} items · {insights!.summary.inspections} reports</div>
+                      </div>
+
+                      <div className="iz-card">
+                        <div className="iz-ddh">
+                          <div className="iz-sw" style={{ background: catColor(selCat) }} />
+                          <div>
+                            <div className="iz-ddn">{selCat}</div>
+                            <div className="iz-ddm">{selCount} item{selCount === 1 ? "" : "s"} across your reports · most repeated at the top</div>
+                          </div>
+                        </div>
+                        {items.length === 0 ? (
+                          <div className="page-sub" style={{ padding: "16px 20px", marginBottom: 0 }}>Nothing to show here yet.</div>
+                        ) : (
+                          <div className="iz-list">
+                            {items.map((t, i) => (
+                              <div className="iz-item" key={i}>
+                                <div className="iz-im">
+                                  <div className="iz-it">{t.title}</div>
+                                  {t.firstSeen && t.lastSeen && t.firstSeen !== t.lastSeen && (
+                                    <div className="iz-ispan">open {t.firstSeen} → {t.lastSeen}</div>
+                                  )}
+                                  <div className="iz-itk"><div className="iz-itf" style={{ width: `${Math.round((t.count / maxN) * 100)}%`, background: catColor(selCat) }} /></div>
+                                </div>
+                                <div className="iz-ic">{t.count}<small>×</small></div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="iz-ddf"><span className="more">{more > 0 ? `+ ${more} more ${selCat} item${more === 1 ? "" : "s"}` : "All items shown"}</span><span>the number is how many inspections it came up on</span></div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             )}
           </div></div>
