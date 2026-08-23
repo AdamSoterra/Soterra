@@ -89,10 +89,13 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
       {/* EXPLAINER VIDEO — right under the hero, self-hosted, muted auto-loop */}
       <section className="band vband">
         <div className="vidwrap">
-          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-          <video className="explainer" autoPlay muted loop playsInline controls preload="metadata" poster="/explainer-poster.jpg">
-            <source src="/explainer.mp4" type="video/mp4" />
-          </video>
+          <div className="vidframe">
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <video className="explainer" autoPlay muted loop playsInline preload="metadata" poster="/explainer-poster.jpg"
+              onClick={(e) => { const v = e.currentTarget; v.paused ? v.play().catch(() => {}) : v.pause(); }}>
+              <source src="/explainer.mp4" type="video/mp4" />
+            </video>
+          </div>
         </div>
       </section>
 
@@ -339,10 +342,13 @@ const CSS = `
 /* section shell */
 .lp .band{position:relative;max-width:1120px;margin:0 auto;padding:74px 7vw}
 .lp .band.tight{padding:56px 7vw}
-/* explainer video, directly under the hero */
-.lp .vband{padding-top:8px;padding-bottom:8px}
-.lp .vidwrap{max-width:1000px;margin:0 auto;border-radius:18px;overflow:hidden;border:1px solid var(--line);box-shadow:0 30px 80px rgba(12,42,71,.16);background:var(--navy)}
-.lp .explainer{display:block;width:100%;height:auto;aspect-ratio:16/9}
+/* explainer video, directly under the hero — clean glow, auto-plays (no controls) */
+.lp .vband{padding-top:10px;padding-bottom:10px}
+.lp .vidwrap{position:relative;max-width:1000px;margin:0 auto;padding:14px}
+.lp .vidwrap::before{content:'';position:absolute;inset:6px;border-radius:24px;background:radial-gradient(closest-side,rgba(14,143,230,.28),transparent 78%);filter:blur(26px);z-index:0}
+.lp .vidframe{position:relative;z-index:1;border-radius:16px;overflow:hidden;box-shadow:0 30px 70px rgba(12,42,71,.18);border:2px solid transparent;background-image:linear-gradient(#fff,#fff),var(--grad);background-origin:border-box;background-clip:padding-box,border-box}
+.lp .explainer{display:block;width:100%;height:auto;aspect-ratio:16/9;border-radius:14px;cursor:pointer}
+@media(max-width:560px){.lp .vidwrap{padding:8px}.lp .vidwrap::before{inset:3px;filter:blur(18px)}.lp .vidframe{box-shadow:0 18px 44px rgba(12,42,71,.16)}}
 .lp .center{text-align:center;max-width:760px;margin:0 auto}
 .lp .center h2{font-size:clamp(27px,3.6vw,42px);font-weight:600;letter-spacing:-.028em;line-height:1.14;margin:14px 0 14px}
 .lp .center .lead{font-size:17px;line-height:1.62}
