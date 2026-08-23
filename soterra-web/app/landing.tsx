@@ -92,9 +92,17 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
           <div className="vidframe">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video className="explainer" autoPlay muted loop playsInline preload="metadata" poster="/explainer-poster.jpg"
-              onClick={(e) => { const v = e.currentTarget; v.paused ? v.play().catch(() => {}) : v.pause(); }}>
+              onClick={(e) => { const v = e.currentTarget; v.paused ? v.play().catch(() => {}) : v.pause(); }}
+              onPlay={(e) => e.currentTarget.closest(".vidframe")?.classList.remove("paused")}
+              onPause={(e) => e.currentTarget.closest(".vidframe")?.classList.add("paused")}>
               <source src="/explainer.mp4" type="video/mp4" />
             </video>
+            <button className="vplay" aria-label="Play video" onClick={(e) => { e.stopPropagation(); e.currentTarget.closest(".vidframe")?.querySelector("video")?.play().catch(() => {}); }}>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+            </button>
+            <button className="vfs" aria-label="Full screen" onClick={(e) => { e.stopPropagation(); const v = e.currentTarget.closest(".vidframe")?.querySelector("video"); if (!v) return; if (v.requestFullscreen) v.requestFullscreen().catch(() => {}); else (v as unknown as { webkitEnterFullscreen?: () => void }).webkitEnterFullscreen?.(); }}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
+            </button>
           </div>
         </div>
       </section>
@@ -348,7 +356,13 @@ const CSS = `
 .lp .vidwrap::before{content:'';position:absolute;inset:6px;border-radius:24px;background:radial-gradient(closest-side,rgba(14,143,230,.28),transparent 78%);filter:blur(26px);z-index:0}
 .lp .vidframe{position:relative;z-index:1;border-radius:16px;overflow:hidden;box-shadow:0 30px 70px rgba(12,42,71,.18);border:2px solid transparent;background-image:linear-gradient(#fff,#fff),var(--grad);background-origin:border-box;background-clip:padding-box,border-box}
 .lp .explainer{display:block;width:100%;height:auto;aspect-ratio:16/9;border-radius:14px;cursor:pointer}
-@media(max-width:560px){.lp .vidwrap{padding:8px}.lp .vidwrap::before{inset:3px;filter:blur(18px)}.lp .vidframe{box-shadow:0 18px 44px rgba(12,42,71,.16)}}
+.lp .vplay{position:absolute;inset:0;margin:auto;width:64px;height:64px;border:0;border-radius:50%;background:rgba(12,42,71,.5);backdrop-filter:blur(4px);color:#fff;display:none;align-items:center;justify-content:center;cursor:pointer;z-index:3;padding-left:4px}
+.lp .vidframe.paused .vplay{display:flex}
+.lp .vplay:hover{background:rgba(12,42,71,.68)}
+.lp .vfs{position:absolute;right:12px;bottom:12px;width:34px;height:34px;border:0;border-radius:9px;background:rgba(12,42,71,.5);backdrop-filter:blur(4px);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:3;opacity:.6;transition:opacity .2s,background .2s}
+.lp .vidframe:hover .vfs{opacity:1}
+.lp .vfs:hover{background:rgba(12,42,71,.75)}
+@media(max-width:560px){.lp .vidwrap{padding:8px}.lp .vidwrap::before{inset:3px;filter:blur(18px)}.lp .vidframe{box-shadow:0 18px 44px rgba(12,42,71,.16)}.lp .vfs{opacity:.85}}
 .lp .center{text-align:center;max-width:760px;margin:0 auto}
 .lp .center h2{font-size:clamp(27px,3.6vw,42px);font-weight:600;letter-spacing:-.028em;line-height:1.14;margin:14px 0 14px}
 .lp .center .lead{font-size:17px;line-height:1.62}
