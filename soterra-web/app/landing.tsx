@@ -136,7 +136,6 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         <div className="center">
           <div className="kick">The assistant</div>
           <h2>It helps prevent rework and the delays that come with it, <span className="g">before the job and while it&apos;s underway.</span></h2>
-          <p className="lead">The same assistant works both ends of the job.</p>
         </div>
 
         <div className="frow">
