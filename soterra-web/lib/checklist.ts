@@ -37,7 +37,11 @@ const MODEL = "claude-opus-4-8";
 // which Sonnet writes just as well for ~a fifth of the cost. So SWMS runs cheaper.
 const SWMS_MODEL = "claude-sonnet-4-6";
 
-export type ChecklistKind = "inspection" | "ccc" | "swms";
+// "programme" is a one-shot programme critique, stored in the same tables with
+// its findings in checklist_items (finding_type set). It never runs through
+// generateChecklistItems — it has its own engine (lib/programmeCritique.ts) —
+// but createChecklist persists it, so the kind is shared here.
+export type ChecklistKind = "inspection" | "ccc" | "swms" | "programme";
 
 // ─── The CCC evidence pack ───────────────────────────────────────────────
 // Second checklist type, same engine, different item source. These are the
@@ -245,8 +249,12 @@ export async function generateChecklistItems(
   // drawings, not Unit 2's. If the filter leaves nothing (stale location cache
   // after a re-upload), fall back to the whole set rather than starve the check.
   const locDocs = new Set(opts.location?.drawings ?? []);
-  const scopedPages = locDocs.size ? projectIdx.pages.filter((pg) => locDocs.has(pg.doc)) : projectIdx.pages;
-  const planPool = scopedPages.length ? scopedPages : projectIdx.pages;
+  // Never let the construction programme's task text rank into a QA checklist —
+  // a schedule of activities and dates is not a design document and must never
+  // be cited as one. Keep it out of the plan pool entirely.
+  const designPages = projectIdx.pages.filter((pg) => pg.docType !== "programme");
+  const scopedPages = locDocs.size ? designPages.filter((pg) => locDocs.has(pg.doc)) : designPages;
+  const planPool = scopedPages.length ? scopedPages : designPages;
   const planPages = retrieve(planPool, projectIdx.df, q, 6);
   const codeHits = retrieve(codeIdx.pages, codeIdx.df, q, 6);
   // ⚠️ visibleTo, exactly as the assistant's own search does. Without it a
@@ -452,7 +460,7 @@ export async function createChecklist(
     inspectionCode?: string | null;
     location?: string | null;
     createdByName?: string | null;
-    items: { title: string; detail?: string | null; source?: string; sourceRef?: string | null; category?: string | null }[];
+    items: { title: string; detail?: string | null; source?: string; sourceRef?: string | null; category?: string | null; findingType?: string | null; severity?: string | null }[];
   }
 ) {
   const [row] = await db
@@ -482,6 +490,8 @@ export async function createChecklist(
         detail: it.detail ?? null,
         source: it.source ?? "manual",
         sourceRef: it.sourceRef ?? null,
+        findingType: it.findingType ?? null,
+        severity: it.severity ?? null,
       }))
     );
   }

@@ -630,7 +630,11 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
       case "search_plans": {
         const q = s(input.query) ?? "";
         if (!q) return { content: JSON.stringify({ error: "query required" }), cards: [] };
-        const { pages, df } = await getProjectIndex(projectId);
+        const { pages: allPages, df } = await getProjectIndex(projectId);
+        // The construction programme is a schedule, not a design document — never
+        // let its task text be retrieved and cited as a plan. It has its own
+        // critique flow (the Programme tab).
+        const pages = allPages.filter((p) => p.docType !== "programme");
         // Pull a few extra so older + newer revisions of the same detail both
         // surface — the model then answers from the latest (label carries the date).
         const top = retrieve(pages, df, q, 8);
@@ -729,7 +733,10 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
 
       case "review_plans": {
         const focus = s(input.focus) ?? "";
-        const { pages } = await getProjectIndex(projectId);
+        const { pages: allPages } = await getProjectIndex(projectId);
+        // Keep the construction programme out of the whole-set read too — a
+        // schedule of activities is not a design document to answer from.
+        const pages = allPages.filter((p) => p.docType !== "programme");
         if (pages.length === 0) return { content: JSON.stringify({ pages: [], note: "No plans are uploaded for this site yet." }), cards: [] };
 
         // Narrow to the focus if given (match on document name OR page text, with

@@ -48,7 +48,9 @@ export async function GET(req: Request) {
   }
 
   const eventId = url.searchParams.get("eventId");
-  const rows = await listChecklists(scope, { eventId });
+  // Programme critiques share these tables (kind='programme') but belong to the
+  // Programme tab, not the QA-checklist list — keep them out of here.
+  const rows = (await listChecklists(scope, { eventId })).filter((r) => r.kind !== "programme");
   // The site-wide list also carries every flagged item, so the Internal pocket
   // can show what the crew's own pre-checks catch without a request per check.
   const flagged = eventId ? [] : await flaggedChecklistItems(scope);

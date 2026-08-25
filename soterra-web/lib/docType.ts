@@ -9,7 +9,7 @@
 // fallback never CHANGES behaviour, only fails to improve it — and the
 // Documents tab lets a human correct it in one tap.
 
-export const DOC_TYPES = ["drawings", "specs", "reports", "scopes", "other"] as const;
+export const DOC_TYPES = ["drawings", "specs", "reports", "scopes", "programme", "other"] as const;
 export type DocType = (typeof DOC_TYPES)[number];
 
 export const DOC_TYPE_LABEL: Record<DocType, string> = {
@@ -17,6 +17,7 @@ export const DOC_TYPE_LABEL: Record<DocType, string> = {
   specs: "Specifications",
   reports: "Reports & PS",
   scopes: "Scopes",
+  programme: "Programme",
   other: "Other",
 };
 
@@ -26,6 +27,7 @@ export const DOC_TYPE_NOTE: Record<DocType, string> = {
   specs: "the project specification (materials, products, standards - same precedence level as the drawings)",
   reports: "a consultant report or producer statement (governs its own discipline)",
   scopes: "a subcontractor scope of works (what a trade is contracted to do - not a design document)",
+  programme: "the construction programme / build schedule - the planned sequence and durations, NOT a design document; never cite it as a plan or spec",
   other: "a project document",
 };
 
@@ -74,6 +76,13 @@ export function detectDocType(filename: string, firstPageText?: string | null): 
   // like a sheet code but are never drawings.
   if (/^PS[\s-]?[1-4]\b/i.test(name)) return "reports";
   if (/masterspec/i.test(name)) return "specs";
+  // The construction programme (build schedule / Gantt). Must sit ABOVE the
+  // sheet-code shortcut, exactly like the PS/masterspec cases: "P-01
+  // Programme.pdf" or "PRG-001.pdf" both start like a sheet code but are a
+  // programme, not a drawing. Deliberately NOT matching a bare "schedule" —
+  // a door/window/finishes schedule is a drawing table, not the build
+  // programme — only the qualified forms and the planning tools.
+  if (/\b(construction|works|baseline|master|contract|build)\s+(programme|program|schedule)\b|\bprogramme\b|\bgantt\b|\b(asta|powerproject|primavera|p6)\b|\bms[\s-]?project\b/i.test(name)) return "programme";
   // A name that STARTS with a sheet code (S0.01-, A3-00-0000-, 44000-,
   // AR109209-01-) is a sheet out of a drawing set, whatever its title says —
   // sets are full of "GENERAL NOTES & SPECIFICATIONS" title sheets that are

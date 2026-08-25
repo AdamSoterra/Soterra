@@ -429,6 +429,11 @@ export const checklistItems = pgTable(
     // source is a guess, and a guess on a checklist is worse than no item.
     source: text("source").default("manual").notNull(), // plans | code | history | ccc | manual
     sourceRef: text("source_ref"), // the exact page label / determination / count
+    // Only set on a programme critique (checklists.kind = 'programme'): which of
+    // the four flag types this finding is, and how serious. Null on every
+    // normal QA item.
+    findingType: text("finding_type"), // missing_scope | out_of_sequence | unrealistic_duration | missing_hold_point
+    severity: text("severity"), // high | medium | low (programme critique only)
     status: text("status").default("pending").notNull(), // pending | ok | issue | na
     note: text("note"),
     // Feature 4: set when this item's fix was emailed to a sub — the "sent and

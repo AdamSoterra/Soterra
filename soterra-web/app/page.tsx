@@ -6,7 +6,7 @@ import { DOC_TYPES, DOC_TYPE_LABEL, docTypeOf, type DocType } from "@/lib/docTyp
 import Landing from "./landing";
 import { InstallHint } from "./components/install-hint";
 
-type Tab = "assistant" | "calendar" | "tasks" | "inspections" | "plans" | "upload" | "rfis" | "insights";
+type Tab = "assistant" | "calendar" | "tasks" | "inspections" | "plans" | "upload" | "rfis" | "insights" | "programme";
 type Cite = {
   code: string; title: string; sub: string; ans: string; hlTag: string;
   // Set when the answer came from a manufacturer's manual (e.g. GIB) rather than
@@ -90,6 +90,8 @@ type ChecklistItem = {
   source: string; sourceRef: string | null; status: "pending" | "ok" | "issue" | "na";
   note: string | null; checkedByName: string | null; photos: ChecklistPhoto[]; pins?: ItemPin[];
   sentTo?: string | null; sentAt?: string | null; sentStatus?: string | null;
+  // Only present on a programme critique (kind='programme').
+  findingType?: string | null; severity?: string | null;
 };
 // A subcontractor contact (Feature 4): company-scoped, trade = a category.
 type Sub = { id: string; name: string; email: string; trade: string | null };
@@ -308,7 +310,15 @@ function outcomeChip(source: string, outcome: string, itemCount: number): { cls:
 
 // Where a checklist item came from. An item with no source is a guess, so the
 // badge is deliberately loud about which of the three sources backed it.
-const SRC_LABEL: Record<string, string> = { plans: "Plans", code: "Code", manufacturer: "GIB manual", history: "Our history", ccc: "CCC pack", hsw: "HSWA / WorkSafe", manual: "Added" };
+const SRC_LABEL: Record<string, string> = { plans: "Plans", code: "Code", manufacturer: "GIB manual", history: "Our history", ccc: "CCC pack", hsw: "HSWA / WorkSafe", manual: "Added", spec: "Spec", scope: "Scope", sequence: "Inspection order" };
+// Programme-critique finding types → the section heading each groups under.
+const FINDING_GROUPS: { key: string; label: string }[] = [
+  { key: "missing_scope", label: "Missing scope" },
+  { key: "out_of_sequence", label: "Out of sequence" },
+  { key: "unrealistic_duration", label: "Unrealistic durations" },
+  { key: "missing_hold_point", label: "Missing inspection hold-points" },
+];
+const SEVERITY_LABEL: Record<string, string> = { high: "High", medium: "Medium", low: "Low" };
 
 // Soterra's project timezone. TODO: per-project tz once projects carry one.
 const TZ = "Pacific/Auckland";
@@ -464,11 +474,13 @@ const I = {
   tasks: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 6h12M9 12h12M9 18h12" /><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" /></svg>),
   insights: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>),
   rfi: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m3 7 9 6 9-6" /></svg>),
+  programme: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M3 6h10M3 12h15M3 18h7" /></svg>),
 };
 const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "assistant", label: "Assistant", icon: I.chat },
   { id: "inspections", label: "Inspections", icon: I.tasks },
   { id: "plans", label: "Documents", icon: I.plans },
+  { id: "programme", label: "Programme", icon: I.programme },
   { id: "rfis", label: "RFIs", icon: I.rfi },
   { id: "insights", label: "Insights", icon: I.insights },
   { id: "upload", label: "Upload", icon: I.up },
@@ -819,6 +831,15 @@ export default function Page() {
   const [upCurrent, setUpCurrent] = useState<{ name: string; phase: string; pct: number } | null>(null);
   const [upItems, setUpItems] = useState<{ name: string; ok: boolean; note: string }[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  // ─── Programme critique tab ───
+  const [progList, setProgList] = useState<ChecklistHead[]>([]);
+  const [progLoaded, setProgLoaded] = useState(false);
+  const [openCritique, setOpenCritique] = useState<ChecklistFull | null>(null);
+  const [progCurrent, setProgCurrent] = useState<{ name: string; phase: string; pct: number } | null>(null);
+  const [progErr, setProgErr] = useState<string | null>(null);
+  const [progBuildType, setProgBuildType] = useState<"residential" | "commercial" | "unknown">("residential");
+  const [progDragOver, setProgDragOver] = useState(false);
+  const progFileRef = useRef<HTMLInputElement>(null);
 // A file input hidden with display:none is removed from the layout tree, and
   // some browsers, WebViews and desktop shells then refuse a programmatic
   // .click() on it — which is exactly why "Choose files" did nothing while
@@ -1205,6 +1226,7 @@ export default function Page() {
   useEffect(() => {
     if (!projectId) return;
     if ((tab === "plans" || tab === "upload") && !docsLoaded) loadPlans();
+    if (tab === "programme" && !progLoaded) loadCritiques();
     // Both tabs need the filed reports now: Insights derives its analytics from
     // them, and the Inspections tab lists them beneath the QA checks.
     if ((tab === "insights" || tab === "inspections") && !insightsLoaded) loadInsights();
@@ -1218,7 +1240,7 @@ export default function Page() {
     // coLoaded, so it fetches once. Insights is now just history — no analytics.
     if (tab === "inspections") loadCoAna();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, evLoaded, taskLoaded, docsLoaded, insightsLoaded, projInsightsLoaded, projectId]);
+  }, [tab, evLoaded, taskLoaded, docsLoaded, insightsLoaded, projInsightsLoaded, progLoaded, projectId]);
 
   // Manual delete — so a wrong booking can be fixed in one tap instead of going
   // through the assistant. Optimistic; resyncs from the server on failure.
@@ -2039,6 +2061,67 @@ export default function Page() {
     // batch, so the check-creation picker opens instantly). Fire-and-forget.
     apiFetch("/api/locations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "refresh" }) }).catch(() => {});
   };
+
+  // ─── Programme critique: upload one programme PDF → critique against the job ───
+  const loadCritiques = async () => {
+    try {
+      const res = await apiFetch("/api/critiques");
+      if (res.ok) {
+        const data = await res.json();
+        setProgList(Array.isArray(data.critiques) ? data.critiques : []);
+      }
+    } catch { /* ignore */ } finally {
+      setProgLoaded(true);
+    }
+  };
+
+  const openCritiqueById = async (id: string) => {
+    try {
+      const res = await apiFetch(`/api/critiques?id=${id}`);
+      if (res.ok) setOpenCritique(await res.json());
+    } catch { /* ignore */ }
+  };
+
+  const onProgrammeFile = async (fileList: FileList | File[]) => {
+    const pid = projRef.current;
+    if (!pid || progCurrent) return;
+    const pdf = Array.from(fileList).find((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    if (!pdf) { setProgErr("That needs to be a PDF export of your programme."); return; }
+    if (pdf.size > 30 * 1024 * 1024) { setProgErr("That programme is over 30 MB — export a lighter PDF and try again."); return; }
+    setProgErr(null);
+    setProgCurrent({ name: pdf.name, phase: "Uploading", pct: 0 });
+    try {
+      const blob = await upload(`${pid}/${pdf.name}`, pdf, {
+        access: "private",
+        handleUploadUrl: "/api/upload/token",
+        clientPayload: JSON.stringify({ projectId: pid }),
+        contentType: "application/pdf",
+        onUploadProgress: (p) => setProgCurrent({ name: pdf.name, phase: "Uploading", pct: Math.round(p.percentage) }),
+      });
+      setProgCurrent({ name: pdf.name, phase: "Checking against the job", pct: 100 });
+      const res = await apiFetch("/api/critiques", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pathname: blob.pathname, filename: pdf.name, buildType: progBuildType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "couldn't critique that programme");
+      setOpenCritique(data);
+      loadCritiques();
+    } catch (e) {
+      setProgErr(e instanceof Error ? e.message : "upload failed");
+    } finally {
+      setProgCurrent(null);
+    }
+  };
+
+  const deleteCritique = async (id: string) => {
+    if (!window.confirm("Delete this programme critique?")) return;
+    try { await apiFetch(`/api/critiques?id=${id}`, { method: "DELETE" }); } catch { /* ignore */ }
+    setOpenCritique(null);
+    setProgList((l) => l.filter((c) => c.id !== id));
+  };
+
   // ─── inspection reports → this company's failure history ───
   const onReportFiles = async (fileList: FileList | File[]) => {
     const pid = projRef.current;
@@ -3624,6 +3707,64 @@ export default function Page() {
               <div className="page-sub">{isDemo ? "This demo site already has 43 Kauri Road's plans loaded — try the assistant." : "Nothing indexed yet. Upload your plans above."}</div>
             ) : (
               <DocsList docs={docs} onDelete={deletePlan} />
+            )}
+          </div></div>
+        )}
+
+        {/* ─── PROGRAMME critique ─── */}
+        {tab === "programme" && (
+          <div className="page"><div className="page-inner">
+            <div className="page-h">Programme</div>
+            <div className="page-sub">
+              Upload {projName}&apos;s build programme (a PDF export) and Soterra checks it against the job — the scope and plans, and the council inspection order — flagging missing scope, out-of-order work, unrealistic durations and missing inspection hold-points. It reads the programme visually, so a Gantt export is fine.
+            </div>
+
+            <div className="rf-vs" style={{ marginTop: 14, maxWidth: 360 }}>
+              <button className={"rf-vsb" + (progBuildType === "residential" ? " act" : "")} onClick={() => setProgBuildType("residential")}>Residential</button>
+              <button className={"rf-vsb" + (progBuildType === "commercial" ? " act" : "")} onClick={() => setProgBuildType("commercial")}>Commercial</button>
+            </div>
+            <div className="page-sub" style={{ marginTop: 6, fontSize: 12.5 }}>Sets which council hold-point rules apply (based on Auckland Council&apos;s inspection order).</div>
+
+            <input ref={progFileRef} type="file" accept="application/pdf" style={HIDDEN_INPUT}
+              onChange={(e) => { const fs = filesFrom(e.target); if (progFileRef.current) progFileRef.current.value = ""; if (fs.length) onProgrammeFile(fs); }} />
+            <div
+              className="drop"
+              style={{ marginTop: 14, cursor: progCurrent ? "default" : "pointer", outline: progDragOver ? "2px dashed var(--brand)" : undefined, outlineOffset: 4 }}
+              onClick={(e) => { if (e.target !== e.currentTarget) return; if (!progCurrent) progFileRef.current?.click(); }}
+              onDragOver={(e) => { e.preventDefault(); if (!progCurrent) setProgDragOver(true); }}
+              onDragLeave={() => setProgDragOver(false)}
+              onDrop={(e) => { e.preventDefault(); setProgDragOver(false); if (progCurrent) return; void filesFromDrop(e.dataTransfer).then((fs) => { if (fs.length) onProgrammeFile(fs); }); }}
+            >
+              <div className="ic">📅</div>
+              <b>{progCurrent ? `${progCurrent.phase}…` : "Upload your build programme"}</b>
+              <p>{progCurrent ? progCurrent.name : "Drop a PDF export of your programme (Asta, MS Project, P6, Powerproject, or any Gantt PDF). Soterra reads it against this job. Up to 30 MB."}</p>
+              {progCurrent && (
+                <div style={{ width: "80%", maxWidth: 360, height: 6, borderRadius: 99, background: "rgba(148,166,190,.25)", overflow: "hidden", marginTop: 6 }}>
+                  <div style={{ width: `${progCurrent.phase === "Uploading" ? (progCurrent.pct || 4) : 100}%`, height: "100%", background: "var(--brand)", transition: "width .2s" }} />
+                </div>
+              )}
+              {progCurrent && progCurrent.phase !== "Uploading" && <p style={{ fontSize: 12.5, color: "var(--mut)", marginTop: 8 }}>Reading the programme and the job — this takes up to a minute.</p>}
+              {!progCurrent && <button type="button" className="soon" onClick={(e) => { e.stopPropagation(); progFileRef.current?.click(); }}>Choose a PDF</button>}
+            </div>
+
+            {progErr && <div className="ev-err" style={{ marginTop: 12 }}>{progErr}</div>}
+
+            <div className="pg-k" style={{ marginTop: 24 }}>Past critiques {progLoaded && progList.length > 0 ? `(${progList.length})` : ""}</div>
+            {!progLoaded ? (
+              <div className="page-sub">Loading…</div>
+            ) : progList.length === 0 ? (
+              <div className="page-sub">No programme checked yet. Upload one above.</div>
+            ) : (
+              <div>
+                {progList.slice().reverse().map((c) => (
+                  <div key={c.id} className="evcard ckcard" role="button" tabIndex={0} onClick={() => openCritiqueById(c.id)} title="Open the critique">
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <b style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</b>
+                      <small style={{ color: "var(--slate)" }}>{c.total ?? 0} finding{(c.total ?? 0) === 1 ? "" : "s"} · {new Date(c.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</small>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div></div>
         )}
@@ -5467,6 +5608,57 @@ export default function Page() {
                 <button className="lg-btn primary" style={{ height: 44, margin: 0, flex: 1 }} onClick={() => closeOutChecklist("done")}>Mark this check done</button>
               )}
               <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 18px" }} onClick={() => deleteChecklist(openChecklist.checklist.id)}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Programme critique detail (read-only, grouped by finding type) ─── */}
+      {openCritique && (
+        <div className="scrim" onClick={() => setOpenCritique(null)}>
+          <div className="sheet" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
+            <div className="sh-top">
+              <div className="ti">
+                <b>{openCritique.checklist.title}</b>
+                <small>{openCritique.items.length} finding{openCritique.items.length === 1 ? "" : "s"} · programme critique</small>
+              </div>
+              <button className="sh-x" onClick={() => setOpenCritique(null)}>✕</button>
+            </div>
+            <div className="dm-body">
+              {openCritique.items.length === 0 && <div className="page-sub" style={{ marginBottom: 0 }}>Nothing was flagged on this programme.</div>}
+              {FINDING_GROUPS.map((g) => {
+                const rows = openCritique.items.filter((it) => (it.findingType ?? "missing_scope") === g.key);
+                if (!rows.length) return null;
+                return (
+                  <div key={g.key} style={{ marginBottom: 18 }}>
+                    <div className="pg-k" style={{ marginBottom: 8 }}>{g.label} ({rows.length})</div>
+                    {rows.map((it) => (
+                      <div className="ck" key={it.id}>
+                        <div className="ck-head">
+                          <div className="ck-txt">
+                            <b>{it.title}</b>
+                            {it.detail && <small style={{ whiteSpace: "pre-line" }}>{it.detail}</small>}
+                            <div className="ck-meta">
+                              {it.severity && (
+                                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".03em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 20, color: "#fff", background: it.severity === "high" ? "#EF4444" : it.severity === "low" ? "#94A6BE" : "#F59E0B" }}>{SEVERITY_LABEL[it.severity] ?? it.severity}</span>
+                              )}
+                              <span className={"src src-" + it.source}>{SRC_LABEL[it.source] ?? it.source}</span>
+                              {it.sourceRef && <span className="src-ref" title={it.sourceRef}>{it.sourceRef}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+              <div className="page-sub" style={{ marginTop: 4, marginBottom: 0, fontSize: 12 }}>
+                Based on Auckland Council&apos;s inspection order (AC1229). A finding is a prompt to check, not a determination — confirm against your own contract and consent.
+              </div>
+            </div>
+            <div className="dm-foot">
+              <button className="lg-btn primary" style={{ height: 44, margin: 0, flex: 1 }} onClick={() => setOpenCritique(null)}>Done</button>
+              <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 18px" }} onClick={() => deleteCritique(openCritique.checklist.id)}>Delete</button>
             </div>
           </div>
         </div>
