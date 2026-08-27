@@ -285,12 +285,23 @@ export default function Landing({ onLogin, onGetStarted }: { onLogin?: () => voi
         </div>
       </section>
 
+      {/* GET IN TOUCH */}
+      <section className="getintouch" id="contact">
+        <div className="kick">Get in touch</div>
+        <h3>Have a question, or want to see it on <span className="g">your projects?</span></h3>
+        <p>We&apos;d love to hear from you.</p>
+        <a className="email-btn" href="mailto:adam@soterra.co.nz">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m3 7 9 6 9-6" /></svg>
+          adam@soterra.co.nz
+        </a>
+      </section>
+
       <footer className="foot">
         <div className="brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-mark.png" alt="" /><span>Soterra</span>
         </div>
-        <div className="fl"><a href="#assistant">What it does</a><a href="#how">How it works</a><a href="#why">Why now</a><a href="/team">Team</a></div>
+        <div className="fl"><a href="#assistant">What it does</a><a href="#how">How it works</a><a href="#why">Why now</a><a href="/team">Team</a><a href="#contact">Contact</a></div>
         <div className="fcopy">Turning construction data into company intelligence.</div>
       </footer>
     </div>
@@ -464,6 +475,13 @@ const CSS = `
 .lp .final{position:relative;text-align:center;max-width:720px;margin:0 auto;padding:70px 7vw 40px}
 .lp .final h2{font-size:clamp(28px,3.8vw,44px);font-weight:300;letter-spacing:-.03em;margin-bottom:14px}
 .lp .final .lead{font-size:17px;margin-bottom:26px}
+/* get in touch */
+.lp .getintouch{text-align:center;max-width:640px;margin:0 auto;padding:20px 7vw 56px;scroll-margin-top:84px}
+.lp .getintouch h3{font-size:clamp(21px,3vw,29px);font-weight:600;letter-spacing:-.025em;line-height:1.2;margin:12px 0 10px}
+.lp .getintouch p{color:var(--slate);font-size:16px;line-height:1.6;margin-bottom:22px}
+.lp .email-btn{display:inline-flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:13px;padding:13px 22px;font-size:15.5px;font-weight:600;color:var(--brand-d);box-shadow:0 10px 26px rgba(12,42,71,.07);transition:border-color .2s,transform .2s}
+.lp .email-btn:hover{border-color:var(--brand);transform:translateY(-1px)}
+.lp .email-btn svg{width:18px;height:18px;flex-shrink:0}
 .lp .foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;max-width:1240px;margin:0 auto;padding:26px 7vw;border-top:1px solid var(--line)}
 .lp .foot .brand{font-size:16px}.lp .foot .brand img{height:22px}
 .lp .foot .fl{display:flex;gap:18px;font-size:13px;color:var(--slate)}
