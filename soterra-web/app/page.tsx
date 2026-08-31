@@ -224,7 +224,11 @@ function floorPlanFor(locLabel: string, drawings: string[], allDocs: string[]): 
  *  "floor"). A clean reference/floor-plan title beats a setout or bulk one.
  *  null when the set genuinely has no floor plan, so the caller still falls
  *  back to the first sheet. */
-function bestFloorPlanNoLoc(allDocs: string[]): string | null {
+function bestFloorPlanNoLoc(allDocs: string[], hint?: string | null): string | null {
+  // A "Unit 1" check must open Unit 1's plan, not Unit 2's. Pull the unit from
+  // the check's title/location and use it to strongly prefer that unit's plan
+  // and push a different unit's plan down. Tolerates "unit 1" and "unit-1".
+  const unit = (hint ?? "").toLowerCase().match(/\bunit[\s-]*(\d+)/)?.[1] ?? null;
   let best: string | null = null;
   let bestScore = 0;
   for (const d of allDocs) {
@@ -234,6 +238,11 @@ function bestFloorPlanNoLoc(allDocs: string[]): string | null {
     if (/floor[\s-]*plan|reference[\s-]*plan|general[\s-]*arrangement/.test(t)) s += 3;
     if (/set-?out|construction/.test(t)) s -= 2;
     if (/bulk|location|area|site/.test(t)) s -= 2;
+    if (unit) {
+      const docUnit = t.match(/\bunit[\s-]*(\d+)/)?.[1] ?? null;
+      if (docUnit === unit) s += 6;       // this check's unit — strongly preferred
+      else if (docUnit) s -= 6;           // a different unit's plan — push it down
+    }
     if (s > bestScore) { best = d; bestScore = s; }
   }
   return best;
@@ -2777,9 +2786,13 @@ export default function Page() {
     }
     if (!doc && loc?.drawings?.length) doc = floorPlanFor(loc.label, loc.drawings, dlist.map((d) => d.doc)) ?? loc.drawings[0];
     // No location (premade template / whole-job check): open a real floor plan
-    // to point at, not the arbitrary first sheet — then the first sheet only if
-    // the set has no floor plan at all.
-    if (!doc) doc = bestFloorPlanNoLoc(dlist.map((d) => d.doc)) ?? dlist[0]?.doc ?? null;
+    // to point at, not the arbitrary first sheet — matching the check's unit
+    // when its title/location names one — then the first sheet only if the set
+    // has no floor plan at all.
+    if (!doc) {
+      const unitHint = [openChecklist?.checklist.title, openChecklist?.checklist.location].filter(Boolean).join(" ");
+      doc = bestFloorPlanNoLoc(dlist.map((d) => d.doc), unitHint) ?? dlist[0]?.doc ?? null;
+    }
     if (!doc) { setClErr("Upload this site's plans first — there's no drawing to pin on."); return; }
     const nd = dlist.find((d) => d.doc === doc);
     // The switcher's sheet list: the location's drawings when the check is

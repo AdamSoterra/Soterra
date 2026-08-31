@@ -83,7 +83,11 @@ export async function POST(req: Request) {
     for (const pin of it.pins ?? []) {
       const key = `${pin.doc}::${pin.page}`;
       const entry = pinsBySheet.get(key) ?? { doc: pin.doc, page: pin.page, pins: [], itemIds: [] };
-      entry.pins.push({ x: pin.x, y: pin.y, label: pin.label || String(it.n) });
+      // The marker MUST carry the item's email number (it.n) so "item 15" in the
+      // list is the "15" on the drawing. The stored pin.label is the number the
+      // item had when it was pinned, which drifts as items are added/reordered —
+      // never trust it for the send.
+      entry.pins.push({ x: pin.x, y: pin.y, label: String(it.n) });
       entry.itemIds.push(it.id);
       pinsBySheet.set(key, entry);
     }
