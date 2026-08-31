@@ -89,16 +89,27 @@ export async function POST(req: Request) {
     }
   }
   let snapshotCount = 0;
-  const snapshotOk = new Set<string>(); // items whose pins ARE on an attached snapshot
+  // Each rendered sheet is attached with a content_id and shown INLINE under
+  // the items pinned on it (Adam: the location picture belongs with the issue,
+  // not loose at the foot). An item pinned on more than one sheet shows the
+  // first that rendered.
+  const snapCidByItem = new Map<string, string>(); // itemId → cid:<id> src
+  const snapCapByItem = new Map<string, string>(); // itemId → sheet label
   for (const sheet of pinsBySheet.values()) {
     if (snapshotCount >= 6 || attachBytes >= MAX_ATTACH_BYTES) break; // cap renders per send
     const png = await renderSheetWithPins(scope.projectId, sheet.doc, sheet.page, sheet.pins);
     if (png && attachBytes + png.length <= MAX_ATTACH_BYTES) {
       const safe = sheet.doc.replace(/[^a-zA-Z0-9.-]+/g, "-").slice(0, 60);
-      attachments.push({ filename: `${safe}-p${sheet.page}-pins.png`, content: png.toString("base64") });
+      const cid = `snap-${snapshotCount}`;
+      attachments.push({ filename: `${safe}-p${sheet.page}-pins.png`, content: png.toString("base64"), content_id: cid });
       attachBytes += png.length;
       snapshotCount++;
-      for (const id of sheet.itemIds) snapshotOk.add(id);
+      for (const id of sheet.itemIds) {
+        if (!snapCidByItem.has(id)) {
+          snapCidByItem.set(id, `cid:${cid}`);
+          snapCapByItem.set(id, `${sheet.doc} · your pin`);
+        }
+      }
     }
   }
   const photoAttached = new Map<string, number>(); // itemId → photos actually attached
@@ -132,7 +143,7 @@ export async function POST(req: Request) {
       title: it.title,
       meta: [
         it.category,
-        it.pins?.[0] ? `${it.pins[0].doc}${snapshotOk.has(it.id) ? " (pinned, snapshot attached)" : ""}` : null,
+        it.pins?.[0] ? `${it.pins[0].doc}${snapCidByItem.has(it.id) ? " (pinned)" : ""}` : null,
         checklist.location,
       ].filter(Boolean).join(" · ") || "QA check",
       note: it.note || it.detail || null,
@@ -142,6 +153,9 @@ export async function POST(req: Request) {
           : attached === total
             ? `${attached} site photo${attached === 1 ? "" : "s"} attached`
             : `${attached} of ${total} site photos attached`,
+      // The pinned drawing, inline under this item.
+      snapshotSrc: snapCidByItem.get(it.id) ?? null,
+      snapshotCaption: snapCapByItem.get(it.id) ?? null,
     };
   });
 
@@ -153,9 +167,8 @@ export async function POST(req: Request) {
       `Hi team, these ${sendItems.length === 1 ? "came up" : `${sendItems.length} came up`} on today's ${checklist.title}. Please put them right and reply with a photo when done.`,
     items: emailItems,
     numberColor: "amber",
-    snapshotCaption: snapshotCount
-      ? `Drawing snapshot${snapshotCount === 1 ? "" : "s"} with the numbered pins attached full-size`
-      : null,
+    // The snapshots now sit inline under each item, so no separate foot caption.
+    snapshotCaption: null,
     replyName: `${senderName} at ${company}`,
     footerNote: "Sent with Soterra · recorded on the project QA log",
     refLabel: `${checklist.title} · item${sendItems.length === 1 ? "" : "s"} ${sendItems.map((i) => i.n).join(", ")}`,

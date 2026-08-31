@@ -78,6 +78,10 @@ export type EmailAttachment = {
   filename: string;
   /** base64-encoded file content */
   content: string;
+  /** Set to embed the image inline (Resend CID). The HTML references it as
+   *  <img src="cid:<content_id>">; the value must match exactly. Gmail then
+   *  renders it in the body instead of only listing it at the foot. */
+  content_id?: string;
 };
 
 export type SendEmailInput = {

@@ -104,6 +104,13 @@ export type EmailItem = {
   note?: string | null;
   statusLabel?: string | null; // "not done" pill (inspection-items variant)
   photoNote?: string | null; // "site photo attached"
+  // The drawing snapshot for THIS item, shown inline right under its details so
+  // the location sits with the issue, not as a loose attachment at the foot.
+  // The value is the full <img> src the caller controls: "cid:snap-…" for a
+  // real send (the matching attachment carries that content_id), or a data: URI
+  // in a preview. Not user input, so it is not escaped.
+  snapshotSrc?: string | null;
+  snapshotCaption?: string | null; // "S3.01 Rev C · your pin"
   // Close-out loop: the sub's tokenized "Mark it fixed" link for THIS defect.
   // One email can carry several defects, so the button rides per item card, not
   // once per email (see lib/qaCloseout.ts). Absent on sends not in the loop.
@@ -142,6 +149,16 @@ export function renderItemsEmail(opts: ItemsEmailOptions): { html: string; text:
       const photo = it.photoNote
         ? `<div style="font-family:${FONT};font-size:11px;color:${MUT};margin-top:8px;">&#128247; ${esc(it.photoNote)}</div>`
         : "";
+      // The location snapshot, inline under this item. width+max-width keep it
+      // fluid on a phone; the caption names the sheet and the pin.
+      const snap = it.snapshotSrc
+        ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;"><tr>
+          <td style="border:1px solid ${LINE};border-radius:8px;padding:5px;">
+            <img src="${it.snapshotSrc}" width="510" style="width:100%;max-width:100%;height:auto;display:block;border-radius:5px;" alt="Drawing snapshot with the pin for this item"/>
+            ${it.snapshotCaption ? `<div style="font-family:${FONT};font-size:11px;color:#7A8CA3;padding:6px 4px 2px;">&#128204; ${esc(it.snapshotCaption)}</div>` : ""}
+          </td>
+        </tr></table>`
+        : "";
       // "Mark it fixed" per defect: the sub taps it, attaches a photo, and this
       // item flips to ready on the project - no reply-parsing, no account.
       const fix = it.fixUrl
@@ -161,6 +178,7 @@ export function renderItemsEmail(opts: ItemsEmailOptions): { html: string; text:
           <div style="font-family:${FONT};font-size:11.5px;color:#7A8CA3;margin-top:3px;">${metaHtml}</div>
           ${note}
           ${photo}
+          ${snap}
           ${fix}
         </td>
       </tr></table>
@@ -191,7 +209,7 @@ ${replyBlock(opts.replyName, opts.replyExtra ?? undefined)}`,
     "",
     ...opts.items.map(
       (it) =>
-        `${it.n}. ${it.title}${it.statusLabel ? ` [${it.statusLabel}]` : ""}\n   ${it.meta}${it.note ? `\n   ${it.note}` : ""}${it.fixUrl ? `\n   Mark it fixed (no account needed): ${it.fixUrl}` : ""}`
+        `${it.n}. ${it.title}${it.statusLabel ? ` [${it.statusLabel}]` : ""}\n   ${it.meta}${it.note ? `\n   ${it.note}` : ""}${it.snapshotSrc ? `\n   Location snapshot attached${it.snapshotCaption ? `: ${it.snapshotCaption}` : ""}` : ""}${it.fixUrl ? `\n   Mark it fixed (no account needed): ${it.fixUrl}` : ""}`
     ),
     "",
     ...(opts.snapshotCaption ? [opts.snapshotCaption, ""] : []),
