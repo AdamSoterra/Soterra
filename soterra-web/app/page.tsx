@@ -505,9 +505,9 @@ const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "assistant", label: "Assistant", icon: I.chat },
   { id: "inspections", label: "Inspections", icon: I.tasks },
   { id: "plans", label: "Documents", icon: I.plans },
-  { id: "programme", label: "Programme", icon: I.programme },
   { id: "rfis", label: "RFIs", icon: I.rfi },
   { id: "insights", label: "Insights", icon: I.insights },
+  { id: "programme", label: "Programme", icon: I.programme },
   { id: "upload", label: "Upload", icon: I.up },
 ];
 
