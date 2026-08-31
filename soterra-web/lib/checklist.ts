@@ -601,8 +601,9 @@ export async function listChecklists(scope: Scope, opts: { eventId?: string | nu
 
 /** Every flagged item on this site's own pre-inspection checks — what the
  *  crew caught before the inspector did. Feeds the Internal pocket's
- *  "what your pre-checks catch" panel; kind 'inspection' only, because a
- *  safety plan's hazard areas aren't trades and the CCC pack is paperwork. */
+ *  "what your pre-checks catch" panel; 'inspection' and 'template' kinds
+ *  only — both flag real trade defects — because a safety plan's hazard
+ *  areas aren't trades and the CCC pack is paperwork. */
 export async function flaggedChecklistItems(scope: Scope) {
   return db
     .select({
@@ -620,7 +621,7 @@ export async function flaggedChecklistItems(scope: Scope) {
         eq(checklistItems.companyId, scope.companyId),
         eq(checklistItems.projectId, scope.projectId),
         eq(checklistItems.status, "issue"),
-        eq(checklists.kind, "inspection")
+        inArray(checklists.kind, ["inspection", "template"])
       )
     )
     .orderBy(desc(checklistItems.checkedAt));
