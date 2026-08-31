@@ -29,12 +29,23 @@ export function emailTransmitOn(): boolean {
   return process.env.EMAIL_TRANSMIT?.trim() === "1";
 }
 
+/** The Resend key, stripped to printable ASCII. A key pasted into the Vercel
+ *  dashboard from a file or editor can arrive with a leading BOM (U+FEFF) or
+ *  surrounding whitespace/newline. Left in, that character makes fetch throw
+ *  "Cannot convert argument to a ByteString ... value of 65279" on the
+ *  Authorization header, and EVERY send fails — which is exactly what happened
+ *  in production. A Resend key is `re_` + base62, so dropping everything
+ *  outside printable ASCII can only ever remove such contaminants. */
+function resendKey(): string {
+  return (process.env.RESEND_API_KEY ?? "").replace(/[^\x21-\x7e]/g, "");
+}
+
 export function emailEnabled(): boolean {
   // Two-part switch: the key must exist AND transmission must be explicitly
   // turned on. EMAIL_TRANSMIT stays unset until send.soterra.co.nz verifies —
   // otherwise every send would reach Resend just to be rejected ("domain not
   // verified") and the log would fill with failures that aren't ours.
-  return !!process.env.RESEND_API_KEY && emailTransmitOn();
+  return !!resendKey() && emailTransmitOn();
 }
 
 /** "Kauri Tower" + its project id → kauri-tower-7b6663@send.soterra.co.nz.
@@ -145,7 +156,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     const res = await fetch(RESEND_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        Authorization: `Bearer ${resendKey()}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
