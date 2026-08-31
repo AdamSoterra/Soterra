@@ -41,7 +41,7 @@ const SWMS_MODEL = "claude-sonnet-4-6";
 // its findings in checklist_items (finding_type set). It never runs through
 // generateChecklistItems — it has its own engine (lib/programmeCritique.ts) —
 // but createChecklist persists it, so the kind is shared here.
-export type ChecklistKind = "inspection" | "ccc" | "swms" | "programme";
+export type ChecklistKind = "inspection" | "ccc" | "swms" | "programme" | "template";
 
 // ─── The CCC evidence pack ───────────────────────────────────────────────
 // Second checklist type, same engine, different item source. These are the
@@ -66,6 +66,27 @@ const CCC_PACK: { title: string; detail: string; category: string }[] = [
   { title: "Barrier and handrail compliance — heights and gaps as built", detail: "Confirm against F4: barrier height, 100mm sphere gap, no climbable elements. Measure, don't assume.", category: "Access & Barriers" },
   { title: "Minor variations — all recorded and accepted by council", detail: "Every on-site change agreed with the inspector needs to be on the file as a minor variation, or it's an amendment.", category: "Other" },
   { title: "Compliance schedule — specified systems list agreed with council", detail: "Only for buildings with specified systems. Get the list agreed early; it drives the BWOF.", category: "Fire" },
+];
+
+// ─── The premade fit-out template ────────────────────────────────────────
+// Third fixed pack, same engine again. A static, generic internal fit-out QA
+// form for teams who want a familiar pre-made checklist — deliberately NOT
+// built from the site's drawings, the Code or history like the generated
+// checks. Mirrors the shape of a standard main-contractor fit-out QA form.
+export const FITOUT_TEMPLATE_TITLE = "Internal fit-out QA (general)";
+const FITOUT_TEMPLATE_PACK: { title: string; detail: string; category: string }[] = [
+  { title: "Product installation guides and data sheets on site", detail: "The manufacturer's install guide and data sheet for every proprietary system being installed — linings, waterproofing, passive fire — and the version the spec names.", category: "Other" },
+  { title: "Current internal details and plans — latest revision", detail: "Check the revision block against the drawing register before work starts. Building to a superseded detail is the classic re-do.", category: "Other" },
+  { title: "GIB / plasterboard linings fixed to the system spec", detail: "Fastener type and centres, sheet layout and stagger, and back-blocking as the specified system requires. The manufacturer's manual governs the warranty.", category: "Interior / Linings" },
+  { title: "Fire-rated penetrations sealed before linings close them in", detail: "Every penetration through a rated element fire-stopped with the tested system for that service and substrate, and photographed before close-in.", category: "Fire" },
+  { title: "Wet-area waterproofing complete before lining and tiling", detail: "Membrane, junctions, upstands and falls finished and cured, with the applicator's sign-off, before anything covers them.", category: "Weathertightness / Cladding" },
+  { title: "Services coordinated and signed off before close-in", detail: "Mechanical, electrical and hydraulic runs in place, tested where required, and signed off by the relevant trade before the wall or ceiling closes.", category: "Mechanical" },
+  { title: "Framing and nogs in place for fixtures, sheet edges and fixings", detail: "Blocking for vanities, rails, joinery and services, plus support at every sheet edge, before pre-line is called.", category: "Structural" },
+  { title: "Subcontractor QA sheets received and filed for completed trades", detail: "One per trade as each area completes. Chase them while the crew is still on site, not at handover.", category: "Other" },
+  { title: "Council inspection dates recorded and mark-ups actioned", detail: "Booked and passed inspections logged, and every inspector mark-up closed out or carried as a defect.", category: "Other" },
+  { title: "Other inspection records captured where relevant", detail: "Seismic, passive fire and services inspection records filed against the area they cover.", category: "Other" },
+  { title: "Location and stage recorded — repeat the check per area", detail: "Note which level, unit or zone this walk covers, and run the template again for the next area rather than mixing them.", category: "Other" },
+  { title: "General comments and outstanding items noted", detail: "Anything not covered above, with who owns it and when it will be closed.", category: "Other" },
 ];
 
 // ─── Generation ──────────────────────────────────────────────────────────
@@ -201,6 +222,11 @@ export async function generateChecklistItems(
   // documents a council wants don't change per site.
   if (opts.kind === "ccc") {
     return { ok: true, items: CCC_PACK.map((c) => ({ title: c.title, detail: c.detail, source: "ccc", sourceRef: "CCC evidence pack", category: c.category })) };
+  }
+
+  // The premade fit-out template is fixed too — same items every time, by design.
+  if (opts.kind === "template") {
+    return { ok: true, items: FITOUT_TEMPLATE_PACK.map((c) => ({ title: c.title, detail: c.detail, source: "template", sourceRef: "Premade template", category: c.category })) };
   }
 
   const q = queryFor(opts.inspectionCode, opts.title);

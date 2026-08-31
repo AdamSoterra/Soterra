@@ -310,7 +310,7 @@ function outcomeChip(source: string, outcome: string, itemCount: number): { cls:
 
 // Where a checklist item came from. An item with no source is a guess, so the
 // badge is deliberately loud about which of the three sources backed it.
-const SRC_LABEL: Record<string, string> = { plans: "Plans", code: "Code", manufacturer: "GIB manual", history: "Our history", ccc: "CCC pack", hsw: "HSWA / WorkSafe", manual: "Added", spec: "Spec", scope: "Scope", sequence: "Inspection order" };
+const SRC_LABEL: Record<string, string> = { plans: "Plans", code: "Code", manufacturer: "GIB manual", history: "Our history", ccc: "CCC pack", template: "Premade template", hsw: "HSWA / WorkSafe", manual: "Added", spec: "Spec", scope: "Scope", sequence: "Inspection order" };
 // Programme-critique finding types → the section heading each groups under.
 const FINDING_GROUPS: { key: string; label: string }[] = [
   { key: "missing_scope", label: "Missing scope" },
@@ -911,6 +911,9 @@ export default function Page() {
   const [openChecklist, setOpenChecklist] = useState<ChecklistFull | null>(null);
   const [clBusy, setClBusy] = useState(false);
   const [clErr, setClErr] = useState<string | null>(null);
+  // The premade fit-out template card at the bottom of the Internal pocket.
+  const [tplBusy, setTplBusy] = useState(false);
+  const [tplErr, setTplErr] = useState<string | null>(null);
   // The "new checklist" sheet, opened from an event or from Insights.
   const [newCl, setNewCl] = useState<{ eventId: string | null; eventTitle: string | null } | null>(null);
   const [newClKind, setNewClKind] = useState<"inspection" | "ccc">("inspection");
@@ -2260,6 +2263,27 @@ export default function Page() {
       setClErr(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setClBusy(false);
+    }
+  };
+  // The premade fit-out template: no generation, the server returns the fixed
+  // pack. Same open-and-refresh flow as a generated check.
+  const createTemplateCheck = async () => {
+    if (tplBusy) return;
+    setTplBusy(true); setTplErr(null);
+    try {
+      const res = await apiFetch("/api/checklists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "template" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.checklist) throw new Error(data.error || "Couldn't create the template check.");
+      setOpenChecklist(data);
+      loadChecklists();
+    } catch (e) {
+      setTplErr(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setTplBusy(false);
     }
   };
   // The post-send truth banner lives with the open checklist.
@@ -3911,6 +3935,24 @@ export default function Page() {
                 </>
               );
             })()}
+
+            {/* ── Premade inspection template. Deliberately last: one fixed,
+                   generic checklist for teams who want a familiar pre-made
+                   form. The generated checks above are the product — this is
+                   the same list every time, on any site. ── */}
+            <div className="sub-k" style={{ marginTop: 26 }}>Premade inspection template</div>
+            <div className="page-sub" style={{ marginTop: 4 }}>
+              A fixed general checklist — the same items every time, not built from this site&apos;s drawings, the Code or your history like the checks above.
+            </div>
+            <div className="ev" onClick={() => { if (!tplBusy) createTemplateCheck(); }} style={{ cursor: tplBusy ? "default" : "pointer", opacity: tplBusy ? 0.6 : 1 }}>
+              <div className="bar" style={{ background: "#7186A0" }} />
+              <div className="body">
+                <b>Internal fit-out QA (general)</b>
+                <small>12 fixed items · linings, penetrations, wet areas, services, QA records</small>
+              </div>
+              <span className="pill na">{tplBusy ? "Creating…" : "Use template"}</span>
+            </div>
+            {tplErr && <div className="ev-err">{tplErr}</div>}
             </>)}
 
             {inspPocket === "external" && (<>

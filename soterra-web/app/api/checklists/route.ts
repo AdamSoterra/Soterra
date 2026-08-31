@@ -5,6 +5,7 @@ import { events } from "@/lib/schema";
 import { resolveScope } from "@/lib/company";
 import {
   CHECKLIST_TYPES,
+  FITOUT_TEMPLATE_TITLE,
   addChecklistItem,
   addChecklistPhoto,
   createChecklist,
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const kind = body.kind === "ccc" ? "ccc" : "inspection";
+  const kind = body.kind === "ccc" ? "ccc" : body.kind === "template" ? "template" : "inspection";
   const inspectionCode = String(body.inspectionCode ?? "").trim().toUpperCase() || null;
   const eventId = String(body.eventId ?? "").trim() || null;
 
@@ -111,7 +112,7 @@ export async function POST(req: Request) {
 
   const baseTitle =
     String(body.title ?? "").trim() ||
-    (kind === "ccc" ? "CCC evidence pack" : `${codeName(inspectionCode) ?? "Inspection"} check`) ||
+    (kind === "ccc" ? "CCC evidence pack" : kind === "template" ? FITOUT_TEMPLATE_TITLE : `${codeName(inspectionCode) ?? "Inspection"} check`) ||
     eventTitle ||
     "Inspection check";
   // "Unit 1 - Fire check" — the report is titled by where it happened.
