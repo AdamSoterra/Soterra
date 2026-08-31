@@ -54,10 +54,44 @@ export type ExtractedInspection = {
   inspectionCode: string | null;
   inspectionType: string | null;
   inspector: string | null;
+  /** Which job the report names — used to keep a report off the wrong project's
+   *  register. Any may be null when the report doesn't state it. */
+  projectName: string | null;
+  siteAddress: string | null;
+  consentNumber: string | null;
   outcome: "pass" | "partial" | "fail" | "unknown";
   inspectedOn: string | null; // YYYY-MM-DD
   items: ExtractedItem[];
 };
+
+// ─── Same-job check ────────────────────────────────────────────────────────
+// A report belongs on a project's register only if it is for THAT job. For the
+// trial we match on the project NAME (at real sign-up the address and consent
+// number are captured too, and this widens to those). Deliberately conservative:
+// it BLOCKS only a clear mismatch — the report names a project and shares no
+// distinctive word with this one. When the report names no project, or the names
+// are too generic to compare, it returns null and the caller files it (never
+// reject on a guess).
+const NAME_STOPWORDS = new Set([
+  "the", "project", "projects", "building", "buildings", "development", "developments",
+  "apartment", "apartments", "terrace", "terraces", "townhouse", "townhouses", "house", "houses",
+  "tower", "towers", "office", "offices", "complex", "block", "blocks", "stage", "lodge", "villa",
+  "villas", "units", "unit", "site", "new", "build", "residence", "residences", "commercial",
+  "road", "street", "lane", "avenue", "ave", "place", "drive", "court", "rise", "crescent",
+  "way", "close", "terr", "grove", "parade", "quay", "north", "south", "east", "west",
+]);
+function distinctiveTokens(s: string): Set<string> {
+  return new Set((s.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((t) => !NAME_STOPWORDS.has(t)));
+}
+/** true = same job, false = a DIFFERENT job (block it), null = can't tell (file it). */
+export function sameJob(reportProject: string | null, projectName: string | null): boolean | null {
+  if (!reportProject || !projectName) return null;
+  const a = distinctiveTokens(reportProject);
+  const b = distinctiveTokens(projectName);
+  if (a.size === 0 || b.size === 0) return null; // nothing distinctive to compare
+  for (const t of a) if (b.has(t)) return true;
+  return false;
+}
 
 // ─── Deterministic pass ──────────────────────────────────────────────────
 
@@ -134,6 +168,9 @@ const ITEM_SCHEMA = {
     },
     inspection_type: { type: "string", description: "What kind of inspection this was, in the report's own words (\"Cavity wrap\", \"Fire\", \"Building services site inspection\"). Empty string if unclear." },
     inspector_org: { type: "string", description: "The ORGANISATION that inspected (\"Auckland Council\", the consultancy's name). NEVER a person's name. Empty string if unclear." },
+    project_name: { type: "string", description: "The NAMED project / building / development this report is about (e.g. \"Kauri Tower\", \"Harbourview Apartments\") — NOT the council, the inspecting/consulting firm, the builder, or a person. It is usually on a \"Project\", \"Building name\" or header line, often written NAME-THEN-ADDRESS: \"Project: Kauri Tower, 95-99 Friedlanders Road\" means project_name is \"Kauri Tower\" and the street part goes in site_address instead — never put the street address in project_name. If the report only ever gives a street address and no building/development name, leave project_name empty." },
+    site_address: { type: "string", description: "The street address of the site (e.g. \"95-99 Friedlanders Road, Manurewa\"). Empty string if not stated." },
+    consent_number: { type: "string", description: "The building consent number if the report states one (e.g. \"BCO60112843-1\"). Empty string if not stated." },
     outcome: { type: "string", enum: ["pass", "partial", "fail", "unknown"] },
     inspected_on: { type: "string", description: "Date of the inspection as YYYY-MM-DD, or empty string if the report doesn't state one." },
     items: {
@@ -152,7 +189,7 @@ const ITEM_SCHEMA = {
       },
     },
   },
-  required: ["is_inspection_report", "source", "inspection_code", "inspection_type", "inspector_org", "outcome", "inspected_on", "items"],
+  required: ["is_inspection_report", "source", "inspection_code", "inspection_type", "inspector_org", "project_name", "site_address", "consent_number", "outcome", "inspected_on", "items"],
   additionalProperties: false,
 } as const;
 
@@ -181,6 +218,8 @@ DUPLICATES: some exports list every item twice — once in a table of contents g
 LOCATION: if the item itself doesn't say where, inherit it from the nearest preceding section heading ("Basement", "Level 4 Corridor", "Level 4 - Apartment type A"). Leave it empty rather than guessing.
 
 CATEGORY: pick the one that matches what physically went wrong, not which inspection it was found on. A passive-fire stopping fail found on a post-line inspection is Fire, not Interior / Linings.
+
+PROJECT IDENTITY: also read off which JOB this report is for — the project/building/development NAME (project_name), the site street address (site_address), and the building consent number (consent_number) if stated. These come from the header, cover, "Project" line or "Building name" line — NOT the council, the consulting firm, the builder, or a person. A "Project" line is often NAME then ADDRESS ("Kauri Tower, 95-99 Friedlanders Road, Manurewa"): split it — the name ("Kauri Tower") is project_name, the street part is site_address. Never put a street address in project_name. Leave any field you can't find as an empty string; never guess one.
 
 PRIVACY: never put a person's name, email address or phone number into any field. Organisations are fine. If the only identifier is a person, write an empty string.
 
@@ -394,6 +433,14 @@ ${trimForModel(clean)}`;
     // [PERSON], which is the signal that the model gave us the inspector, not
     // the inspecting body. Drop it rather than store a placeholder.
     inspector: dropIfPerson(anonymiseField(str(modelOut.inspector_org))),
+    // Job identity, for the same-job check on upload. NOT run through the person
+    // anonymiser: a building name is two capitalised words ("Kauri Tower",
+    // "Harbourview Apartments") and the anonymiser would scrub it to [PERSON] and
+    // lose it. The schema already forbids returning a person here. This value is
+    // used only to compare against the project's own name — it is never stored.
+    projectName: str(modelOut.project_name),
+    siteAddress: str(modelOut.site_address),
+    consentNumber: str(modelOut.consent_number),
     outcome: normaliseOutcome(str(modelOut.outcome) || header.outcome || fromName.outcome),
     inspectedOn: isoDate(str(modelOut.inspected_on)) || header.date || fromName.date || null,
     items,

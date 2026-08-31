@@ -1,8 +1,11 @@
 import { auth } from "@clerk/nextjs/server";
 import { get } from "@vercel/blob";
 import { extractText, getDocumentProxy } from "unpdf";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { projects } from "@/lib/schema";
 import { resolveScope } from "@/lib/company";
-import { extractInspection, hasUsableText } from "@/lib/inspectionExtract";
+import { extractInspection, hasUsableText, sameJob } from "@/lib/inspectionExtract";
 import { deleteInspection, listInspections, saveInspection, inspectionDetail, isWorkStatus, setItemWorkStatus } from "@/lib/history";
 
 // Inspection reports in → this COMPANY's failure history out. Same upload
@@ -110,6 +113,20 @@ export async function POST(req: Request) {
   if (!extracted.isInspectionReport) {
     return Response.json(
       { error: "That doesn't look like an inspection report — it reads more like a proposal, spec or drawing. Nothing was filed." },
+      { status: 422 }
+    );
+  }
+
+  // Same-job check: a report only joins THIS project's register if it is for
+  // this job. Blocks a clear mismatch (the report names a different project);
+  // when it names none, or the names are too generic to compare, it files.
+  const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
+  if (sameJob(extracted.projectName, proj?.name ?? null) === false) {
+    return Response.json(
+      {
+        error: `This report is for "${extracted.projectName}", not "${proj?.name}". Nothing was filed — switch to the right project, or check the report.`,
+        mismatch: { reportProject: extracted.projectName, currentProject: proj?.name ?? null },
+      },
       { status: 422 }
     );
   }
