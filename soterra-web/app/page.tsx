@@ -236,12 +236,19 @@ function bestFloorPlanNoLoc(allDocs: string[], hint?: string | null): string | n
     if (!/\bfloor\b/.test(t) || !/\bplans?\b/.test(t)) continue;
     let s = 5;
     if (/floor[\s-]*plan|reference[\s-]*plan|general[\s-]*arrangement/.test(t)) s += 3;
+    // You mark a location on the ARCHITECTURAL plan (it shows the rooms), not the
+    // structural framing plan. Prefer the A-series / reference plan; push the
+    // S-series framing/slab plan down — it's a mess of joists, not a room layout.
+    if (/^a\d|reference[\s-]*plan|architectural/.test(t)) s += 4;
+    if (/^s\d|structural|framing|waffle|\btruss\b|slab/.test(t)) s -= 5;
     if (/set-?out|construction/.test(t)) s -= 2;
     if (/bulk|location|area|site/.test(t)) s -= 2;
     if (unit) {
       const docUnit = t.match(/\bunit[\s-]*(\d+)/)?.[1] ?? null;
-      if (docUnit === unit) s += 6;       // this check's unit — strongly preferred
-      else if (docUnit) s -= 6;           // a different unit's plan — push it down
+      // A different unit's plan is wrong; the right unit is a tiebreak, not
+      // enough to drag a framing plan above the architectural one.
+      if (docUnit === unit) s += 3;
+      else if (docUnit) s -= 6;
     }
     if (s > bestScore) { best = d; bestScore = s; }
   }
