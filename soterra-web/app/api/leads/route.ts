@@ -2,6 +2,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { leads, trialUsage } from "@/lib/schema";
+import { resendKey } from "@/lib/email";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -65,7 +66,7 @@ export async function POST(req: Request) {
       ];
       await fetch("https://api.resend.com/emails", {
         method: "POST",
-        headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${resendKey()}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           from: `Soterra <leads@${SEND_DOMAIN}>`,
           to: [NOTIFY_TO],

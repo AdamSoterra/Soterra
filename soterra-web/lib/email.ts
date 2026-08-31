@@ -36,7 +36,7 @@ export function emailTransmitOn(): boolean {
  *  Authorization header, and EVERY send fails — which is exactly what happened
  *  in production. A Resend key is `re_` + base62, so dropping everything
  *  outside printable ASCII can only ever remove such contaminants. */
-function resendKey(): string {
+export function resendKey(): string {
   return (process.env.RESEND_API_KEY ?? "").replace(/[^\x21-\x7e]/g, "");
 }
 
