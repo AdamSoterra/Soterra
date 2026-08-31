@@ -8,7 +8,7 @@ import { historyForCode, searchHistory, topItems } from "./history";
 import { getProjectIndex } from "./projectIndex";
 import { getCodeIndex, codeLabel } from "./codeIndex";
 import { getManufacturerIndex, manufacturerLabel, visibleTo } from "./manufacturerIndex";
-import { excerpt, retrieve } from "./retrieve";
+import { excerpt, retrieve, searchManufacturerPages } from "./retrieve";
 import { blockersFor } from "./inspectionOrder";
 
 // ─── The checklist engine ────────────────────────────────────────────────
@@ -119,7 +119,7 @@ const GEN_SYSTEM = `You write the pre-inspection checklist a New Zealand site ma
 You are given four sources. Use every one that has something ON-SUBJECT for this inspection (see the subject rule below); ignore the parts that aren't:
 1. THIS PROJECT'S DRAWINGS — pages from the site's own consented drawings and specs. Every "as per plan" item comes from here, WITH the actual value the plan gives. "Cavity battens as per plan" is useless; "Cavity battens — 20mm H3.1 treated, at 600 crs per A-302" is a check someone can do.
 2. THE BUILDING CODE — pages from the MBIE Acceptable Solutions and Verification Methods. Every numeric item comes from here, with the actual figure.
-3. THE MANUFACTURER'S MANUAL — pages from the maker's own installation manual (e.g. GIB). This is what the inspector actually checks a proprietary system against, and it is FREQUENTLY STRICTER than the Code minimum. Fastener type and centres, sheet layout, back-blocking, control joints, the specific system build-up — take these from here, with the exact figure, and cite the manual page. Where the manual and the Code differ, the manual governs the warranty, so lead with the manual's figure.
+3. THE MANUFACTURER'S MANUAL — pages from the maker's own installation manual (e.g. GIB). This is what the inspector actually checks a proprietary system against, and it is FREQUENTLY STRICTER than the Code minimum. Fastener type and centres, sheet layout, back-blocking, control joints, the specific system build-up — take these from here, with the exact figure, and cite the manual page. Where the manual and the Code differ, the manual governs the warranty, so lead with the manual's figure. ⚠️ BUT ONLY FOR THE SYSTEM THE DRAWINGS NAME. The manual pages below were retrieved by keyword, so they can include a NEIGHBOURING system from the same maker that this job does NOT use — a maker often documents several fire or acoustic systems in one manual. If the drawings name a system (see SPECIFIED SYSTEMS in the request), take proprietary items ONLY from that system; if a manual page in front of you describes a different system or a different product than the drawings specify, DROP IT — do not write its items, and never substitute a different brand or product for the one the drawings call for. Citing the wrong maker's system is the worst error you can make here: it puts a check on the wall that does not apply to this job.
 4. THIS COMPANY'S OWN HISTORY — things this builder has already been failed on. These matter most: they are the specific mistakes this crew makes.
 
 THE SUBJECT IS FIXED BY THE REQUEST — READ THIS FIRST.
@@ -201,6 +201,84 @@ export type GenerateResult =
   // thing, so the two are kept apart all the way to the message on screen.
   | { ok: false; reason: "empty" | "failed"; message: string };
 
+/** The proprietary systems/products THIS JOB'S DRAWINGS actually name — so the
+ *  manufacturer manual we answer from is the one the plans specify, not whatever
+ *  a keyword search happens to rank.
+ *
+ *  Four signals, in order of decisiveness. A term qualifies when it is (a) a
+ *  real word in the manufacturer corpus but (b) NOT in the Building Code corpus
+ *  — the Code is plain construction English ("lintel", "gable") and never names
+ *  a brand, so subtracting it removes that whole class; (c) not titleblock
+ *  boilerplate repeated on nearly every sheet; and, decisively, (d) CONCENTRATED
+ *  in a single maker's manual. A real product name lives in its own maker's
+ *  pages ("gbtlab" is 100% GIB, "lumberlok" is MiTek); rare contract prose that
+ *  slips the first nets ("conflicts", "deliveries") is scattered across every
+ *  maker's manuals, because every manual contains prose. Rarest first — the
+ *  exact system code the job specifies is the most valuable to inject. Empty
+ *  when the plans name nothing proprietary, so retrieval is then unchanged. */
+export function specifiedProprietaryTerms(
+  planPages: { text: string }[],
+  mfrPages: { manufacturer: string; text: string }[],
+  mfrDf: Map<string, number>,
+  codeDf: Map<string, number>,
+): string[] {
+  // "distinctive" = on at most ~12% of manual pages: gbtlab is on 1%, aqualine
+  // ~4%, soundseal ~8%; a generic like "timber" is on far more and drops out.
+  const cut = Math.max(6, Math.floor(mfrPages.length * 0.12));
+  const nPlan = planPages.length || 1;
+  const onPages = new Map<string, number>();
+  for (const p of planPages) {
+    const here = new Set((p.text.match(/[A-Za-z][A-Za-z0-9]{3,}/g) ?? []).map((w) => w.toLowerCase()));
+    for (const w of here) onPages.set(w, (onPages.get(w) ?? 0) + 1);
+  }
+  const text = planPages.map((p) => p.text).join(" \n "); // ORIGINAL case
+  const candidates = new Map<string, number>(); // term → manufacturer df
+  const consider = (raw: string) => {
+    const t = raw.toLowerCase().replace(/[()]/g, "");
+    if (t.length < 5 || candidates.has(t)) return;
+    const mdf = mfrDf.get(t);
+    if (!mdf || mdf > cut) return; // absent from the manuals, or too common to be a system name
+    if (codeDf.has(t)) return; // a word the Building Code uses is construction English, not a brand
+    if ((onPages.get(t) ?? 0) > Math.max(2, nPlan * 0.4)) return; // boilerplate on most sheets
+    candidates.set(t, mdf);
+  };
+  for (const m of text.match(/\b[A-Z]{3,}(?:\([A-Z]\))?[A-Z0-9]{0,4}\b/g) ?? []) consider(m);
+  for (const m of text.match(/\b[A-Z][a-z]{4,}\b/g) ?? []) consider(m);
+  if (candidates.size === 0) return [];
+
+  // Concentration test: one pass over the corpus, counting each candidate's
+  // pages per manufacturer. A real product/system name appears in ONE maker's
+  // manuals (occasionally cross-referenced in one more); rare contract prose
+  // ("conflicts", "deliveries") is spread across MANY makers, because every
+  // manual contains prose. The distinct-maker COUNT is the robust signal — it
+  // isn't fooled by GIB being 42% of the corpus the way a raw share is.
+  const byMfr = new Map<string, Map<string, number>>();
+  for (const t of candidates.keys()) byMfr.set(t, new Map());
+  for (const p of mfrPages) {
+    const low = p.text.toLowerCase();
+    for (const t of candidates.keys()) {
+      if (low.includes(t)) {
+        const m = byMfr.get(t)!;
+        m.set(p.manufacturer, (m.get(p.manufacturer) ?? 0) + 1);
+      }
+    }
+  }
+  const terms: { t: string; total: number; df: number }[] = [];
+  for (const [t, df] of candidates) {
+    const m = byMfr.get(t)!;
+    let total = 0;
+    let top = 0;
+    for (const c of m.values()) {
+      total += c;
+      if (c > top) top = c;
+    }
+    // ≤2 makers AND ≥70% in the top one AND enough pages to mean something.
+    if (total >= 4 && m.size <= 2 && top / total >= 0.7) terms.push({ t, total, df });
+  }
+  terms.sort((a, b) => a.total - b.total || a.df - b.df); // rarest real product first
+  return terms.slice(0, 8).map((x) => x.t);
+}
+
 export async function generateChecklistItems(
   scope: Scope,
   opts: {
@@ -281,15 +359,32 @@ export async function generateChecklistItems(
   const designPages = projectIdx.pages.filter((pg) => pg.docType !== "programme");
   const scopedPages = locDocs.size ? designPages.filter((pg) => locDocs.has(pg.doc)) : designPages;
   const planPool = scopedPages.length ? scopedPages : designPages;
-  const planPages = retrieve(planPool, projectIdx.df, q, 6);
+  // Retrieve a wider net of plan pages: the top 6 are the sources the model
+  // reads, but the system the job specifies (e.g. the intertenancy details
+  // sheet) may rank a little lower — take terms from the top 12 so it isn't
+  // missed.
+  const planHits = retrieve(planPool, projectIdx.df, q, 12);
+  const planPages = planHits.slice(0, 6);
   const codeHits = retrieve(codeIdx.pages, codeIdx.df, q, 6);
+
+  // ⚠️ PLANS GOVERN THE MANUFACTURER. Which proprietary system the inspector
+  // checks against is fixed by the DRAWINGS, not by keyword similarity. A bare
+  // "fire wall" query ranks GIB's Barrierline/Fyreline pages purely because
+  // those words are spread across a hundred-plus pages of the GIB corpus — even
+  // on a job whose drawings specify a DIFFERENT GIB system (e.g. GBTLAB 60d).
+  // So pull the systems the plans actually name and steer the manufacturer
+  // search to them, then use searchManufacturerPages (exact-code + brand
+  // boosting), not a bare keyword retrieve. See [[feedback_plans_govern_source_priority]].
+  const specTerms = specifiedProprietaryTerms(planHits, mfrIdx.pages, mfrIdx.df, codeIdx.df);
+  const mfrQuery = specTerms.length ? `${q} ${specTerms.join(" ")}` : q;
   // ⚠️ visibleTo, exactly as the assistant's own search does. Without it a
   // checklist could quote a demo-tier manufacturer to an account that must
   // never see one: those brands have NOT granted permission, several are
   // competitors of each other, and one of them has staff with accounts here.
   // The gate has to hold on every path that reads this index, not just on
-  // search_manufacturer.
-  const mfrHits = retrieve(visibleTo(mfrIdx.pages, scope.userId), mfrIdx.df, q, 6);
+  // search_manufacturer. nDocs stays the FULL corpus size so idf is right after
+  // the licence filter narrows the pages.
+  const mfrHits = searchManufacturerPages(visibleTo(mfrIdx.pages, scope.userId), mfrIdx.df, mfrQuery, 6, mfrIdx.pages.length);
 
   const planLabel = (p: (typeof planPages)[number]) =>
     [p.doc, p.code, p.title].filter(Boolean).join(" · ") + ` · page ${p.page} of ${p.npages}`;
@@ -339,6 +434,8 @@ export async function generateChecklistItems(
         role: "user",
         content: `Write the pre-inspection checklist for: ${codeLabelName}${
           opts.location ? `\nSCOPE: this check covers ${opts.location.label} ONLY — write items for that location, and skip anything that clearly belongs elsewhere on the job.` : ""
+        }${
+          specTerms.length ? `\nSPECIFIED SYSTEMS (proprietary systems/products named on THIS job's drawings): ${specTerms.join(", ")}. Take proprietary/manufacturer items ONLY for these. If a manufacturer manual page below is for a different system or product, drop it — do not write its items, and never substitute a different brand for one the drawings specify.` : ""
         }\n\n${sources}`,
       }],
     });
