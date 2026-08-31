@@ -213,6 +213,31 @@ function floorPlanFor(locLabel: string, drawings: string[], allDocs: string[]): 
   };
   return pick(drawings, 0) ?? pick(allDocs.filter((d) => !drawings.includes(d)), 6);
 }
+/** When a check has NO location (the premade template, or a whole-job check)
+ *  and the item isn't pinned yet, still open a real architectural FLOOR PLAN to
+ *  drop the pin on — never the arbitrary first sheet in the set. A floor plan
+ *  names BOTH "floor" and "plan" (ground / first / level-N floor plan, floor
+ *  reference plan). That pair is what separates it from the two things that
+ *  kept coming up wrongly: detail sheets (they say "floor" — midfloor,
+ *  subfloor — but never "plan") and civil / slab-setout / services plans (they
+ *  say "plan" — stormwater, fencing, waffle-slab, electrical — but never
+ *  "floor"). A clean reference/floor-plan title beats a setout or bulk one.
+ *  null when the set genuinely has no floor plan, so the caller still falls
+ *  back to the first sheet. */
+function bestFloorPlanNoLoc(allDocs: string[]): string | null {
+  let best: string | null = null;
+  let bestScore = 0;
+  for (const d of allDocs) {
+    const t = d.toLowerCase();
+    if (!/\bfloor\b/.test(t) || !/\bplans?\b/.test(t)) continue;
+    let s = 5;
+    if (/floor[\s-]*plan|reference[\s-]*plan|general[\s-]*arrangement/.test(t)) s += 3;
+    if (/set-?out|construction/.test(t)) s -= 2;
+    if (/bulk|location|area|site/.test(t)) s -= 2;
+    if (s > bestScore) { best = d; bestScore = s; }
+  }
+  return best;
+}
 
 // Consultant discipline codes → readable names (mirrors lib/categories.ts
 // CONSULTANT_TYPES). Council codes come back on the row already named.
@@ -2751,7 +2776,10 @@ export default function Page() {
       } catch { /* keep what we have */ }
     }
     if (!doc && loc?.drawings?.length) doc = floorPlanFor(loc.label, loc.drawings, dlist.map((d) => d.doc)) ?? loc.drawings[0];
-    if (!doc) doc = dlist[0]?.doc ?? null;
+    // No location (premade template / whole-job check): open a real floor plan
+    // to point at, not the arbitrary first sheet — then the first sheet only if
+    // the set has no floor plan at all.
+    if (!doc) doc = bestFloorPlanNoLoc(dlist.map((d) => d.doc)) ?? dlist[0]?.doc ?? null;
     if (!doc) { setClErr("Upload this site's plans first — there's no drawing to pin on."); return; }
     const nd = dlist.find((d) => d.doc === doc);
     // The switcher's sheet list: the location's drawings when the check is
