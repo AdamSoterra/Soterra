@@ -5227,6 +5227,7 @@ export default function Page() {
           page={pinFor.page}
           npages={pinFor.npages}
           sheets={pinFor.sheets}
+          scopeIds={openChecklist ? openChecklist.items.map((i) => i.id) : undefined}
           onSwitchSheet={(doc, npages) => setPinFor((f) => (f ? { ...f, doc, page: 1, npages } : f))}
           onClose={() => setPinFor(null)}
           fetchApi={apiFetch}
@@ -6830,6 +6831,11 @@ function PinStage(p: {
    *  set). With 2+ the title becomes a switcher; the parent owns the doc. */
   sheets?: { doc: string; npages: number }[];
   onSwitchSheet?: (doc: string, npages: number) => void;
+  /** When set, show ONLY pins whose record is in this list (the current check's
+   *  item ids) — so a check never shows pins dropped by OTHER checks on the same
+   *  sheet. Omitted elsewhere (e.g. citation view), which keeps the show-all
+   *  behaviour there. */
+  scopeIds?: string[];
 }) {
   const [page, setPage] = useState(p.page);
   // The parent swaps p.doc on a sheet switch (same mounted instance) — follow
@@ -6888,6 +6894,9 @@ function PinStage(p: {
   }, []);
 
   const src = `/api/plan-page?project=${encodeURIComponent(p.projectId)}&doc=${encodeURIComponent(p.doc)}&p=${page}`;
+  // Scope to the current check's records when asked; otherwise show every pin.
+  const scope = p.scopeIds ? new Set(p.scopeIds) : null;
+  const shown = scope ? pins.filter((pin) => scope.has(pin.recordId)) : pins;
   return (
     <div className="ps-scrim">
       <div className="ps-top">
@@ -6907,7 +6916,7 @@ function PinStage(p: {
           ) : (
             <b>{p.doc}</b>
           )}
-          <small>{pins.length ? `${pins.length} pin${pins.length === 1 ? "" : "s"} on this page` : "No pins on this page"}</small>
+          <small>{shown.length ? `${shown.length} pin${shown.length === 1 ? "" : "s"} on this page` : "No pins on this page"}</small>
         </div>
         <div className="ps-nav">
           <button disabled={page <= 1} onClick={() => setPage(page - 1)}>‹</button>
@@ -6967,7 +6976,7 @@ function PinStage(p: {
                   p.onDrop({ x, y, page });
                 }}
               >
-                {pins.map((pin) => (
+                {shown.map((pin) => (
                   <div
                     key={pin.id}
                     className={"ps-pin " + pin.recordType + (sel === pin.id ? " sel" : "")}
