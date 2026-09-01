@@ -945,7 +945,9 @@ export default function Page() {
   const [clSearch, setClSearch] = useState("");
   const [clStatus, setClStatus] = useState(""); // "" = all
   // Inspection-reports table sort. Newest inspected first by default.
-  const [repSort, setRepSort] = useState<{ key: "type" | "inspector" | "date" | "items" | "result"; dir: "asc" | "desc" }>({ key: "date", dir: "desc" });
+  // Default: newest UPLOADED first, so a report you just added lands at the top.
+  // The "Inspected" column still sorts by the report's own date when clicked.
+  const [repSort, setRepSort] = useState<{ key: "type" | "inspector" | "date" | "added" | "items" | "result"; dir: "asc" | "desc" }>({ key: "added", dir: "desc" });
   // Inspection types you can build a check for, grouped the way they actually
   // arrive: the council's statutory ones, then the consultants' disciplines.
   const [clTypes, setClTypes] = useState<{ council: { code: string; name: string }[]; consultant: { code: string; name: string }[] }>({ council: [], consultant: [] });
@@ -4115,8 +4117,9 @@ export default function Page() {
                 else if (repSort.key === "result") v = resultRank(a) - resultRank(b);
                 else if (repSort.key === "type") v = (a.inspectionType || a.doc).localeCompare(b.inspectionType || b.doc);
                 else if (repSort.key === "inspector") v = (a.inspector || "").localeCompare(b.inspector || "");
+                else if (repSort.key === "added") v = (a.createdAt || "").localeCompare(b.createdAt || ""); // upload time (ISO) sorts chronologically
                 else v = (a.inspectedOn || "").localeCompare(b.inspectedOn || "");
-                if (v === 0) v = (a.inspectedOn || "").localeCompare(b.inspectedOn || ""); // tiebreak by date
+                if (v === 0) v = (a.createdAt || "").localeCompare(b.createdAt || ""); // tiebreak by upload time
                 return repSort.dir === "asc" ? v : -v;
               };
               const rows = [...filtered].sort(cmp);
