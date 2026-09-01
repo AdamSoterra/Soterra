@@ -392,6 +392,17 @@ ${trimForModel(clean)}`;
   const inspectionCode = (header.code || fromName.code || str(modelOut.inspection_code) || null)?.toUpperCase() ?? null;
   const known = inspectionType(inspectionCode);
 
+  // ⭐ ON A CONSULTANT REPORT, THE ITEM'S TRADE FOLLOWS THE REPORT — not what
+  // physically went wrong. A consultant report is ONE discipline, and every item
+  // on it is closed off by the engineer who RAISED it: if the electrical engineer
+  // flags a missed fire-stop, it stays on the electrical register and the
+  // electrical engineer signs it off, so it must file as Electrical, not Fire.
+  // (Council reports keep defect-type categorisation so each item reaches the
+  // right SUB. SERV covers electrical+hydraulic+mechanical in one report, so it
+  // stays by defect.) This overrides classify()'s text rule for these reports.
+  const reportDiscipline =
+    known?.group === "consultant" && inspectionCode !== "SERV" ? known.category : null;
+
   // Merge: deterministic checklist fails first (they're exact), then anything
   // the model found that isn't already covered.
   const items: ExtractedItem[] = [];
@@ -403,7 +414,7 @@ ${trimForModel(clean)}`;
     if (!title || seen.has(key(title))) continue;
     seen.add(key(title));
     const c = classify({ title, inspectionCode });
-    items.push({ title, detail: null, location: null, category: c.category, categoryBy: c.by });
+    items.push({ title, detail: null, location: null, category: reportDiscipline ?? c.category, categoryBy: reportDiscipline ? "code" : c.by });
   }
 
   const rawItems = Array.isArray(modelOut.items) ? (modelOut.items as Record<string, unknown>[]) : [];
@@ -414,7 +425,7 @@ ${trimForModel(clean)}`;
     const detail = anonymiseField(str(r.detail));
     const location = anonymiseField(str(r.location));
     const c = classify({ title, detail, suggested: str(r.category), inspectionCode });
-    items.push({ title, detail: detail === title ? null : detail, location, category: c.category, categoryBy: c.by });
+    items.push({ title, detail: detail === title ? null : detail, location, category: reportDiscipline ?? c.category, categoryBy: reportDiscipline ? "code" : c.by });
   }
 
   return {
