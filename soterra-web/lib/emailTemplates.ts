@@ -42,11 +42,10 @@ function shell(opts: {
 }): string {
   return `<!doctype html>
 <html>
-<body style="margin:0;padding:0;background:#EEF2F7;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#EEF2F7;">
-<tr><td align="center" style="padding:26px 14px;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid ${LINE};border-radius:10px;">
-<tr><td height="5" bgcolor="${BRAND}" style="height:5px;background:linear-gradient(90deg,#41C3FF 0%,#0A8DED 100%);font-size:5px;line-height:5px;mso-line-height-rule:exactly;border-radius:10px 10px 0 0;">&nbsp;</td></tr>
+<body style="margin:0;padding:0;background:#ffffff;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
+<tr><td align="center" style="padding:18px 14px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid ${LINE};border-radius:8px;">
 ${opts.headerHtml}
 <tr><td style="padding:20px 28px 8px;font-family:${FONT};font-size:14px;line-height:1.55;color:${INK};">
 ${opts.bodyHtml}
