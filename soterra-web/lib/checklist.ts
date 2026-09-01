@@ -280,6 +280,16 @@ export function specifiedProprietaryTerms(
   return terms.slice(0, 8).map((x) => x.t);
 }
 
+/** Regional council / consent guides (Tauranga self-check sheets, a Christchurch
+ *  inspection guide, an Auckland Council consents booklet…). A QA check must cite
+ *  the NATIONAL MBIE Building Code, not one city's guide (Adam, 2026-09-01): a
+ *  Tauranga self-check sheet cited on an Auckland job reads wrong. These are kept
+ *  out of the check's Code sources here; they still serve the assistant's
+ *  council-process answers on the ask route. */
+function isCityCouncilGuide(doc: string): boolean {
+  return /^(christchurch|tauranga|hamilton|dunedin|wellington|auckland council)\b|building consent (process|application|information)|inspection checklist|self[- ]?check|consent process guide|check ?sheet|certificate of acceptance|building on small sites|carry out a building project|restricted building work guidance|building location certificate|alterations to existing|step by step guide/i.test(doc);
+}
+
 export async function generateChecklistItems(
   scope: Scope,
   opts: {
@@ -366,7 +376,7 @@ export async function generateChecklistItems(
   // missed.
   const planHits = retrieve(planPool, projectIdx.df, q, 12);
   const planPages = planHits.slice(0, 6);
-  const codeHits = retrieve(codeIdx.pages, codeIdx.df, q, 6);
+  const codeHits = retrieve(codeIdx.pages.filter((p) => !isCityCouncilGuide(p.doc)), codeIdx.df, q, 6);
 
   // ⚠️ PLANS GOVERN THE MANUFACTURER. Which proprietary system the inspector
   // checks against is fixed by the DRAWINGS, not by keyword similarity. A bare
