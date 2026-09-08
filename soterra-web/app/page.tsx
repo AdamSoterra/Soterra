@@ -4944,6 +4944,7 @@ export default function Page() {
           onClose={() => setPinStage(null)}
           fetchApi={apiFetch}
           refresh={pinRefresh}
+          pinKind="qa_flag"
           onDrop={(at) => void dropFlag(at)}
           onPinClick={(pin) => { if (pin.recordType === "qa_flag") void openFlagById(pin.recordId); }}
         />
@@ -5402,6 +5403,21 @@ export default function Page() {
           onSwitchSheet={(doc, npages) => setPinFor((f) => (f ? { ...f, doc, page: 1, npages } : f))}
           onClose={() => setPinFor(null)}
           fetchApi={apiFetch}
+          newLabel={pinFor.label}
+          pinKind="checklist_item"
+          recordId={pinFor.itemId}
+          onMove={async (pin, at) => {
+            // The item's existing pin, dragged to the right spot: save it, keep the sheet open.
+            try {
+              const r = await apiFetch("/api/pins", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: pin.id, x: at.x, y: at.y }) });
+              if (!r.ok) throw new Error();
+              if (openChecklist) void openChecklistById(openChecklist.checklist.id);
+              return true;
+            } catch {
+              setClErr("Couldn't move the pin — try again.");
+              return false;
+            }
+          }}
           onDrop={async (at) => {
             const target = pinFor;
             try {
@@ -7004,6 +7020,16 @@ function PinStage(p: {
   fetchApi: (path: string, init?: RequestInit) => Promise<Response>;
   onDrop?: (at: { x: number; y: number; page: number }) => void;
   onPinClick?: (pin: PinRow) => void;
+  /** The number the NEW pin will carry, shown on it while it is being placed
+   *  (a check item's number, so "which item is which" holds from the first
+   *  tap). Omitted = a plain marker. */
+  newLabel?: string;
+  /** Colour family of the new pin (checklist_item purple, qa_flag amber, rfi blue). */
+  pinKind?: string;
+  /** The record being pinned. Its EXISTING pins on the sheet become draggable
+   *  too: hold and move, and onMove saves the new spot. */
+  recordId?: string;
+  onMove?: (pin: PinRow, at: { x: number; y: number }) => Promise<boolean> | boolean | void;
   /** Bump to refetch the pins (e.g. after a flag was created or deleted). */
   refresh?: number;
   /** Sheets this stage may flip between (the location's drawings, or the whole
@@ -7028,10 +7054,74 @@ function PinStage(p: {
   const [img, setImg] = useState<"loading" | "ok" | "error">("loading");
   const [scale, setScale] = useState(1);
   const [sel, setSel] = useState<string | null>(null);
+  // The pin being placed: dropped on the first tap, then draggable (mouse or
+  // finger) until "Confirm". Adam, 2026-09-09: the sheet must NOT close on the
+  // tap - "if you mark the wrong area you can simply drag it to where it needs
+  // to be ... confirm that is the right spot and the plan closes after that."
+  const [pending, setPending] = useState<{ x: number; y: number; page: number } | null>(null);
+  const [saving, setSaving] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
   const scaleRef = useRef(1);
   useEffect(() => { scaleRef.current = scale; }, [scale]);
-  useEffect(() => { setImg("loading"); setSel(null); }, [page]);
+  useEffect(() => { setImg("loading"); setSel(null); setPending(null); }, [page, p.doc]);
+
+  const clampPct = (v: number) => Math.max(0.5, Math.min(99.5, v));
+  /** Pointer position → % of the sheet, from the pin layer's live rect. */
+  const pctAt = (clientX: number, clientY: number) => {
+    const rect = layerRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return null;
+    return { x: clampPct(((clientX - rect.left) / rect.width) * 100), y: clampPct(((clientY - rect.top) / rect.height) * 100) };
+  };
+  /** Hold-and-drag a marker. The finger keeps its offset from the pin's tip so
+   *  the pin doesn't jump under the touch; pointer capture keeps the drag
+   *  alive off the marker; touch-action:none (CSS) stops the page scrolling. */
+  const startDrag = (
+    e: React.PointerEvent<HTMLDivElement>,
+    from: { x: number; y: number },
+    onUpdate: (x: number, y: number) => void,
+    onEnd?: (x: number, y: number) => void
+  ) => {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    e.stopPropagation();
+    e.preventDefault();
+    const start = pctAt(e.clientX, e.clientY);
+    if (!start) return;
+    const dx = from.x - start.x, dy = from.y - start.y;
+    const el = e.currentTarget;
+    try { el.setPointerCapture(e.pointerId); } catch { /* older browsers */ }
+    let last = { ...from };
+    let moved = false;
+    const move = (m: PointerEvent) => {
+      const at = pctAt(m.clientX, m.clientY);
+      if (!at) return;
+      moved = true;
+      last = { x: clampPct(at.x + dx), y: clampPct(at.y + dy) };
+      onUpdate(last.x, last.y);
+    };
+    const up = (m: PointerEvent) => {
+      try { el.releasePointerCapture(m.pointerId); } catch { /* ignore */ }
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+      if (moved) onEnd?.(last.x, last.y);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  };
+  const confirmPending = () => {
+    if (!pending || !p.onDrop || saving) return;
+    setSaving(true);
+    try {
+      p.onDrop(pending);
+    } finally {
+      // The parent closes the stage (check) or opens its form (flag); either
+      // way this marker's job is done.
+      setPending(null);
+      setSaving(false);
+    }
+  };
 
   // The page's pins. fetchApi is recreated each parent render, so it is
   // deliberately not a dependency — doc/page changing is what matters.
@@ -7146,25 +7236,57 @@ function PinStage(p: {
             {img === "ok" && (
               <div
                 className="ps-pinlayer"
+                ref={layerRef}
                 style={p.onDrop ? { cursor: "crosshair" } : undefined}
                 onClick={(e) => {
                   if (!p.onDrop) return;
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const x = Math.max(0.5, Math.min(99.5, ((e.clientX - rect.left) / rect.width) * 100));
-                  const y = Math.max(0.5, Math.min(99.5, ((e.clientY - rect.top) / rect.height) * 100));
-                  p.onDrop({ x, y, page });
+                  // First tap drops the marker; a later tap elsewhere moves it
+                  // there. Nothing is saved until Confirm.
+                  const at = pctAt(e.clientX, e.clientY);
+                  if (at) setPending({ ...at, page });
                 }}
               >
-                {shown.map((pin) => (
+                {shown.map((pin) => {
+                  // The record being pinned owns this pin: hold + drag moves it,
+                  // saved on release. Everyone else's pins just open their record.
+                  const own = !!p.recordId && pin.recordId === p.recordId && !!p.onMove;
+                  return (
+                    <div
+                      key={pin.id}
+                      className={"ps-pin " + pin.recordType + (sel === pin.id ? " sel" : "") + (own ? " own" : "")}
+                      style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
+                      onClick={(e) => { e.stopPropagation(); if (own) return; setSel(pin.id); p.onPinClick?.(pin); }}
+                      onPointerDown={
+                        own
+                          ? (e) =>
+                              startDrag(
+                                e,
+                                { x: pin.x, y: pin.y },
+                                (x, y) => setPins((list) => list.map((q) => (q.id === pin.id ? { ...q, x, y } : q))),
+                                (x, y) => void Promise.resolve(p.onMove!(pin, { x, y })).then((ok) => {
+                                  // A failed save snaps the marker back where it was.
+                                  if (ok === false) setPins((list) => list.map((q) => (q.id === pin.id ? { ...q, x: pin.x, y: pin.y } : q)));
+                                })
+                              )
+                          : undefined
+                      }
+                      title={own ? "Hold and drag to move this pin" : undefined}
+                    >
+                      <div className="head"><b>{pin.label || "•"}</b></div>
+                    </div>
+                  );
+                })}
+                {pending && pending.page === page && (
                   <div
-                    key={pin.id}
-                    className={"ps-pin " + pin.recordType + (sel === pin.id ? " sel" : "")}
-                    style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
-                    onClick={(e) => { e.stopPropagation(); setSel(pin.id); p.onPinClick?.(pin); }}
+                    className={"ps-pin pending " + (p.pinKind ?? "")}
+                    style={{ left: `${pending.x}%`, top: `${pending.y}%` }}
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => startDrag(e, pending, (x, y) => setPending((q) => (q ? { ...q, x, y } : q)))}
+                    title="Hold and drag to the exact spot"
                   >
-                    <div className="head"><b>{pin.label || "•"}</b></div>
+                    <div className="head"><b>{p.newLabel || "•"}</b></div>
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>
@@ -7175,8 +7297,17 @@ function PinStage(p: {
           </div>
         )}
       </div>
-      {p.onDrop && img === "ok" && <div className="ps-hint">📌 Tap the drawing to drop a pin</div>}
-      <div className="zoomctl">
+      {p.onDrop && img === "ok" && !pending && (
+        <div className="ps-hint">📌 Tap the drawing to drop pin{p.newLabel ? ` ${p.newLabel}` : ""}{p.recordId && shown.some((q) => q.recordId === p.recordId) ? " · hold an existing pin to move it" : ""}</div>
+      )}
+      {p.onDrop && pending && pending.page === page && (
+        <div className="ps-confirm">
+          <span>Hold and drag the pin to the exact spot, or tap somewhere else to move it.</span>
+          <button className="ok" disabled={saving} onClick={confirmPending}>{saving ? "Saving…" : "✓ That's the spot"}</button>
+          <button disabled={saving} onClick={() => setPending(null)}>Remove</button>
+        </div>
+      )}
+      <div className="zoomctl" style={pending ? { bottom: "calc(env(safe-area-inset-bottom, 0px) + 92px)" } : undefined}>
         <button onClick={() => setScale((s) => Math.max(1, +(s - 0.4).toFixed(2)))}>−</button>
         <span>{Math.round(scale * 100)}%</span>
         <button onClick={() => setScale((s) => Math.min(6, +(s + 0.4).toFixed(2)))}>+</button>

@@ -107,6 +107,34 @@ export async function POST(req: Request) {
   return Response.json({ pin });
 }
 
+// PATCH /api/pins { id, x, y } → move a pin on its sheet (drag to the right
+// spot after the fact). Same sheet, same page: a pin that needs a different
+// sheet is deleted and dropped again. x/y are % of the sheet, clamped.
+export async function PATCH(req: Request) {
+  const { userId } = await auth();
+  if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
+  const scope = await resolveScope(req, userId);
+  if (!scope) return Response.json({ error: "No site selected" }, { status: 403 });
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const id = String(body.id ?? "").trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return Response.json({ error: "Bad id" }, { status: 400 });
+  const x = Number(body.x), y = Number(body.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return Response.json({ error: "x and y are required" }, { status: 400 });
+  const clamp = (v: number) => Math.max(0.5, Math.min(99.5, v));
+  const [row] = await db
+    .update(planPins)
+    .set({ x: clamp(x), y: clamp(y) })
+    .where(and(eq(planPins.id, id), eq(planPins.projectId, scope.projectId)))
+    .returning();
+  if (!row) return Response.json({ error: "Pin not found" }, { status: 404 });
+  return Response.json({ pin: row });
+}
+
 // DELETE /api/pins?id=<uuid>
 export async function DELETE(req: Request) {
   const { userId } = await auth();
