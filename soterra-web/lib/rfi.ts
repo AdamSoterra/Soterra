@@ -29,10 +29,36 @@ import { renderRfiAnswerNotice, renderRfiEmail, renderThreadNotice } from "./ema
 import { renderSheetWithPins } from "./pinSnapshot";
 import { companyRequiresLogin } from "./externalAuth";
 import { replyAddress } from "./inboundAddress";
+import { attachmentsLine, packForEmail, parseAttachments, type Attachment } from "./attachments";
 
 /** Where the consultant answer link points. One env override for previews. */
 const APP_URL = (process.env.APP_BASE_URL ?? "https://soterra.co.nz").replace(/\/+$/, "");
 const PORTAL_URL = `${APP_URL}/portal`;
+
+// ─── files ────────────────────────────────────────────────────────────────
+// Every file on an RFI lives in the private Blob store under the project's
+// rfis/ folder: "<projectId>/rfis/<rfiId>/…" once the RFI exists, and
+// "<projectId>/rfis/pending/<key>/…" for files picked on the New RFI form
+// before Save. Reads never trust the folder alone - /api/rfi-file checks the
+// path is on THIS RFI's list (rfiPathBelongsTo).
+export function rfiBlobRoot(projectId: string): string {
+  return `${projectId}/rfis/`;
+}
+export function rfiBlobPrefix(projectId: string, rfiId: string): string {
+  return `${projectId}/rfis/${rfiId}/`;
+}
+const MAX_FILES_ON_RFI = 30;
+function cleanFiles(files: Attachment[] | undefined, prefixes: string[], max = 10): Attachment[] {
+  return (files ?? [])
+    .filter((f) => f && typeof f.path === "string" && prefixes.some((p) => f.path.startsWith(p)))
+    .slice(0, max)
+    .map((f) => ({
+      filename: String(f.filename ?? "").trim().slice(0, 160) || "file",
+      path: f.path,
+      bytes: Math.max(0, Math.floor(Number(f.bytes) || 0)),
+      contentType: String(f.contentType || "application/octet-stream").slice(0, 120),
+    }));
+}
 
 export const RFI_SLA_WORKING_DAYS = 7;
 
@@ -172,14 +198,18 @@ export type NewRfiInput = {
   criticalPath?: boolean;
   requiredBy?: Date | null; // default = send date + SLA
   raisedByName?: string | null;
+  /** Files picked on the New RFI form (already in Blob under the project's rfis/ folder). */
+  attachments?: Attachment[];
 };
 
 export async function createDraft(scope: Scope, input: NewRfiInput): Promise<Rfi> {
+  const files = cleanFiles(input.attachments, [rfiBlobRoot(scope.projectId)], MAX_FILES_ON_RFI);
   const [row] = await db
     .insert(rfis)
     .values({
       companyId: scope.companyId,
       projectId: scope.projectId,
+      attachments: files.length ? JSON.stringify(files) : null,
       subject: input.subject.trim().slice(0, 200),
       discipline: input.discipline ?? null,
       priority: input.priority ?? "normal",
@@ -220,6 +250,51 @@ async function ourRfi(scope: Scope, rfiId: string): Promise<Rfi | null> {
     .where(and(eq(rfis.id, rfiId), eq(rfis.projectId, scope.projectId)))
     .limit(1);
   return row ?? null;
+}
+
+/** Attach files (already uploaded direct-to-Blob under the project's rfis/
+ *  folder) to a DRAFT. Once sent, files travel on follow-ups instead, so the
+ *  consultant is told about them. */
+export async function attachRfiFiles(scope: Scope, rfiId: string, files: Attachment[]): Promise<Rfi> {
+  const rfi = await ourRfi(scope, rfiId);
+  if (!rfi) throw new Error("RFI not found");
+  if (rfi.status !== "draft") throw new Error("Attach files to a sent RFI with a follow-up, so the consultant is told");
+  const existing = parseAttachments(rfi.attachments);
+  for (const f of cleanFiles(files, [rfiBlobRoot(scope.projectId)], MAX_FILES_ON_RFI)) {
+    if (!existing.some((e) => e.path === f.path)) existing.push(f);
+  }
+  if (existing.length > MAX_FILES_ON_RFI) throw new Error("Too many files on one RFI");
+  const [row] = await db
+    .update(rfis)
+    .set({ attachments: JSON.stringify(existing), updatedAt: new Date() })
+    .where(eq(rfis.id, rfiId))
+    .returning();
+  return row;
+}
+
+export async function removeRfiAttachment(scope: Scope, rfiId: string, path: string): Promise<Rfi> {
+  const rfi = await ourRfi(scope, rfiId);
+  if (!rfi) throw new Error("RFI not found");
+  if (rfi.status !== "draft") throw new Error("Files can only be removed from a draft");
+  const kept = parseAttachments(rfi.attachments).filter((a) => a.path !== path);
+  const [row] = await db
+    .update(rfis)
+    .set({ attachments: kept.length ? JSON.stringify(kept) : null, updatedAt: new Date() })
+    .where(eq(rfis.id, rfiId))
+    .returning();
+  return row;
+}
+
+/** Is this blob path one of the RFI's files (its own, or on a line of the thread)? */
+export async function rfiPathBelongsTo(rfi: Rfi, path: string): Promise<Attachment | null> {
+  const own = parseAttachments(rfi.attachments).find((a) => a.path === path);
+  if (own) return own;
+  const msgs = await db.select({ attachments: rfiMessages.attachments }).from(rfiMessages).where(eq(rfiMessages.rfiId, rfi.id));
+  for (const m of msgs) {
+    const hit = parseAttachments(m.attachments).find((a) => a.path === path);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /** Send: burn the next number, open the clock, email the consultant. The
@@ -284,6 +359,15 @@ export async function sendRfi(
       attachments.push({ filename: `${label}-${safe}-pin.png`, content: png.toString("base64") });
     }
   }
+  // The RFI's own files ride along while the email budget lasts (the pin
+  // snapshots are already on the email); the rest download from the RFI page.
+  const pinBytes = attachments.reduce((n, a) => n + Math.ceil((a.content.length * 3) / 4), 0);
+  const packed = await packForEmail(parseAttachments(rfi.attachments), pinBytes);
+  attachments.push(...packed.attachments);
+  const listedFiles = [
+    ...attachments.slice(0, attachments.length - packed.attachments.length).map((a) => a.filename),
+    ...packed.listed.map((l) => (l.attached ? `${l.filename} (${l.bytesLabel})` : `${l.filename} (${l.bytesLabel} · download from the RFI page)`)),
+  ];
 
   const codeRefs: string[] = rfi.codeRefs ? JSON.parse(rfi.codeRefs) : [];
   const cc: string[] = rfi.cc ? JSON.parse(rfi.cc) : [];
@@ -310,7 +394,7 @@ export async function sendRfi(
     proposedSolution: rfi.proposedSolution,
     drawingRefs,
     codeRefs,
-    attachments: attachments.map((a) => a.filename),
+    attachments: listedFiles,
     replyName: by.name ?? "the sender",
     refLabel: `${label} · Rev ${opened.revision}`,
     answerUrl: `${APP_URL}/answer/${answerToken}`,
@@ -381,7 +465,8 @@ export async function logAnswer(
   scope: Scope,
   rfiId: string,
   body: string,
-  by: { userId?: string | null; name?: string | null; consultantName?: string | null; via?: string | null }
+  by: { userId?: string | null; name?: string | null; consultantName?: string | null; via?: string | null },
+  files?: Attachment[]
 ): Promise<Rfi> {
   const rfi = await ourRfi(scope, rfiId);
   if (!rfi) throw new Error("RFI not found");
@@ -420,6 +505,7 @@ export async function logAnswer(
     authorName: by.consultantName ?? rfi.consultantName ?? rfi.consultantCompany ?? null,
     body: body.trim(),
     via: by.via ?? null,
+    attachments: files?.length ? JSON.stringify(files) : null,
   });
   return claimed;
 }
@@ -441,7 +527,8 @@ export async function promoteToAnswer(
     .limit(1);
   if (!msg) throw new Error("That note isn't on this RFI");
   if (msg.authorSide !== "consultant" || msg.type !== "followup") throw new Error("Only a consultant's note can become the answer");
-  const row = await logAnswer(scope, rfiId, msg.body, { ...by, consultantName: msg.authorName, via: msg.via ?? "app" });
+  // The note's files (a marked-up sketch that came with the email) go with it.
+  const row = await logAnswer(scope, rfiId, msg.body, { ...by, consultantName: msg.authorName, via: msg.via ?? "app" }, parseAttachments(msg.attachments));
   await db.insert(rfiMessages).values({
     companyId: scope.companyId,
     projectId: scope.projectId,
@@ -459,11 +546,14 @@ export async function addFollowup(
   scope: Scope,
   rfiId: string,
   body: string,
-  by: { userId?: string | null; name?: string | null },
-  opts?: { bounce?: boolean }
+  by: { userId?: string | null; name?: string | null; email?: string | null },
+  opts?: { bounce?: boolean; files?: Attachment[] }
 ): Promise<Rfi> {
   const rfi = await ourRfi(scope, rfiId);
   if (!rfi) throw new Error("RFI not found");
+  const files = cleanFiles(opts?.files, [rfiBlobRoot(scope.projectId)]);
+  const text = body.trim() || (files.length ? "(see attachments)" : "");
+  if (!text) throw new Error("Write the follow-up first");
   await db.insert(rfiMessages).values({
     companyId: scope.companyId,
     projectId: scope.projectId,
@@ -471,14 +561,76 @@ export async function addFollowup(
     type: "followup",
     authorSide: "contractor",
     authorName: by.name ?? null,
-    body: body.trim(),
+    body: text,
+    via: "app",
+    attachments: files.length ? JSON.stringify(files) : null,
   });
   // A follow-up on an answered RFI can bounce the ball back (status → open).
+  let out: Rfi | null = null;
   if (opts?.bounce && rfi.status === "answered") {
-    return transition(scope, rfi, "open", by, "follow-up bounced the ball back");
+    out = await transition(scope, rfi, "open", by, "follow-up bounced the ball back");
   }
-  const fresh = await ourRfi(scope, rfiId);
-  return fresh ?? rfi;
+  // The consultant hears about it (with the files), same as when our side
+  // replies from their inbox. Best-effort: the line is logged whatever
+  // happens to the email.
+  if (rfi.status !== "draft" && rfi.consultantEmail && rfi.answerToken) {
+    try {
+      await notifyConsultantOfFollowup(scope, rfi, by, text, files, !!opts?.bounce && rfi.status === "answered");
+    } catch (e) {
+      console.error("rfi follow-up notice failed:", e);
+    }
+  }
+  return out ?? (await ourRfi(scope, rfiId)) ?? rfi;
+}
+
+async function notifyConsultantOfFollowup(
+  scope: Scope,
+  rfi: Rfi,
+  by: { userId?: string | null; name?: string | null; email?: string | null },
+  text: string,
+  files: Attachment[],
+  bounced: boolean
+) {
+  const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
+  const projectName = proj?.name ?? "The project";
+  const company = (await companyName(scope.companyId)) ?? "The builder";
+  const label = rfiLabel(rfi);
+  const loginRequired = await companyRequiresLogin(scope.companyId);
+  const packed = await packForEmail(files);
+  const line = attachmentsLine(packed.listed.map((l) => ({ filename: l.attached ? l.filename : `${l.filename} (download from the RFI page)` })));
+  const rendered = renderThreadNotice({
+    companyName: company,
+    projectName,
+    heading: `${label} · ${bounced ? "follow-up question" : "follow-up"}`,
+    subject: rfi.subject,
+    actorLine: `${by.name ?? "The site team"} · ${company}`,
+    lead: bounced ? `has a follow-up on ${label}. The RFI is open again and the response clock is running.` : `added to ${label}.`,
+    body: text,
+    attachmentsLine: line,
+    linkLabel: "Open the RFI",
+    linkUrl: `${APP_URL}/answer/${rfi.answerToken}`,
+    linkNote: loginRequired ? "Opens for your Soterra account on the address this was sent to." : "No account needed.",
+    refLabel: `${label} · ${projectName}`.slice(0, 80),
+    portalUrl: PORTAL_URL,
+    loginRequired,
+    tone: bounced ? "amber" : "blue",
+  });
+  await sendEmail({
+    scope,
+    kind: "rfi",
+    recordType: "rfi",
+    recordIds: [rfi.id],
+    to: { name: rfi.consultantName || rfi.consultantCompany, email: rfi.consultantEmail! },
+    replyTo: (await replyAddress("rfi", rfi.answerToken!)) ?? by.email ?? null,
+    fromName: `${company} (via Soterra)`,
+    fromEmail: projectSenderAddress(projectName, scope.projectId),
+    subject: `${label} · ${projectName} · ${rfi.subject}`,
+    html: rendered.html,
+    text: rendered.text,
+    attachments: packed.attachments,
+    sentBy: by.userId ?? null,
+    sentByName: by.name ?? null,
+  });
 }
 
 export async function setRfiStatus(
@@ -607,8 +759,10 @@ export async function getRfi(scope: Scope, rfiId: string) {
       label: rfiLabel(rfi),
       daysOpen: rfi.dateRaised ? workingDaysBetween(rfi.dateRaised, now) : 0,
       overdue: rfi.status === "open" && !!rfi.dateRequiredBy && now > rfi.dateRequiredBy,
+      files: parseAttachments(rfi.attachments),
+      uploadPrefix: rfiBlobPrefix(scope.projectId, rfi.id),
     },
-    messages,
+    messages: messages.map((m) => ({ ...m, attachments: parseAttachments(m.attachments) })),
     transitions,
     pins,
     ci,
@@ -692,18 +846,20 @@ export async function rfiThreadView(rfi: Rfi) {
   const scope = tokenScope(rfi);
   const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
   const company = (await companyName(scope.companyId)) ?? "The builder";
-  const messages = await db
+  const rows = await db
     .select({
       type: rfiMessages.type,
       authorSide: rfiMessages.authorSide,
       authorName: rfiMessages.authorName,
       body: rfiMessages.body,
       via: rfiMessages.via,
+      attachments: rfiMessages.attachments,
       createdAt: rfiMessages.createdAt,
     })
     .from(rfiMessages)
     .where(and(eq(rfiMessages.rfiId, rfi.id), inArray(rfiMessages.type, PUBLIC_MESSAGE_TYPES)))
     .orderBy(rfiMessages.createdAt);
+  const messages = rows.map((m) => ({ ...m, attachments: parseAttachments(m.attachments) }));
   // The sheets this RFI pinned — rendered by the sheet route, one per doc+page.
   const pins = await db
     .select({ doc: planPins.doc, page: planPins.page })
@@ -735,6 +891,9 @@ export async function rfiThreadView(rfi: Rfi) {
       dateRaised: rfi.dateRaised,
       dateRequiredBy: rfi.dateRequiredBy,
       dateAnswered: rfi.dateAnswered,
+      attachments: parseAttachments(rfi.attachments),
+      // Where the consultant's own files go (the upload doors sign only this folder).
+      uploadPrefix: rfiBlobPrefix(scope.projectId, rfi.id),
     },
     messages,
     sheets,
@@ -749,11 +908,12 @@ export async function answerByToken(
   token: string,
   body: string,
   authorName?: string | null,
-  via: "link" | "portal" = "link"
+  via: "link" | "portal" = "link",
+  files?: Attachment[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const rfi = await rfiByToken(token);
   if (!rfi || rfi.status === "void" || rfi.number == null) return { ok: false, error: "not-found" };
-  return answerAsConsultant(rfi, body, authorName, via);
+  return answerAsConsultant(rfi, body, authorName, via, files);
 }
 
 /** The official answer from the other side, whichever door it came in. */
@@ -761,21 +921,23 @@ export async function answerAsConsultant(
   rfi: Rfi,
   body: string,
   authorName?: string | null,
-  via: "link" | "portal" | "email" = "link"
+  via: "link" | "portal" | "email" = "link",
+  files?: Attachment[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (rfi.status === "closed") return { ok: false, error: "closed" };
   if (rfi.status !== "open") return { ok: false, error: "not-open" };
   const scope = tokenScope(rfi);
   const name = authorName?.trim().slice(0, 120) || rfi.consultantName || rfi.consultantCompany || "The consultant";
+  const atts = cleanFiles(files, [rfiBlobPrefix(rfi.projectId, rfi.id), `${rfi.projectId}/inbound/${rfi.id}/`]);
   try {
-    await logAnswer(scope, rfi.id, body, { userId: null, name, consultantName: name, via });
+    await logAnswer(scope, rfi.id, body, { userId: null, name, consultantName: name, via }, atts);
   } catch {
     // Lost the atomic claim: someone answered (or closed it) a moment ago.
     return { ok: false, error: "not-open" };
   }
   // Best-effort: the answer is logged whatever happens to the notice email.
   try {
-    await notifyAnswer(scope, rfi, body, name);
+    await notifyAnswer(scope, rfi, body, name, attachmentsLine(atts));
   } catch (e) {
     console.error("rfi answer notice failed:", e);
   }
@@ -789,21 +951,24 @@ export async function commentByToken(
   token: string,
   body: string,
   authorName?: string | null,
-  via: "link" | "portal" = "link"
+  via: "link" | "portal" = "link",
+  files?: Attachment[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const rfi = await rfiByToken(token);
   if (!rfi || rfi.status === "void" || rfi.number == null) return { ok: false, error: "not-found" };
-  return commentAsConsultant(rfi, body, authorName, via);
+  return commentAsConsultant(rfi, body, authorName, via, files);
 }
 
 export async function commentAsConsultant(
   rfi: Rfi,
   body: string,
   authorName?: string | null,
-  via: "link" | "portal" | "email" = "link"
+  via: "link" | "portal" | "email" = "link",
+  files?: Attachment[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (rfi.status !== "open" && rfi.status !== "answered") return { ok: false, error: "closed" };
   const name = authorName?.trim().slice(0, 120) || rfi.consultantName || rfi.consultantCompany || "The consultant";
+  const atts = cleanFiles(files, [rfiBlobPrefix(rfi.projectId, rfi.id), `${rfi.projectId}/inbound/${rfi.id}/`]);
   await db.insert(rfiMessages).values({
     companyId: rfi.companyId,
     projectId: rfi.projectId,
@@ -811,8 +976,9 @@ export async function commentAsConsultant(
     type: "followup",
     authorSide: "consultant",
     authorName: name,
-    body: body.trim(),
+    body: body.trim() || "(see attachments)",
     via,
+    attachments: atts.length ? JSON.stringify(atts) : null,
   });
   return { ok: true };
 }
@@ -828,10 +994,16 @@ export async function emailReplyOnRfi(
   rfi: Rfi,
   from: { email: string; name: string },
   text: string,
-  attachmentsLine: string | null
+  attachments: Attachment[]
 ): Promise<{ handled: "rfi_comment" | "rfi_followup" | "rejected" }> {
   if (rfi.status === "void" || rfi.number == null) return { handled: "rejected" };
   const scope = tokenScope(rfi);
+  // The stored files go on the thread line itself (so they open from the
+  // RFI page) and are named in the notice to the other side.
+  const attJson = attachments.length ? JSON.stringify(attachments) : null;
+  const attachmentsLine = attachments.length
+    ? `${attachments.length} attachment${attachments.length === 1 ? "" : "s"}: ${attachments.map((a) => a.filename).join(" · ")}`
+    : null;
   const fromLower = from.email.toLowerCase();
   const senderLower = (await senderEmailOf(rfi))?.toLowerCase() ?? null;
   // Our own sender replying from their inbox is the one internal case; anyone
@@ -855,6 +1027,7 @@ export async function emailReplyOnRfi(
       authorName: from.name || rfi.consultantName || rfi.consultantCompany || from.email,
       body,
       via: "email",
+      attachments: attJson,
     });
     // Tell whoever pressed Send, with the one-click promote in the app.
     const to = await senderEmailOf(rfi);
@@ -902,6 +1075,7 @@ export async function emailReplyOnRfi(
     authorName: from.name || from.email,
     body,
     via: "email",
+    attachments: attJson,
   });
   if (rfi.consultantEmail && rfi.answerToken) {
     const loginRequired = await companyRequiresLogin(scope.companyId);
@@ -997,7 +1171,7 @@ export async function tokenSheetPng(token: string, doc: string, page: number): P
 
 /** Tell whoever pressed Send that the answer is in. Their address is the
  *  Reply-To we stamped on the outbound send — read back from the email log. */
-async function notifyAnswer(scope: Scope, rfi: Rfi, answer: string, consultantLine: string) {
+async function notifyAnswer(scope: Scope, rfi: Rfi, answer: string, consultantLine: string, attachmentsLine?: string | null) {
   const to = await senderEmailOf(rfi);
   if (!to) return;
   const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
@@ -1011,6 +1185,7 @@ async function notifyAnswer(scope: Scope, rfi: Rfi, answer: string, consultantLi
     rfiSubject: rfi.subject,
     consultantLine,
     answer,
+    attachmentsLine: attachmentsLine ?? null,
     appUrl: APP_URL,
   });
   await sendEmail({

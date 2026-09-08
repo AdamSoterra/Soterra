@@ -1,5 +1,6 @@
-import { answerByToken, commentByToken, getRfiThreadByToken, rfiByToken, rfiRecipients } from "@/lib/rfi";
+import { answerByToken, commentByToken, getRfiThreadByToken, rfiBlobPrefix, rfiByToken, rfiRecipients } from "@/lib/rfi";
 import { gateExternal, gateResponse } from "@/lib/externalAuth";
+import { sanitizeFiles } from "@/lib/attachments";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -13,9 +14,11 @@ export const maxDuration = 60;
 // no-account flow.
 //
 //   GET  /api/rfi-answer?token=…            → the thread the page renders
-//   POST /api/rfi-answer {token, kind, body, authorName}
+//   POST /api/rfi-answer {token, kind, body, authorName, files?}
 //        kind "answer"  → the official answer: open → answered, clock stops
 //        kind "comment" → a clarifying note; ball and clock do not move
+//        files: {filename, path, bytes, contentType}[] already uploaded via
+//               /api/rfi-answer/upload under this RFI's own Blob folder
 
 const MAX_BODY = 20000;
 
@@ -54,18 +57,21 @@ export async function POST(req: Request) {
   if (kind !== "answer" && kind !== "comment") {
     return Response.json({ error: "Unknown kind" }, { status: 400 });
   }
-  if (!text) return Response.json({ error: "Write the response first." }, { status: 400 });
   if (text.length > MAX_BODY) return Response.json({ error: "That response is too long." }, { status: 413 });
 
   const { rfi, res } = await gate(token);
   if (!rfi) return Response.json({ error: "This link is no longer valid." }, { status: 404 });
   if (res) return res;
+  // Only files under THIS RFI's folder count (the upload door signs nothing else).
+  const files = sanitizeFiles(body.files, [rfiBlobPrefix(rfi.projectId, rfi.id)]);
+  // The official answer needs words; a comment can be just a file (a marked-up sketch).
+  if (!text && (kind === "answer" || !files.length)) return Response.json({ error: "Write the response first." }, { status: 400 });
 
   try {
     const result =
       kind === "comment"
-        ? await commentByToken(token, text, authorName)
-        : await answerByToken(token, text, authorName);
+        ? await commentByToken(token, text, authorName, "link", files)
+        : await answerByToken(token, text, authorName, "link", files);
 
     if (!result.ok) {
       if (result.error === "not-found") return Response.json({ error: "This link is no longer valid." }, { status: 404 });

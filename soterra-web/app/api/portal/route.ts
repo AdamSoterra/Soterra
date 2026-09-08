@@ -3,12 +3,14 @@ import { verifiedEmails } from "@/lib/externalAuth";
 import {
   answerAsConsultant,
   commentAsConsultant,
+  rfiBlobPrefix,
   rfiLabel,
   rfiRecipients,
   rfiThreadView,
   rfisForEmails,
   sentRfiById,
 } from "@/lib/rfi";
+import { sanitizeFiles } from "@/lib/attachments";
 import { corrForEmail, corrForEmails, corrLabel, corrTypeLabel, corrView, replyAsExternal, type CorrAttachment } from "@/lib/correspondence";
 import { defectForEmail, defectsForEmails, fixView, markReadyRow, signoffRow, signoffView } from "@/lib/qaCloseout";
 import { db } from "@/lib/db";
@@ -177,8 +179,10 @@ export async function POST(req: Request) {
       if (!rfi || !rfiRecipients(rfi).some((e) => who.emails.includes(e))) return Response.json({ error: "Not found" }, { status: 404 });
       const action = String(body.action ?? "");
       if (action !== "answer" && action !== "comment") return Response.json({ error: "Unknown action" }, { status: 400 });
-      if (!text) return Response.json({ error: "Write the response first." }, { status: 400 });
-      const res = action === "answer" ? await answerAsConsultant(rfi, text, name, "portal") : await commentAsConsultant(rfi, text, name, "portal");
+      // Files uploaded through /api/portal/upload under this RFI's own folder.
+      const files = sanitizeFiles(body.files, [rfiBlobPrefix(rfi.projectId, rfi.id)]);
+      if (!text && (action === "answer" || !files.length)) return Response.json({ error: "Write the response first." }, { status: 400 });
+      const res = action === "answer" ? await answerAsConsultant(rfi, text, name, "portal", files) : await commentAsConsultant(rfi, text, name, "portal", files);
       if (!res.ok) {
         if (res.error === "not-open") return Response.json({ error: "This RFI already has an answer logged. Add a comment instead." }, { status: 409 });
         return Response.json({ error: "This RFI is closed - nothing further is needed." }, { status: 409 });

@@ -27,8 +27,11 @@ if (BLOB) {
   const files = await sql`select distinct file as p from plan_pages where project_id = any(${pids}) and file is not null`;
   const corr = await sql`select attachments from correspondence where company_id = ${co.id}`;
   const msgs = await sql`select attachments from correspondence_messages where company_id = ${co.id}`;
+  // RFI files too (the RFI's own + every line of its thread), since 2026-09-10.
+  const rfiOwn = await sql`select attachments from rfis where company_id = ${co.id}`;
+  const rfiMsgs = await sql`select attachments from rfi_messages where company_id = ${co.id}`;
   const paths = new Set(files.map((f) => f.p));
-  for (const r of [...corr, ...msgs]) for (const a of JSON.parse(r.attachments ?? "[]")) paths.add(a.path);
+  for (const r of [...corr, ...msgs, ...rfiOwn, ...rfiMsgs]) for (const a of JSON.parse(r.attachments ?? "[]")) paths.add(a.path);
   for (const p of paths) {
     try {
       await del(p, { token: BLOB });

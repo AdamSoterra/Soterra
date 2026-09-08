@@ -6,7 +6,16 @@ import { projectMembers, projects } from "./schema";
 // site id in the `x-soterra-project` header; we confirm the caller is a member.
 // Returns the projectId if the user belongs to it, else null (→ 403).
 export async function resolveProjectId(req: Request, userId: string): Promise<string | null> {
-  const pid = req.headers.get("x-soterra-project");
+  // Header from the app, or ?project= on a plain link (see resolveScope).
+  let pid = req.headers.get("x-soterra-project");
+  if (!pid) {
+    try {
+      const v = new URL(req.url).searchParams.get("project")?.trim();
+      pid = v && /^[0-9a-f-]{36}$/i.test(v) ? v : null;
+    } catch {
+      pid = null;
+    }
+  }
   if (!pid) return null;
   const [m] = await db
     .select({ id: projectMembers.id })

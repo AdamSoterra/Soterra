@@ -53,7 +53,12 @@ export async function POST(request: Request) {
         // drawings, office documents, zips) - under the item's own folder only.
         // A client instruction's document (PDF, or a photo of the letter)
         // lives under instructions/ and takes the same list.
-        const isCorr = pathname.startsWith(`${projectId}/correspondence/`) || pathname.startsWith(`${projectId}/instructions/`);
+        // RFI files (the New RFI form, a draft, a follow-up) take the same list
+        // under rfis/ - "<projectId>/rfis/<rfiId>/…" or "…/rfis/pending/<key>/…".
+        const isCorr =
+          pathname.startsWith(`${projectId}/correspondence/`) ||
+          pathname.startsWith(`${projectId}/instructions/`) ||
+          pathname.startsWith(`${projectId}/rfis/`);
         const corrTypes = [
           "application/pdf",
           "image/jpeg",

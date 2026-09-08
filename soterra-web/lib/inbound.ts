@@ -291,7 +291,7 @@ export async function handleInbound(p: ParsedInbound): Promise<InboundResult> {
     const stored = await storeAttachments(rfi.projectId, rfi.id, p.attachments);
     const line = attLine(stored);
     const text = line && !p.text ? `(${line})` : p.text;
-    const res = await emailReplyOnRfi(rfi, p.from, text, line);
+    const res = await emailReplyOnRfi(rfi, p.from, text, stored);
     return record({ companyId: rfi.companyId, projectId: rfi.projectId, recordType: "rfi", recordId: rfi.id, attachments: stored, handled: res.handled });
   }
 

@@ -717,7 +717,9 @@ export const rfis = pgTable(
     question: text("question").notNull(),
     proposedSolution: text("proposed_solution"),
     codeRefs: text("code_refs"), // JSON array of strings ("NZS 3604 cl 8.6")
-    attachments: text("attachments"), // JSON array of {filename} listed on the RFI
+    // JSON array of {filename, path, bytes, contentType}: the files attached to
+    // the RFI itself (private Blob under <projectId>/rfis/…; see lib/attachments).
+    attachments: text("attachments"),
     costImpact: text("cost_impact").default("unknown").notNull(), // none | unknown | yes
     costEstimate: text("cost_estimate"),
     programmeImpact: text("programme_impact").default("unknown").notNull(), // none | unknown | yes
@@ -769,6 +771,10 @@ export const rfiMessages = pgTable(
     // How the line arrived: app | link | portal | email. Null = app (legacy).
     // "email" lines came in through the inbound webhook (lib/inbound.ts).
     via: text("via"),
+    // JSON array of {filename, path, bytes, contentType} - files on this line
+    // of the thread (a follow-up's drawings, the consultant's marked-up sketch,
+    // an email reply's attachments). Served through /api/rfi-file.
+    attachments: text("attachments"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({ byRfi: index("rfi_messages_rfi_idx").on(t.rfiId) })

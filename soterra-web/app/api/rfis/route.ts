@@ -4,17 +4,21 @@ import {
   DISCIPLINES,
   publicRfi,
   addFollowup,
+  attachRfiFiles,
   createCi,
   createDraft,
   getRfi,
   listRfis,
   logAnswer,
   promoteToAnswer,
+  removeRfiAttachment,
   rfiAnalytics,
+  rfiBlobRoot,
   sendRfi,
   setRfiStatus,
   updateRfiImpact,
 } from "@/lib/rfi";
+import { sanitizeFiles } from "@/lib/attachments";
 
 export const runtime = "nodejs";
 // Sending renders drawing snapshots; give it room.
@@ -102,12 +106,16 @@ export async function POST(req: Request) {
     criticalPath: body.criticalPath === true,
     requiredBy,
     raisedByName: displayName(user),
+    // Files picked on the form went straight to Blob under this site's rfis/
+    // folder (/api/upload/token signs only that); anything else is dropped.
+    attachments: sanitizeFiles(body.attachments, [rfiBlobRoot(scope.projectId)], 30),
   });
   return Response.json({ rfi: publicRfi(rfi) }, { status: 201 });
 }
 
 // PATCH /api/rfis — the lifecycle. { id, action, ... }
-//   action: "send" | "log_answer" (body) | "followup" (body, bounce?) |
+//   action: "send" | "log_answer" (body) | "followup" (body, bounce?, files?) |
+//           "attach" (files, draft only) | "detach" (path, draft only) |
 //           "close" | "reopen" | "void" | "create_ci" (title, amendsDrawings?, cost?)
 export async function PATCH(req: Request) {
   const { userId } = await auth();
@@ -149,10 +157,19 @@ export async function PATCH(req: Request) {
       const rfi = await promoteToAnswer(scope, id, messageId, by);
       return Response.json({ rfi: publicRfi(rfi) });
     }
+    if (action === "attach") {
+      const rfi = await attachRfiFiles(scope, id, sanitizeFiles(body.files, [rfiBlobRoot(scope.projectId)], 30));
+      return Response.json({ rfi: publicRfi(rfi) });
+    }
+    if (action === "detach") {
+      const rfi = await removeRfiAttachment(scope, id, String(body.path ?? ""));
+      return Response.json({ rfi: publicRfi(rfi) });
+    }
     if (action === "followup") {
+      const files = sanitizeFiles(body.files, [rfiBlobRoot(scope.projectId)]);
       const text = String(body.body ?? "").trim();
-      if (!text) return Response.json({ error: "Write the follow-up" }, { status: 400 });
-      const rfi = await addFollowup(scope, id, text, by, { bounce: body.bounce === true });
+      if (!text && !files.length) return Response.json({ error: "Write the follow-up" }, { status: 400 });
+      const rfi = await addFollowup(scope, id, text, by, { bounce: body.bounce === true, files });
       return Response.json({ rfi: publicRfi(rfi) });
     }
     if (action === "close" || action === "void") {

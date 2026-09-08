@@ -400,6 +400,7 @@ export function renderRfiAnswerNotice(opts: {
   rfiSubject: string;
   consultantLine: string; // "Jane Smith · Holmes Structural"
   answer: string;
+  attachmentsLine?: string | null; // "1 attachment: SK-04 marked up.pdf"
   appUrl: string; // where Accept + close lives
 }): { html: string; text: string } {
   const headerHtml = `<tr><td bgcolor="${NAVY}" style="background:${NAVY};padding:14px 28px;">
@@ -414,6 +415,7 @@ ${header(opts.companyName, `${opts.projectName} · answered by ${opts.consultant
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:12px 0;"><tr>
   <td style="background:#F0FAF4;border:1px solid #BFE8CE;border-radius:9px;padding:13px 15px;font-family:${FONT};font-size:13.5px;color:${INK};line-height:1.55;">${esc(opts.answer).replace(/\n/g, "<br/>")}</td>
 </tr></table>
+${opts.attachmentsLine ? `<div style="font-family:${FONT};font-size:12.5px;color:#43586E;margin:0 0 10px;">&#128206; ${esc(opts.attachmentsLine)} &middot; open the RFI to download</div>` : ""}
 <div style="font-family:${FONT};font-size:12.5px;color:${SLATE};line-height:1.5;">Open Soterra to accept and close it, raise a CI from it, or bounce it back with a follow-up: <a href="${esc(opts.appUrl)}" style="color:${BRAND};font-weight:bold;text-decoration:none;">${esc(opts.appUrl.replace(/^https?:\/\//, ""))}</a></div>`;
 
   const html = shell({
@@ -427,6 +429,7 @@ ${header(opts.companyName, `${opts.projectName} · answered by ${opts.consultant
     `${opts.projectName} · answered by ${opts.consultantLine}`,
     "",
     opts.answer,
+    ...(opts.attachmentsLine ? ["", `${opts.attachmentsLine} (open the RFI to download)`] : []),
     "",
     `The response clock has stopped. Accept + close, raise a CI, or bounce it back in Soterra: ${opts.appUrl}`,
   ].join("\n");

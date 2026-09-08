@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
-import { ErrorCard, InvalidCard, Loading, LoginGate, RfiThreadView, Shell, type RfiThread } from "@/app/components/external-views";
+import { upload } from "@vercel/blob/client";
+import { ErrorCard, InvalidCard, Loading, LoginGate, RfiThreadView, Shell, type CorrFile, type RfiThread } from "@/app/components/external-views";
 
 // The consultant's side of an RFI - soterra.co.nz/answer/<token>.
 //
@@ -47,12 +48,32 @@ export default function AnswerPage({ params }: { params: { token: string } }) {
       <RfiThreadView
         thread={thread}
         sheetSrc={(doc, page) => `/api/rfi-answer/sheet?token=${encodeURIComponent(token)}&doc=${encodeURIComponent(doc)}&page=${page}`}
-        act={async (kind, text, name) => {
+        fileHref={(path) => `/api/rfi-file?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`}
+        uploadFile={
+          thread.rfi.uploadPrefix
+            ? async (file) => {
+                try {
+                  // The route only signs paths under this RFI's own folder.
+                  const res = await upload(`${thread.rfi.uploadPrefix}${file.name}`, file, {
+                    access: "private",
+                    handleUploadUrl: "/api/rfi-answer/upload",
+                    clientPayload: JSON.stringify({ token }),
+                    contentType: file.type || "application/octet-stream",
+                  });
+                  const f: CorrFile = { filename: file.name, path: res.pathname, bytes: file.size, contentType: file.type || "application/octet-stream" };
+                  return { file: f };
+                } catch (e) {
+                  return { error: e instanceof Error ? e.message : `${file.name} didn't upload.` };
+                }
+              }
+            : null
+        }
+        act={async (kind, text, name, files) => {
           try {
             const r = await fetch("/api/rfi-answer", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ token, kind, body: text, authorName: name }),
+              body: JSON.stringify({ token, kind, body: text, authorName: name, files }),
             });
             const d = (await r.json()) as { ok?: boolean; thread?: RfiThread; error?: string };
             if (!r.ok || !d.ok) return { ok: false, error: d.error };

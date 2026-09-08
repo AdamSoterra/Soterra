@@ -119,12 +119,15 @@ type RfiRow = {
   consultantCompany: string | null; consultantName: string | null;
   dateRequiredBy: string | null; daysOpen: number; overdue: boolean; lateWd: number;
 };
-type RfiMsg = { id: string; type: string; authorSide: string; authorName: string | null; body: string; via?: string | null; createdAt: string };
+// A file on an RFI or on a line of its thread (private Blob; served by /api/rfi-file).
+type RfiAtt = { filename: string; path: string; bytes: number; contentType: string };
+type RfiMsg = { id: string; type: string; authorSide: string; authorName: string | null; body: string; via?: string | null; attachments?: RfiAtt[]; createdAt: string };
 type RfiFull = {
   rfi: RfiRow & {
     question: string; proposedSolution: string | null; codeRefs: string | null; location: string | null;
     costImpact: string; costEstimate: string | null; programmeImpact: string; programmeDays: number | null;
     raisedByName: string | null; consultantEmail: string | null; dateRaised: string | null; dateAnswered: string | null; revision: number;
+    files?: RfiAtt[]; uploadPrefix?: string;
   };
   messages: RfiMsg[];
   transitions: { id: string; fromStatus: string | null; toStatus: string; ballTo: string | null; byName: string | null; comment: string | null; at: string }[];
@@ -1051,6 +1054,18 @@ export default function Page() {
   const [newRfiOpen, setNewRfiOpen] = useState(false);
   const [nr, setNr] = useState({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "", criticalPath: false, costImpact: "unknown", costEstimate: "", programmeImpact: "unknown", programmeDays: "" });
   const [nrCon, setNrCon] = useState(""); // saved-consultant pick on the New RFI form (cosmetic; the fields hold the truth)
+  // Files on the New RFI form upload straight to the private store (under a
+  // per-form staging key) and are recorded on the draft when it is created.
+  // Follow-ups and drafts carry their own files under the RFI's folder.
+  const [nrFiles, setNrFiles] = useState<RfiAtt[]>([]);
+  const [nrUploading, setNrUploading] = useState(false);
+  const nrKeyRef = useRef(Math.random().toString(36).slice(2, 10));
+  const nrFileRef = useRef<HTMLInputElement>(null);
+  const [fuFiles, setFuFiles] = useState<RfiAtt[]>([]);
+  const [fuUploading, setFuUploading] = useState(false);
+  const fuFileRef = useRef<HTMLInputElement>(null);
+  const draftFileRef = useRef<HTMLInputElement>(null);
+  const [draftUploading, setDraftUploading] = useState(false);
   // ─── The Directory (address book): consultants + subs, company-wide ───
   const [dirOpen, setDirOpen] = useState(false);
   const [dirTab, setDirTab] = useState<"consultants" | "subs">("consultants");
@@ -1077,6 +1092,43 @@ export default function Page() {
     if (pid) headers.set("x-soterra-project", pid);
     return fetch(path, { ...init, headers });
   };
+
+  // Direct-to-Blob upload of RFI files (New RFI form, a draft, a follow-up).
+  // /api/upload/token signs only paths under this site's rfis/ folder; `sub`
+  // is the RFI id, or "pending/<key>" for a form that has no RFI yet.
+  const uploadRfiFiles = async (sub: string, list: File[]): Promise<RfiAtt[]> => {
+    const out: RfiAtt[] = [];
+    const pid = projRef.current;
+    if (!pid) throw new Error("No site selected");
+    for (const f of list.slice(0, 10)) {
+      const res = await upload(`${pid}/rfis/${sub}/${f.name}`, f, {
+        access: "private",
+        handleUploadUrl: "/api/upload/token",
+        clientPayload: JSON.stringify({ projectId: pid }),
+        contentType: f.type || "application/octet-stream",
+      });
+      out.push({ filename: f.name, path: res.pathname, bytes: f.size, contentType: f.type || "application/octet-stream" });
+    }
+    return out;
+  };
+  // Opened in a new tab, so the site rides as ?project= (no header on a plain link).
+  const rfiFileHref = (rfiId: string, path: string) => `/api/rfi-file?id=${encodeURIComponent(rfiId)}&path=${encodeURIComponent(path)}&project=${encodeURIComponent(projRef.current ?? "")}`;
+  const rfiFileIcon = (name: string) => (/\.pdf$/i.test(name) ? "📄" : /\.(jpe?g|png|webp)$/i.test(name) ? "🖼" : "📎");
+  const rfiFmtBytes = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(n < 10485760 ? 1 : 0)} MB`);
+  // One row per file: icon · name (a link once the RFI exists) · size · Remove.
+  const rfiFileRows = (files: RfiAtt[], rfiId: string | null, onRemove?: (path: string) => void) =>
+    files.map((a) => (
+      <div className="co-att" key={a.path}>
+        <span>{rfiFileIcon(a.filename)}</span>
+        {rfiId ? (
+          <a href={rfiFileHref(rfiId, a.path)} target="_blank" rel="noopener noreferrer">{a.filename}</a>
+        ) : (
+          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{a.filename}</span>
+        )}
+        <small>{rfiFmtBytes(a.bytes)}</small>
+        {onRemove && <button type="button" className="co-attbtn" disabled={rfiBusy} onClick={() => onRemove(a.path)}>Remove</button>}
+      </div>
+    ));
 
   /**
    * Wait for the current site id to be ready.
@@ -2864,6 +2916,7 @@ export default function Page() {
           ...nr,
           cc: nr.cc.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean),
           codeRefs: nr.codeRefs.split(/[,;]+/).map((s) => s.trim()).filter(Boolean),
+          attachments: nrFiles,
         }),
       });
       const d = await res.json();
@@ -2876,6 +2929,8 @@ export default function Page() {
         loadRfis();
       }
       setNewRfiOpen(false);
+      setNrFiles([]);
+      nrKeyRef.current = Math.random().toString(36).slice(2, 10);
       setNr({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "", criticalPath: false, costImpact: "unknown", costEstimate: "", programmeImpact: "unknown", programmeDays: "" });
       setNrCon("");
     } catch (e) {
@@ -4561,6 +4616,12 @@ export default function Page() {
                           ))}
                         </div>
                       )}
+                      {(rfiOpen.rfi.files?.length ?? 0) > 0 && (
+                        <div style={{ marginTop: 10 }}>
+                          <div className="k" style={{ marginBottom: 2 }}>Attachments</div>
+                          {rfiFileRows(rfiOpen.rfi.files ?? [], rfiOpen.rfi.id, rfiOpen.rfi.status === "draft" ? (path) => void rfiAction(rfiOpen.rfi.id, "detach", { path }) : undefined)}
+                        </div>
+                      )}
                     </div>
 
                     {rfiOpen.rfi.status === "draft" && (
@@ -4572,6 +4633,18 @@ export default function Page() {
                           </button>
                           <button className="lg-btn" style={{ height: 40, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} disabled={rfiBusy} onClick={() => void rfiAction(rfiOpen.rfi.id, "void")}>Void draft</button>
                         </div>
+                        <input ref={draftFileRef} type="file" multiple style={{ display: "none" }} onChange={async (e) => {
+                          const list = e.target.files ? Array.from(e.target.files) : [];
+                          e.target.value = "";
+                          if (!list.length) return;
+                          setDraftUploading(true); setRfiErr(null);
+                          try { const atts = await uploadRfiFiles(rfiOpen.rfi.id, list); await rfiAction(rfiOpen.rfi.id, "attach", { files: atts }); }
+                          catch (err) { setRfiErr(err instanceof Error ? err.message : "Couldn't attach those."); }
+                          finally { setDraftUploading(false); }
+                        }} />
+                        <button type="button" className="co-drop" disabled={draftUploading || rfiBusy} onClick={() => draftFileRef.current?.click()}>
+                          {draftUploading ? "Uploading…" : "📎 Attach files - they go out with the RFI email"}
+                        </button>
                       </div>
                     )}
 
@@ -4602,6 +4675,7 @@ export default function Page() {
                             {rfiOpen.messages.filter((m) => m.type === "official_answer").map((m, i, arr) => (
                               <div key={m.id} style={{ marginBottom: i < arr.length - 1 ? 12 : 0 }}>
                                 <div className="rf-anstext">{m.body}</div>
+                                {rfiFileRows(m.attachments ?? [], rfiOpen.rfi.id)}
                                 <div className="rf-ansmeta">{m.authorName ?? "Consultant"} · {new Date(m.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</div>
                               </div>
                             ))}
@@ -4637,6 +4711,7 @@ export default function Page() {
                           {m.via === "email" ? " · by email" : m.via === "portal" ? " · from the portal" : m.via === "link" ? " · from the link" : ""}
                         </div>
                         <div className="body">{m.body}</div>
+                        {rfiFileRows(m.attachments ?? [], rfiOpen.rfi.id)}
                         {/* A consultant's note (an email reply, a comment) can become THE answer in one click. */}
                         {m.authorSide === "consultant" && rfiOpen.rfi.status === "open" && (
                           <button className="dir-act" style={{ marginTop: 8 }} disabled={rfiBusy} onClick={() => void rfiAction(rfiOpen.rfi.id, "promote", { messageId: m.id })}>
@@ -4651,8 +4726,20 @@ export default function Page() {
                         <div className="k">Follow-up</div>
                         <div style={{ display: "flex", gap: 8 }}>
                           <input className="ev-in" style={{ flex: 1 }} value={fuText} placeholder={rfiOpen.rfi.status === "answered" ? "Ask a follow-up - it reopens the RFI and the consultant clock" : "Add context to the thread"} onChange={(e) => setFuText(e.target.value)} />
-                          <button className="lg-btn" style={{ height: 42, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} disabled={rfiBusy || !fuText.trim()} onClick={async () => { if (await rfiAction(rfiOpen.rfi.id, "followup", { body: fuText, bounce: rfiOpen.rfi.status === "answered" })) setFuText(""); }}>Send</button>
+                          <input ref={fuFileRef} type="file" multiple style={{ display: "none" }} onChange={async (e) => {
+                            const list = e.target.files ? Array.from(e.target.files) : [];
+                            e.target.value = "";
+                            if (!list.length) return;
+                            setFuUploading(true); setRfiErr(null);
+                            try { const atts = await uploadRfiFiles(rfiOpen.rfi.id, list); setFuFiles((xs) => [...xs, ...atts]); }
+                            catch (err) { setRfiErr(err instanceof Error ? err.message : "Couldn't attach those."); }
+                            finally { setFuUploading(false); }
+                          }} />
+                          <button className="lg-btn" style={{ height: 42, margin: 0, width: "auto", padding: "0 12px", fontSize: 13 }} title="Attach files - drawings, photos, documents" disabled={rfiBusy || fuUploading} onClick={() => fuFileRef.current?.click()}>{fuUploading ? "…" : "📎"}</button>
+                          <button className="lg-btn" style={{ height: 42, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} disabled={rfiBusy || fuUploading || (!fuText.trim() && !fuFiles.length)} onClick={async () => { if (await rfiAction(rfiOpen.rfi.id, "followup", { body: fuText, bounce: rfiOpen.rfi.status === "answered", files: fuFiles })) { setFuText(""); setFuFiles([]); } }}>Send</button>
                         </div>
+                        {rfiFileRows(fuFiles, null, (path) => setFuFiles((xs) => xs.filter((x) => x.path !== path)))}
+                        {fuFiles.length > 0 && <div className="page-sub" style={{ margin: "6px 0 0" }}>The files go to {rfiOpen.rfi.consultantCompany || "the consultant"} with the follow-up.</div>}
                         {rfiOpen.rfi.status === "closed" && (
                           <button className="lg-btn" style={{ height: 36, margin: "10px 0 0", width: "auto", padding: "0 14px", fontSize: 12.5 }} disabled={rfiBusy} onClick={() => void rfiAction(rfiOpen.rfi.id, "reopen")}>Reopen this RFI</button>
                         )}
@@ -5143,6 +5230,23 @@ export default function Page() {
               </div>
               <label className="ev-lbl" style={{ marginTop: 14, fontSize: 12.5, color: "var(--navy)" }}>The question</label>
               <textarea className="ev-in" rows={7} style={{ fontSize: 15, lineHeight: 1.5 }} value={nr.question} placeholder="What needs answering? Put the drawing and any figures right in the text." onChange={(e) => setNr((v) => ({ ...v, question: e.target.value }))} />
+              {/* Files: a marked-up detail, photos, the sketch. They upload now and go
+                  out with the RFI email on Send (up to the email budget; the rest
+                  download from the RFI page). */}
+              <label className="ev-lbl" style={{ marginTop: 12 }}>Attachments</label>
+              {rfiFileRows(nrFiles, null, (path) => setNrFiles((xs) => xs.filter((x) => x.path !== path)))}
+              <input ref={nrFileRef} type="file" multiple style={{ display: "none" }} onChange={async (e) => {
+                const list = e.target.files ? Array.from(e.target.files) : [];
+                e.target.value = "";
+                if (!list.length) return;
+                setNrUploading(true); setRfiErr(null);
+                try { const atts = await uploadRfiFiles(`pending/${nrKeyRef.current}`, list); setNrFiles((xs) => [...xs, ...atts]); }
+                catch (err) { setRfiErr(err instanceof Error ? err.message : "Couldn't attach those."); }
+                finally { setNrUploading(false); }
+              }} />
+              <button type="button" className="co-drop" disabled={nrUploading || rfiBusy} onClick={() => nrFileRef.current?.click()}>
+                {nrUploading ? "Uploading…" : "📎 Attach files (drawings, photos, documents)"}
+              </button>
               {/* Saved-consultant picker (the Directory). Picking fills the free-text
                   fields below; typing fresh details still works, and whoever the RFI
                   is sent to is saved back into the Directory automatically. */}
@@ -5210,8 +5314,8 @@ export default function Page() {
               </p>
               {rfiErr && <div className="ev-err">{rfiErr}</div>}
               <div className="form-actions">
-                <button className="lg-btn" style={{ height: 46, margin: 0, width: "auto", padding: "0 18px" }} disabled={rfiBusy || !nr.subject.trim() || !nr.question.trim()} onClick={() => void createRfi(false)}>Save draft</button>
-                <button className="lg-btn primary" style={{ height: 46, margin: 0, flex: 1 }} disabled={rfiBusy || !nr.subject.trim() || !nr.question.trim() || !nr.consultantEmail.trim()} onClick={() => void createRfi(true)}>
+                <button className="lg-btn" style={{ height: 46, margin: 0, width: "auto", padding: "0 18px" }} disabled={rfiBusy || nrUploading || !nr.subject.trim() || !nr.question.trim()} onClick={() => void createRfi(false)}>Save draft</button>
+                <button className="lg-btn primary" style={{ height: 46, margin: 0, flex: 1 }} disabled={rfiBusy || nrUploading || !nr.subject.trim() || !nr.question.trim() || !nr.consultantEmail.trim()} onClick={() => void createRfi(true)}>
                   {rfiBusy ? "Sending…" : "Send RFI"}
                 </button>
               </div>

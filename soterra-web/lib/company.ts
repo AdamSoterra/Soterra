@@ -39,7 +39,10 @@ export type Scope = {
  * Returns null when the header is missing or the caller isn't a member → 403.
  */
 export async function resolveScope(req: Request, userId: string): Promise<Scope | null> {
-  const pid = req.headers.get("x-soterra-project");
+  // The app sends the site as a header; a plain link opened in a new tab (a
+  // file on an RFI or a piece of correspondence) cannot, so ?project= is the
+  // fallback. Either way membership is checked below - the id is only a hint.
+  const pid = req.headers.get("x-soterra-project") ?? projectFromQuery(req);
   if (!pid) return null;
   const [row] = await db
     .select({ companyId: projects.companyId, role: projectMembers.role })
@@ -49,6 +52,15 @@ export async function resolveScope(req: Request, userId: string): Promise<Scope 
     .limit(1);
   if (!row || !row.companyId) return null;
   return { projectId: pid, companyId: row.companyId as CompanyId, userId, role: row.role };
+}
+
+function projectFromQuery(req: Request): string | null {
+  try {
+    const v = new URL(req.url).searchParams.get("project")?.trim();
+    return v && /^[0-9a-f-]{36}$/i.test(v) ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The company a project belongs to — for server-side callers that already

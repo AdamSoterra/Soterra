@@ -312,7 +312,7 @@ export function CorrespondencePanel({
   const AttRow = ({ a, itemId, canFile }: { a: Att; itemId: string; canFile: boolean }) => (
     <div className="co-att">
       <span>{/\.pdf$/i.test(a.filename) ? "📄" : /\.(jpe?g|png|webp)$/i.test(a.filename) ? "🖼" : "📎"}</span>
-      <a href={`/api/corr-file?id=${encodeURIComponent(itemId)}&path=${encodeURIComponent(a.path)}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+      <a href={`/api/corr-file?id=${encodeURIComponent(itemId)}&path=${encodeURIComponent(a.path)}&project=${encodeURIComponent(projectId)}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
         {a.filename}
       </a>
       <small>{bytes(a.bytes)}</small>

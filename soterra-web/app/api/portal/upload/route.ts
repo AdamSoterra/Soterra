@@ -1,12 +1,13 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { corrBlobPrefix, corrForEmail } from "@/lib/correspondence";
+import { rfiBlobPrefix, rfiRecipients, sentRfiById } from "@/lib/rfi";
 import { verifiedEmails } from "@/lib/externalAuth";
 
-// Direct-to-Blob upload token for a PORTAL user replying on a piece of
-// correspondence with files. Authorised by the signed-in account's verified
-// email matching the item's recipients (same rule as /api/portal); the path
-// must live under the item's own folder.
+// Direct-to-Blob upload token for a PORTAL user replying with files - on a
+// piece of correspondence ({corrId}) or on an RFI ({rfiId}). Authorised by the
+// signed-in account's verified email matching the item's recipients (same rule
+// as /api/portal); the path must live under the item's own folder.
 export const runtime = "nodejs";
 
 const ALLOWED = [
@@ -33,13 +34,29 @@ export async function POST(request: Request) {
         const { userId } = await auth();
         if (!userId) throw new Error("Not signed in");
         let corrId = "";
+        let rfiId = "";
         try {
-          corrId = String(JSON.parse(clientPayload || "{}").corrId ?? "");
+          const payload = JSON.parse(clientPayload || "{}");
+          corrId = String(payload.corrId ?? "");
+          rfiId = String(payload.rfiId ?? "");
         } catch {
           throw new Error("Bad request");
         }
         const user = await currentUser();
-        const row = await corrForEmail(corrId, verifiedEmails(user as never));
+        const emails = verifiedEmails(user as never);
+        if (rfiId) {
+          const rfi = await sentRfiById(rfiId);
+          if (!rfi || !rfiRecipients(rfi).some((e) => emails.includes(e))) throw new Error("Not found");
+          if (rfi.status !== "open" && rfi.status !== "answered") throw new Error("This RFI is closed");
+          if (!pathname.startsWith(rfiBlobPrefix(rfi.projectId, rfi.id))) throw new Error("Bad upload path");
+          return {
+            allowedContentTypes: ALLOWED,
+            maximumSizeInBytes: 100 * 1024 * 1024,
+            addRandomSuffix: true,
+            tokenPayload: JSON.stringify({ rfiId: rfi.id, uploadedBy: userId }),
+          };
+        }
+        const row = await corrForEmail(corrId, emails);
         if (!row) throw new Error("Not found");
         if (row.status !== "sent" && row.status !== "responded") throw new Error("This item is closed");
         if (!pathname.startsWith(corrBlobPrefix(row.projectId, row.id))) throw new Error("Bad upload path");

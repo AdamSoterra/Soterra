@@ -153,7 +153,7 @@ export function LoginGate({ reason, what }: { reason: "login" | "mismatch"; what
 
 // ─── RFI thread (the consultant's answer page) ─────────────────────────────
 
-export type RfiThreadMsg = { type: string; authorSide: string; authorName: string | null; body: string; via?: string | null; createdAt: string };
+export type RfiThreadMsg = { type: string; authorSide: string; authorName: string | null; body: string; via?: string | null; attachments?: CorrFile[]; createdAt: string };
 export type RfiThread = {
   company: string;
   project: string;
@@ -174,6 +174,10 @@ export type RfiThread = {
     dateRaised: string | null;
     dateRequiredBy: string | null;
     dateAnswered: string | null;
+    /** The RFI's own files (drawings, photos) - served through the caller's fileHref. */
+    attachments?: CorrFile[];
+    /** Where this side's files go; the upload doors sign only this folder. */
+    uploadPrefix?: string;
   };
   messages: RfiThreadMsg[];
   sheets: { doc: string; page: number }[];
@@ -184,36 +188,64 @@ export type RfiThread = {
 export function RfiThreadView({
   thread,
   sheetSrc,
+  fileHref,
+  uploadFile,
   act,
   defaultName,
   hideFoot,
 }: {
   thread: RfiThread;
   sheetSrc: (doc: string, page: number) => string;
-  act: (kind: "answer" | "comment", text: string, name: string) => Act<RfiThread>;
+  /** Link for one of the RFI's files (the door decides: token or portal). */
+  fileHref?: (path: string) => string;
+  /** Direct-to-Blob upload for the consultant's own files; null/absent = no attachments on this door. */
+  uploadFile?: ((file: File) => Promise<{ file?: CorrFile; error?: string }>) | null;
+  act: (kind: "answer" | "comment", text: string, name: string, files: CorrFile[]) => Act<RfiThread>;
   defaultName?: string;
   hideFoot?: boolean;
 }) {
   const [name, setName] = useState(defaultName || thread.rfi.consultantName || "");
   const [text, setText] = useState("");
+  const [files, setFiles] = useState<CorrFile[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [justAnswered, setJustAnswered] = useState(false);
   const [t, setT] = useState(thread);
+  const fileRef = useRef<HTMLInputElement>(null);
   const r = t.rfi;
   const firstQ = t.messages.findIndex((m) => m.type === "question");
   const convo = t.messages.filter((_, i) => i !== firstQ);
   const overdue = r.status === "open" && r.dateRequiredBy && new Date() > new Date(r.dateRequiredBy);
+  const href = fileHref ?? (() => "#");
 
+  const pick = async (list: FileList | null) => {
+    if (!list || !uploadFile) return;
+    setErr(null);
+    setUploading(true);
+    try {
+      for (const f of Array.from(list).slice(0, 10)) {
+        const res = await uploadFile(f);
+        if (res.file) setFiles((xs) => [...xs, res.file!]);
+        else setErr(res.error ?? `${f.name} didn't upload.`);
+      }
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
   const submit = async (kind: "answer" | "comment") => {
-    if (!text.trim() || busy) return;
+    // The official answer needs words; a comment can be just a file.
+    if (busy || uploading) return;
+    if (!text.trim() && (kind === "answer" || !files.length)) return;
     setBusy(true);
     setErr(null);
-    const res = await act(kind, text, name);
+    const res = await act(kind, text, name, files);
     if (!res.ok) setErr(res.error ?? "That didn't go through. Try again.");
     else {
       if (res.data) setT(res.data);
       setText("");
+      setFiles([]);
       if (kind === "answer") setJustAnswered(true);
     }
     setBusy(false);
@@ -261,6 +293,12 @@ export function RfiThreadView({
             <small>{s.doc} · the pin marks the spot this RFI is about</small>
           </div>
         ))}
+        {(r.attachments?.length ?? 0) > 0 && (
+          <>
+            <div className="ans-klabel">Attachments</div>
+            <AttachmentList files={r.attachments ?? []} href={href} />
+          </>
+        )}
       </div>
 
       {convo.length > 0 && (
@@ -274,6 +312,7 @@ export function RfiThreadView({
                 {m.via === "email" ? " · by email" : ""}
               </div>
               <div className="ans-msg-b">{m.body}</div>
+              <AttachmentList files={m.attachments ?? []} href={href} />
             </div>
           ))}
         </div>
@@ -297,14 +336,23 @@ export function RfiThreadView({
             maxLength={20000}
             onChange={(e) => setText(e.target.value)}
           />
+          {uploadFile && (
+            <>
+              <input ref={fileRef} type="file" multiple style={{ display: "none" }} onChange={(e) => void pick(e.target.files)} />
+              {files.length > 0 && <AttachmentList files={files} href={href} />}
+              <button className="qa-photo" style={{ marginTop: 9 }} disabled={uploading} onClick={() => fileRef.current?.click()}>
+                {uploading ? "Uploading…" : "📎 Attach a file (a marked-up sketch, a revised detail, a photo)"}
+              </button>
+            </>
+          )}
           {err && <div className="ans-err">{err}</div>}
           <div className="ans-actions">
             {t.canAnswer && (
-              <button className="ans-btn primary" disabled={busy || !text.trim()} onClick={() => void submit("answer")}>
+              <button className="ans-btn primary" disabled={busy || uploading || !text.trim()} onClick={() => void submit("answer")}>
                 {busy ? "Sending…" : "Send as the official answer"}
               </button>
             )}
-            <button className="ans-btn" disabled={busy || !text.trim()} onClick={() => void submit("comment")}>
+            <button className="ans-btn" disabled={busy || uploading || (!text.trim() && !files.length)} onClick={() => void submit("comment")}>
               {t.canAnswer ? "Send as a comment only" : busy ? "Sending…" : "Add the note"}
             </button>
           </div>

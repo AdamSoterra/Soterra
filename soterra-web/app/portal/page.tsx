@@ -158,8 +158,28 @@ export default function PortalPage() {
             thread={detail.data as RfiThread}
             defaultName={list?.me.name}
             sheetSrc={(doc, page) => `/api/portal/sheet?id=${encodeURIComponent(open.id)}&doc=${encodeURIComponent(doc)}&page=${page}`}
-            act={async (kind, text, name) => {
-              const r = await post({ kind: "rfi", id: open.id, action: kind, body: text, authorName: name });
+            fileHref={(path) => `/api/rfi-file?portal=${encodeURIComponent(open.id)}&path=${encodeURIComponent(path)}`}
+            uploadFile={
+              (detail.data as RfiThread).rfi.uploadPrefix
+                ? async (file) => {
+                    const v = detail.data as RfiThread;
+                    try {
+                      const res = await upload(`${v.rfi.uploadPrefix}${file.name}`, file, {
+                        access: "private",
+                        handleUploadUrl: "/api/portal/upload",
+                        clientPayload: JSON.stringify({ rfiId: open.id }),
+                        contentType: file.type || "application/octet-stream",
+                      });
+                      const f: CorrFile = { filename: file.name, path: res.pathname, bytes: file.size, contentType: file.type || "application/octet-stream" };
+                      return { file: f };
+                    } catch (e) {
+                      return { error: e instanceof Error ? e.message : `${file.name} didn't upload.` };
+                    }
+                  }
+                : null
+            }
+            act={async (kind, text, name, files) => {
+              const r = await post({ kind: "rfi", id: open.id, action: kind, body: text, authorName: name, files });
               return r.ok ? { ok: true, data: r.data as RfiThread } : r;
             }}
           />
