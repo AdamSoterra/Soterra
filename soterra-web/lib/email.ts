@@ -86,8 +86,8 @@ export type EmailAttachment = {
 
 export type SendEmailInput = {
   scope: Scope;
-  kind: "qa_flags" | "rfi" | "inspection_items" | "test";
-  recordType?: "qa_flag" | "rfi" | "inspection_item" | "checklist_item" | null;
+  kind: "qa_flags" | "rfi" | "inspection_items" | "correspondence" | "inbound" | "test";
+  recordType?: "qa_flag" | "rfi" | "inspection_item" | "checklist_item" | "correspondence" | null;
   recordIds?: string[];
   to: { name?: string | null; email: string };
   cc?: string[];

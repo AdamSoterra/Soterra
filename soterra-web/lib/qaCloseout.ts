@@ -33,17 +33,17 @@
 // current closeout_status is the lock, and exactly one writer wins.
 
 import { randomBytes } from "node:crypto";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "./db";
 import { inspectionItems, inspections, projects, qaFlags } from "./schema";
 import type { Scope } from "./company";
 import { companyName } from "./company";
 import { projectSenderAddress, sendEmail } from "./email";
-import { renderQaCloseoutNotice, renderQaSignoffEmail } from "./emailTemplates";
+import { renderQaCloseoutNotice, renderQaSignoffEmail, renderThreadNotice } from "./emailTemplates";
 import { workingDaysBetween } from "./rfi";
-
-/** Where the public /fix and /signoff links point. One env override for previews. */
-const APP_URL = (process.env.APP_BASE_URL ?? "https://soterra.co.nz").replace(/\/+$/, "");
+import { companyRequiresLogin } from "./externalAuth";
+import { replyAddress } from "./inboundAddress";
+import { APP_URL, PORTAL_URL } from "./appUrl";
 
 /** Working days a sub / consultant has before a defect counts as overdue on the
  *  scorecard. A defect fix is quicker than an RFI answer, hence shorter than the
@@ -136,10 +136,11 @@ export async function armFlagFix(scope: Scope, flagId: string): Promise<{ token:
   return { token, url: fixUrl(token) };
 }
 
-/** Mint + persist sub_tokens for a batch of inspection items; return id -> url.
- *  Items already carrying a token keep it (a resend reuses the same link). */
-export async function armItemsFix(scope: Scope, itemIds: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+/** Mint + persist sub_tokens for a batch of inspection items; return id -> url
+ *  (+ the token, for the reply address). Items already carrying a token keep
+ *  it (a resend reuses the same link). */
+export async function armItemsFix(scope: Scope, itemIds: string[]): Promise<Map<string, { url: string; token: string }>> {
+  const out = new Map<string, { url: string; token: string }>();
   if (!itemIds.length) return out;
   const rows = await db
     .select({ id: inspectionItems.id, subToken: inspectionItems.subToken })
@@ -154,9 +155,76 @@ export async function armItemsFix(scope: Scope, itemIds: string[]): Promise<Map<
   for (const r of rows) {
     const token = r.subToken ?? mintToken();
     if (!r.subToken) await db.update(inspectionItems).set({ subToken: token }).where(eq(inspectionItems.id, r.id));
-    out.set(r.id, fixUrl(token));
+    out.set(r.id, { url: fixUrl(token), token });
   }
   return out;
+}
+
+// ─── lookups shared by the token pages, the portal and inbound email ────────
+
+export type FoundDefect = { kind: "flag"; row: FlagRow } | { kind: "item"; row: ItemRow };
+
+/** A reply-address token → the defect it belongs to. "fix" = the sub's
+ *  token (either table); "so" = the consultant's token (items only). */
+export async function defectByReplyToken(kind: "fix" | "so", token: string): Promise<(FoundDefect & { side: "sub" | "consultant" }) | null> {
+  if (kind === "fix") {
+    const f = await bySubToken(token);
+    return f ? { ...f, side: "sub" } : null;
+  }
+  const item = await byConsultantToken(token);
+  return item ? { kind: "item", row: item, side: "consultant" } : null;
+}
+
+/** The addresses a defect's fix link went to (lowercased) - what the sign-in
+ *  gate and the portal match a sub against. */
+export function subEmailsOf(found: FoundDefect): string[] {
+  if (found.kind === "flag") return found.row.subEmail ? [found.row.subEmail.toLowerCase()] : [];
+  try {
+    const arr = found.row.subEmails ? (JSON.parse(found.row.subEmails) as string[]) : [];
+    return arr.map((e) => String(e).toLowerCase());
+  } catch {
+    return [];
+  }
+}
+
+/** The portal: every defect sent to any of these emails, on either side. */
+export async function defectsForEmails(emails: string[]): Promise<{ fixes: FoundDefect[]; signoffs: ItemRow[] }> {
+  if (!emails.length) return { fixes: [], signoffs: [] };
+  const lower = emails.map((e) => e.toLowerCase());
+  const inList = sql.join(lower.map((e) => sql`${e}`), sql`, `);
+  const flags = await db
+    .select()
+    .from(qaFlags)
+    .where(and(isNotNull(qaFlags.subToken), sql`lower(${qaFlags.subEmail}) IN (${inList})`));
+  const likeAny = sql.join(lower.map((e) => sql`${inspectionItems.subEmails} ILIKE ${"%" + e.replace(/[%_]/g, "") + "%"}`), sql` OR `);
+  const items = await db
+    .select()
+    .from(inspectionItems)
+    .where(and(isNotNull(inspectionItems.subToken), sql`(${likeAny})`));
+  const signoffs = await db
+    .select()
+    .from(inspectionItems)
+    .where(and(isNotNull(inspectionItems.consultantToken), sql`lower(${inspectionItems.consultantEmail}) IN (${inList})`));
+  const fixes: FoundDefect[] = [
+    ...flags.map((row) => ({ kind: "flag" as const, row })),
+    ...items.filter((i) => subEmailsOf({ kind: "item", row: i }).some((e) => lower.includes(e))).map((row) => ({ kind: "item" as const, row })),
+  ];
+  return { fixes, signoffs };
+}
+
+/** One defect for the portal, only if it was sent to one of these emails. */
+export async function defectForEmail(kind: CloseoutKind, id: string, emails: string[], side: "sub" | "consultant"): Promise<FoundDefect | null> {
+  const lower = new Set(emails.map((e) => e.toLowerCase()));
+  if (kind === "flag") {
+    if (side !== "sub") return null;
+    const [row] = await db.select().from(qaFlags).where(eq(qaFlags.id, id)).limit(1);
+    if (!row || !row.subToken) return null;
+    return subEmailsOf({ kind: "flag", row }).some((e) => lower.has(e)) ? { kind: "flag", row } : null;
+  }
+  const [row] = await db.select().from(inspectionItems).where(eq(inspectionItems.id, id)).limit(1);
+  if (!row) return null;
+  if (side === "sub") return row.subToken && subEmailsOf({ kind: "item", row }).some((e) => lower.has(e)) ? { kind: "item", row } : null;
+  return row.consultantToken && row.consultantEmail && lower.has(row.consultantEmail.toLowerCase()) ? { kind: "item", row } : null;
 }
 
 // ─── the sub's /fix page (token-authorised, no login) ───────────────────────
@@ -165,6 +233,11 @@ export async function armItemsFix(scope: Scope, itemIds: string[]): Promise<Map<
 export async function getFixByToken(token: string) {
   const found = await bySubToken(token);
   if (!found) return null;
+  return fixView(found);
+}
+
+/** The sub's view of a defect - shared by the token page and the portal. */
+export async function fixView(found: FoundDefect) {
   const row = found.row;
   const scope = tokenScope(row);
   const { project, company } = await projectAndCompany(scope);
@@ -185,9 +258,12 @@ export async function getFixByToken(token: string) {
   return {
     company,
     project,
+    kind: found.kind,
+    id: row.id,
     defect,
     status: row.closeoutStatus,
     hasFixPhoto: !!row.fixPhoto,
+    reviewNote: row.closeoutStatus === "sent" ? row.reviewNote : null, // the bounce-back note, when there is one
     // The button is live only while the ball is with the sub.
     canSubmit: row.closeoutStatus === "sent",
   };
@@ -204,6 +280,13 @@ export async function markReadyByToken(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const found = await bySubToken(token);
   if (!found) return { ok: false, error: "not-found" };
+  return markReadyRow(found, input);
+}
+
+export async function markReadyRow(
+  found: FoundDefect,
+  input: { photoBlobPath?: string | null; note?: string | null }
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const row = found.row;
   const now = new Date();
   const note = input.note?.trim().slice(0, 4000) || null;
@@ -245,11 +328,17 @@ export async function markReadyByToken(
 export async function getSignoffByToken(token: string) {
   const item = await byConsultantToken(token);
   if (!item) return null;
+  return signoffView(item);
+}
+
+/** The consultant's view of a fixed defect - shared by the token page and the portal. */
+export async function signoffView(item: ItemRow) {
   const scope = tokenScope(item);
   const { project, company } = await projectAndCompany(scope);
   return {
     company,
     project,
+    id: item.id,
     defect: {
       title: item.title,
       detail: item.detail,
@@ -274,6 +363,13 @@ export async function signoffByToken(
 ): Promise<{ ok: true; approved: boolean } | { ok: false; error: string }> {
   const item = await byConsultantToken(token);
   if (!item) return { ok: false, error: "not-found" };
+  return signoffRow(item, input);
+}
+
+export async function signoffRow(
+  item: ItemRow,
+  input: { approve: boolean; note?: string | null }
+): Promise<{ ok: true; approved: boolean } | { ok: false; error: string }> {
   const now = new Date();
   const note = input.note?.trim().slice(0, 4000) || null;
 
@@ -376,6 +472,7 @@ export async function forwardToConsultant(
   if (!claimed) return { ok: false, error: "not-ready" };
 
   const { project, company } = await projectAndCompany(scope);
+  const loginRequired = await companyRequiresLogin(scope.companyId);
   const rendered = renderQaSignoffEmail({
     companyName: company,
     contextLine: `${project} · ${claimed.category ?? "Inspection"} · marked fixed`,
@@ -388,6 +485,8 @@ export async function forwardToConsultant(
     hasPhoto: !!claimed.fixPhoto,
     signoffUrl: `${APP_URL}/signoff/${token}`,
     refLabel: `QA close-out · ${claimed.title}`.slice(0, 80),
+    portalUrl: PORTAL_URL,
+    loginRequired,
   });
   const result = await sendEmail({
     scope,
@@ -397,7 +496,7 @@ export async function forwardToConsultant(
     to: { name, email },
     fromName: `${company} (via Soterra)`,
     fromEmail: projectSenderAddress(project, scope.projectId),
-    replyTo: claimed.senderEmail ?? null,
+    replyTo: (await replyAddress("so", token)) ?? claimed.senderEmail ?? null,
     subject: `Sign-off needed · ${project} · ${claimed.title}`,
     html: rendered.html,
     text: rendered.text,
@@ -477,6 +576,118 @@ async function notifyMc(
   });
 }
 
+// ─── an email reply on a defect (lib/inbound.ts) ───────────────────────────
+//
+// Defects have no thread table: the sub's note and photo live on the row, the
+// consultant's note too. So an email reply is logged in inbound_emails by the
+// caller and passed on here by email to the OTHER side, so the conversation
+// keeps moving without anyone watching two inboxes.
+
+export async function emailReplyOnDefect(
+  found: FoundDefect & { side: "sub" | "consultant" },
+  from: { email: string; name: string },
+  text: string,
+  attachments: { filename: string; path: string; bytes: number; contentType: string }[]
+): Promise<{ handled: "defect_note" | "defect_forwarded" | "rejected" }> {
+  const row = found.row;
+  const scope = tokenScope(row);
+  const { project, company } = await projectAndCompany(scope);
+  const title = found.kind === "flag" ? (row as FlagRow).title : (row as ItemRow).title;
+  const fromLower = from.email.toLowerCase();
+  const senderLower = (row as { senderEmail?: string | null }).senderEmail?.toLowerCase() ?? null;
+  const attLine = attachments.length ? `${attachments.length} attachment${attachments.length === 1 ? "" : "s"}: ${attachments.map((a) => a.filename).join(" · ")}` : null;
+  const body = text.trim() || (attLine ? `(${attLine})` : "(empty reply)");
+
+  // The other side wrote: tell whoever pressed Send.
+  if (!senderLower || fromLower !== senderLower) {
+    if (!senderLower) return { handled: "rejected" };
+    const rendered = renderThreadNotice({
+      companyName: company,
+      projectName: project,
+      heading: `${found.side === "sub" ? "Sub" : "Consultant"} reply by email`,
+      subject: title,
+      actorLine: from.name || from.email,
+      lead: `replied by email on this defect${found.side === "sub" ? "" : " (sign-off)"}. The link in the original email is still the way to mark it fixed or sign it off; this is their note.`,
+      body,
+      attachmentsLine: attLine,
+      linkLabel: "Open Soterra",
+      linkUrl: APP_URL,
+      refLabel: `QA close-out · ${title}`.slice(0, 80),
+      tone: "amber",
+    });
+    await sendEmail({
+      scope,
+      kind: "inbound",
+      recordType: found.kind === "flag" ? "qa_flag" : "inspection_item",
+      recordIds: [row.id],
+      to: { email: senderLower },
+      replyTo: from.email,
+      fromName: "Soterra",
+      fromEmail: projectSenderAddress(project, scope.projectId),
+      subject: `${title} · reply by email · ${project}`,
+      html: rendered.html,
+      text: rendered.text,
+      sentByName: from.name || from.email,
+    });
+    return { handled: "defect_note" };
+  }
+
+  // Our sender replying from their inbox: pass it on to the external party
+  // with their link back in.
+  const loginRequired = await companyRequiresLogin(scope.companyId);
+  let to: { name: string | null; email: string } | null = null;
+  let link = APP_URL;
+  let replyTo: string | null = null;
+  if (found.side === "sub") {
+    const emails = subEmailsOf(found);
+    const token = (row as { subToken?: string | null }).subToken;
+    if (emails.length && token) {
+      to = { name: found.kind === "flag" ? (row as FlagRow).subName : (row as ItemRow).sentTo, email: emails[0] };
+      link = fixUrl(token);
+      replyTo = await replyAddress("fix", token);
+    }
+  } else {
+    const item = row as ItemRow;
+    if (item.consultantEmail && item.consultantToken) {
+      to = { name: item.consultantName, email: item.consultantEmail };
+      link = `${APP_URL}/signoff/${item.consultantToken}`;
+      replyTo = await replyAddress("so", item.consultantToken);
+    }
+  }
+  if (!to) return { handled: "rejected" };
+  const rendered = renderThreadNotice({
+    companyName: company,
+    projectName: project,
+    heading: "Note from the builder",
+    subject: title,
+    actorLine: `${from.name || from.email} · ${company}`,
+    lead: "wrote about this defect.",
+    body,
+    attachmentsLine: attLine,
+    linkLabel: found.side === "sub" ? "Open the item" : "Open the sign-off",
+    linkUrl: link,
+    linkNote: loginRequired ? "Opens for your Soterra account on the address this was sent to." : "No account needed.",
+    refLabel: `QA close-out · ${title}`.slice(0, 80),
+    portalUrl: PORTAL_URL,
+    loginRequired,
+  });
+  await sendEmail({
+    scope,
+    kind: "inbound",
+    recordType: found.kind === "flag" ? "qa_flag" : "inspection_item",
+    recordIds: [row.id],
+    to,
+    replyTo: replyTo ?? from.email,
+    fromName: `${company} (via Soterra)`,
+    fromEmail: projectSenderAddress(project, scope.projectId),
+    subject: `${title} · ${project}`,
+    html: rendered.html,
+    text: rendered.text,
+    sentByName: from.name || from.email,
+  });
+  return { handled: "defect_forwarded" };
+}
+
 // ─── the sub's fix photo (private Blob, streamed through a token route) ───────
 
 /** Resolve any of a defect's tokens to its stored fix photo, for the streaming
@@ -487,6 +698,22 @@ export async function fixPhotoByToken(token: string): Promise<string | null> {
   if (found?.row.fixPhoto) return found.row.fixPhoto;
   const item = await byConsultantToken(token);
   return item?.fixPhoto ?? null;
+}
+
+/** Who a defect's links were sent to, for the sign-in gate on the token routes. */
+export async function fixGateEmails(token: string): Promise<{ companyId: string; emails: string[] } | null> {
+  const found = await bySubToken(token);
+  if (!found) return null;
+  return { companyId: found.row.companyId, emails: subEmailsOf(found) };
+}
+export async function signoffGateEmails(token: string): Promise<{ companyId: string; emails: string[] } | null> {
+  const item = await byConsultantToken(token);
+  if (!item) return null;
+  return { companyId: item.companyId, emails: item.consultantEmail ? [item.consultantEmail.toLowerCase()] : [] };
+}
+/** Either side's emails for the photo route (sub's or consultant's token). */
+export async function photoGateEmails(token: string): Promise<{ companyId: string; emails: string[] } | null> {
+  return (await fixGateEmails(token)) ?? (await signoffGateEmails(token));
 }
 
 /** Where a sub's fix photo for a given defect must live. Namespaced by project +
@@ -508,6 +735,11 @@ export async function fixUploadTarget(
     recordId: found.row.id,
     canSubmit: found.row.closeoutStatus === "sent",
   };
+}
+
+/** The photo stored on a defect row (either side's portal view). */
+export function fixPhotoOf(found: FoundDefect): string | null {
+  return found.row.fixPhoto ?? null;
 }
 
 // ─── the scorecard ──────────────────────────────────────────────────────────

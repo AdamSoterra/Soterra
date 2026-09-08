@@ -1087,6 +1087,68 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .ans-foot{max-width:680px;margin:6px auto 0;text-align:center;font-size:11.5px;color:#94A6BE;line-height:1.5}
 .ans-foot b{color:#0E8FE6}
 
+/* Attachments on the external pages (correspondence files, reply files). */
+.ans-files{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.ans-file{display:flex;align-items:center;gap:9px;border:1px solid #E3EDF7;border-radius:10px;padding:9px 11px;background:#FBFDFF;text-decoration:none;color:#0C2A47;font-size:13.5px;font-weight:600}
+.ans-file:hover{border-color:#0E8FE6}
+.ans-file-ic{flex:0 0 auto}
+.ans-file-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ans-file-b{flex:0 0 auto;font-size:11.5px;color:#94A6BE;font-weight:600}
+.ans-back-row{max-width:680px;margin:0 auto 12px}
+.ans-back-row .ans-btn{height:38px;padding:0 14px;font-size:13px}
+
+/* /portal - the consultant / subcontractor home. Rides on the .ans- family. */
+.pt-me{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12.5px;color:#52698A}
+.pt-me b{color:#0C2A47;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px}
+.pt-out{font-family:var(--font);font-size:12px;font-weight:700;color:#0A78C8;background:none;border:1px solid #D6E4F2;border-radius:8px;padding:5px 9px;cursor:pointer}
+.pt-filters{display:flex;gap:7px;margin:0 0 12px;flex-wrap:wrap}
+.pt-f{font-family:var(--font);font-size:12.5px;font-weight:700;color:#52698A;background:#fff;border:1.5px solid #E3EDF7;border-radius:20px;padding:7px 14px;cursor:pointer}
+.pt-f.act{border-color:#0E8FE6;color:#0A78C8;background:rgba(65,195,255,.08)}
+.pt-link{font-family:var(--font);font-size:13px;font-weight:700;color:#0A78C8;background:none;border:none;padding:0;cursor:pointer;text-decoration:underline}
+.pt-row{display:flex;flex-direction:column;gap:4px;width:100%;text-align:left;font-family:var(--font);background:#fff;border:1px solid #E3EDF7;border-radius:12px;padding:12px 14px;margin-bottom:9px;cursor:pointer}
+.pt-row:hover{border-color:#B9D4EC}
+.pt-row.needs{border-color:#FDBA74;background:#FFFBF5}
+.pt-row-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pt-kind{font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:20px;background:#EAF4FF;color:#0A78C8}
+.pt-kind.fix{background:#FFF4E5;color:#B45309}
+.pt-kind.signoff{background:#E8F8EE;color:#0F7B43}
+.pt-kind.corr{background:#F6F2FE;color:#7C3AED}
+.pt-status{margin-left:auto;font-size:11.5px;font-weight:700;color:#7A8CA3}
+.pt-status.needs{color:#B45309}
+.pt-status.late{color:#B3261E}
+.pt-row-title{font-size:15px;font-weight:700;color:#0C2A47;line-height:1.3}
+.pt-row-meta{font-size:12px;color:#52698A}
+
+/* Correspondence panel (RFIs tab → Correspondence). Rides on the rf- family. */
+.rf-area{display:inline-flex;gap:4px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:14px}
+.rf-areab{font-family:var(--font);font-size:13px;font-weight:700;color:var(--slate);background:transparent;border:none;border-radius:9px;padding:8px 16px;cursor:pointer}
+.rf-areab.act{background:var(--grad);color:#fff;box-shadow:0 6px 16px rgba(10,141,237,.25)}
+.rf-pill.responded{background:rgba(16,185,129,.13);color:#0E7A55}
+.rf-pill.sent{background:rgba(14,143,230,.1);color:var(--brand-d)}
+.co-types{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+.co-type{font-family:var(--font);font-size:12.5px;font-weight:700;color:var(--slate);background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:8px 13px;cursor:pointer;text-align:left}
+.co-type small{display:block;font-size:10.5px;font-weight:500;color:var(--mut);margin-top:1px}
+.co-type.act{border-color:var(--brand);color:var(--brand-d);background:rgba(65,195,255,.08)}
+.co-att{display:flex;align-items:center;gap:9px;border:1px solid var(--line2);border-radius:10px;padding:8px 11px;margin-top:6px;background:#FBFDFF;font-size:12.5px;color:var(--navy)}
+.co-att a{color:var(--navy);text-decoration:none;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.co-att a:hover{text-decoration:underline}
+.co-att small{color:var(--mut);font-size:11px;white-space:nowrap}
+.co-att .filed{font-size:10.5px;font-weight:700;color:#0E7A55;white-space:nowrap}
+.co-attbtn{font-family:var(--font);font-size:11px;font-weight:700;color:var(--brand-d);background:#fff;border:1px solid var(--line);border-radius:7px;padding:4px 8px;cursor:pointer;white-space:nowrap}
+.co-attbtn:hover{border-color:var(--brand)}
+.co-attbtn:disabled{opacity:.5;cursor:default}
+.co-drop{border:1.5px dashed #B9D4EC;border-radius:12px;background:#F6FBFF;color:#0A78C8;font-size:13.5px;font-weight:700;font-family:var(--font);cursor:pointer;padding:12px;width:100%;margin-top:8px}
+.co-drop:hover{border-color:#0E8FE6}
+.co-drop:disabled{opacity:.6;cursor:default}
+.co-msg{border-left:3px solid #C9E4FA;padding:2px 0 2px 12px;margin-bottom:12px}
+.co-msg.them{border-left-color:#9FE1CB}
+.co-msg .who{font-size:11px;font-weight:700;color:var(--slate);margin-bottom:3px}
+.co-msg .body{font-size:13.5px;color:#243B53;line-height:1.55;white-space:pre-wrap}
+.co-login{display:flex;gap:10px;align-items:flex-start;border:1.5px solid var(--line);border-radius:11px;padding:11px 13px;cursor:pointer;font-family:var(--font);margin-bottom:14px;background:#FBFDFF}
+.co-login input{margin-top:2px;width:16px;height:16px;flex:0 0 16px;accent-color:var(--brand)}
+.co-login span{font-size:12.5px;color:var(--slate);line-height:1.45}
+.co-login span b{color:var(--navy)}
+
 /* QA close-out /fix page - the sub's photo control. Rides on the .ans- family
    above; just the camera button + the preview thumb it doesn't cover. */
 .qa-photo{width:100%;min-height:52px;border:1.5px dashed #B9D4EC;border-radius:12px;background:#F6FBFF;color:#0A78C8;font-size:15px;font-weight:700;font-family:var(--font);cursor:pointer;padding:12px}

@@ -94,6 +94,20 @@ function ctaButton(label: string, url: string, small = false): string {
   </tr></table>`;
 }
 
+// The portal line under an external CTA: the same email that carries the
+// one-item link also tells the recipient where ALL their items live once they
+// have a Soterra account. Absent when the caller has no portal url.
+function portalLine(portalUrl?: string | null, loginRequired?: boolean): string {
+  if (!portalUrl) return "";
+  const lead = loginRequired
+    ? "The link opens for a Soterra account on the address this email was sent to (free, one minute to set up)."
+    : "Have a Soterra account?";
+  return `<div style="font-family:${FONT};font-size:12px;color:${MUT};margin:0 0 14px;line-height:1.5;">${esc(lead)} Everything sent to you, on every project, is at <a href="${esc(portalUrl)}" style="color:${BRAND};font-weight:bold;text-decoration:none;">${esc(portalUrl.replace(/^https?:\/\//, ""))}</a>.</div>`;
+}
+function portalText(portalUrl?: string | null): string[] {
+  return portalUrl ? [`All your Soterra items: ${portalUrl}`] : [];
+}
+
 // ─── 1 + 3: itemised sends (QA flags / inspection items) ─────────────────
 
 export type EmailItem = {
@@ -127,6 +141,8 @@ export type ItemsEmailOptions = {
   replyExtra?: string | null; // "Each item is tracked on the project until it is closed."
   footerNote: string;
   refLabel?: string | null;
+  portalUrl?: string | null;
+  loginRequired?: boolean;
 };
 
 export function renderItemsEmail(opts: ItemsEmailOptions): { html: string; text: string } {
@@ -162,7 +178,7 @@ export function renderItemsEmail(opts: ItemsEmailOptions): { html: string; text:
       // item flips to ready on the project - no reply-parsing, no account.
       const fix = it.fixUrl
         ? ctaButton("Mark it fixed", it.fixUrl, true) +
-          `<div style="font-family:${FONT};font-size:11px;color:${MUT};margin-top:2px;">No account needed. Attach a photo of the fix and it is logged against this item.</div>`
+          `<div style="font-family:${FONT};font-size:11px;color:${MUT};margin-top:2px;">${opts.loginRequired ? "Opens for your Soterra account (free to set up)." : "No account needed."} Attach a photo of the fix and it is logged against this item.</div>`
         : "";
       return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:12px;"><tr>
     <td style="border:1px solid ${LINE};border-radius:10px;padding:14px 16px;">
@@ -195,7 +211,8 @@ export function renderItemsEmail(opts: ItemsEmailOptions): { html: string; text:
     bodyHtml: `${introBlock(opts.intro)}
 ${itemsHtml}
 ${snapshot}
-${replyBlock(opts.replyName, opts.replyExtra ?? undefined)}`,
+${replyBlock(opts.replyName, opts.replyExtra ?? undefined)}
+${portalLine(opts.portalUrl, opts.loginRequired)}`,
     footerNote: opts.footerNote,
     refLabel: opts.refLabel,
   });
@@ -208,11 +225,12 @@ ${replyBlock(opts.replyName, opts.replyExtra ?? undefined)}`,
     "",
     ...opts.items.map(
       (it) =>
-        `${it.n}. ${it.title}${it.statusLabel ? ` [${it.statusLabel}]` : ""}\n   ${it.meta}${it.note ? `\n   ${it.note}` : ""}${it.snapshotSrc ? `\n   Location snapshot attached${it.snapshotCaption ? `: ${it.snapshotCaption}` : ""}` : ""}${it.fixUrl ? `\n   Mark it fixed (no account needed): ${it.fixUrl}` : ""}`
+        `${it.n}. ${it.title}${it.statusLabel ? ` [${it.statusLabel}]` : ""}\n   ${it.meta}${it.note ? `\n   ${it.note}` : ""}${it.snapshotSrc ? `\n   Location snapshot attached${it.snapshotCaption ? `: ${it.snapshotCaption}` : ""}` : ""}${it.fixUrl ? `\n   Mark it fixed${opts.loginRequired ? "" : " (no account needed)"}: ${it.fixUrl}` : ""}`
     ),
     "",
     ...(opts.snapshotCaption ? [opts.snapshotCaption, ""] : []),
     `Just hit Reply: your response goes straight to ${opts.replyName}.`,
+    ...portalText(opts.portalUrl),
     "",
     `Sent with Soterra · ${opts.footerNote}${opts.refLabel ? ` · ${opts.refLabel}` : ""}`,
   ].join("\n");
@@ -239,6 +257,10 @@ export type RfiEmailOptions = {
   /** The tokenized public answer page. When set, the email leads with an
    *  "Answer online" button; a plain reply stays as the fallback. */
   answerUrl?: string | null;
+  portalUrl?: string | null;
+  loginRequired?: boolean;
+  /** True when a plain email reply lands in the RFI thread (inbound is on). */
+  replyLogged?: boolean;
 };
 
 export function renderRfiEmail(opts: RfiEmailOptions): { html: string; text: string } {
@@ -308,10 +330,11 @@ ${
       <a href="${esc(opts.answerUrl)}" style="display:inline-block;font-family:${FONT};font-size:14.5px;font-weight:bold;color:#ffffff;text-decoration:none;">Answer this RFI online &#8594;</a>
     </td>
   </tr></table>
-<div style="font-family:${FONT};font-size:12px;color:${MUT};margin:0 0 14px;">No account needed. Your answer lands in the RFI thread, is logged against ${esc(opts.rfiNumber)}, and stops the response clock.</div>
+<div style="font-family:${FONT};font-size:12px;color:${MUT};margin:0 0 14px;">${opts.loginRequired ? "Opens for your Soterra account (free, one minute to set up)." : "No account needed."} Your answer lands in the RFI thread, is logged against ${esc(opts.rfiNumber)}, and stops the response clock.</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;"><tr>
-    <td style="background:#F8FAFC;border:1px dashed #D6DEE8;border-radius:8px;padding:11px 14px;font-family:${FONT};font-size:12.5px;color:#43586E;line-height:1.5;">&#8617; Or simply reply to this email - ${esc(opts.companyName)} logs your reply against ${esc(opts.rfiNumber)}.</td>
-  </tr></table>`
+    <td style="background:#F8FAFC;border:1px dashed #D6DEE8;border-radius:8px;padding:11px 14px;font-family:${FONT};font-size:12.5px;color:#43586E;line-height:1.5;">&#8617; Or simply reply to this email - ${opts.replyLogged ? `your reply is logged straight into the ${esc(opts.rfiNumber)} thread` : `${esc(opts.companyName)} logs your reply against ${esc(opts.rfiNumber)}`}.</td>
+  </tr></table>
+${portalLine(opts.portalUrl, opts.loginRequired)}`
     : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0;"><tr>
     <td style="background:#F8FAFC;border:1px dashed #D6DEE8;border-radius:8px;padding:11px 14px;font-family:${FONT};font-size:13px;color:#43586E;line-height:1.5;">&#8617; <b>Reply to this email with your response.</b> ${esc(opts.companyName)} logs it against ${esc(opts.rfiNumber)}; the register, thread and response times are tracked in Soterra.</td>
   </tr></table>`
@@ -351,9 +374,10 @@ ${header(opts.companyName, opts.contextLine)}`;
     "",
     ...(opts.answerUrl
       ? [
-          `ANSWER ONLINE (no account needed): ${opts.answerUrl}`,
+          `ANSWER ONLINE${opts.loginRequired ? "" : " (no account needed)"}: ${opts.answerUrl}`,
           "",
           `Or simply reply to this email - ${opts.companyName} logs your reply against ${opts.rfiNumber}.`,
+          ...portalText(opts.portalUrl),
         ]
       : [
           `Reply to this email with your response. ${opts.companyName} logs it against ${opts.rfiNumber}; the register, thread and response times are tracked in Soterra.`,
@@ -427,6 +451,8 @@ export function renderQaSignoffEmail(opts: {
   hasPhoto: boolean; // a photo of the fix is on the page
   signoffUrl: string; // APP_URL/signoff/<token>
   refLabel: string;
+  portalUrl?: string | null;
+  loginRequired?: boolean;
 }): { html: string; text: string } {
   const headerHtml = `<tr><td bgcolor="${NAVY}" style="background:${NAVY};padding:14px 28px;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
@@ -454,10 +480,11 @@ ${detailHtml}
 ${fixHtml}
 <div style="font-family:${FONT};font-size:12.5px;color:${SLATE};margin:6px 0 2px;">${opts.hasPhoto ? "A photo of the fix is on the page below." : "Open the page to review and sign off."}</div>
 ${ctaButton("Sign it off", opts.signoffUrl)}
-<div style="font-family:${FONT};font-size:12px;color:${MUT};margin:0 0 14px;">No account needed. Approve to close it out, or bounce it back to ${esc(opts.subLine)} with a note.</div>
+<div style="font-family:${FONT};font-size:12px;color:${MUT};margin:0 0 14px;">${opts.loginRequired ? "Opens for your Soterra account (free, one minute to set up)." : "No account needed."} Approve to close it out, or bounce it back to ${esc(opts.subLine)} with a note.</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;"><tr>
     <td style="background:#F8FAFC;border:1px dashed #D6DEE8;border-radius:8px;padding:11px 14px;font-family:${FONT};font-size:12.5px;color:#43586E;line-height:1.5;">&#8617; Or simply reply to this email - ${esc(opts.companyName)} logs your decision.</td>
-  </tr></table>`;
+  </tr></table>
+${portalLine(opts.portalUrl, opts.loginRequired)}`;
 
   const html = shell({
     headerHtml,
@@ -538,6 +565,167 @@ ${noteHtml}
     ...(opts.note ? ["", opts.note] : []),
     "",
     `Open Soterra to action it: ${opts.appUrl}`,
+  ].join("\n");
+  return { html, text };
+}
+
+// ─── General correspondence: notice / site instruction / transmittal / letter ─
+// The outbound item itself. Mirrors renderRfiEmail's shape (navy header with
+// the register number + subject, meta box, the body, the attachments, an
+// "Open in Soterra" CTA, a plain reply as the fallback) but without the RFI's
+// clock language - a "response required by" banner only when the sender asked
+// for one.
+
+export type CorrespondenceEmailOptions = {
+  companyName: string;
+  contextLine: string; // "Kauri Tower · Sent by Adam Domok · 9 Sep 2026"
+  label: string; // "TR-003"
+  typeLabel: string; // "Transmittal"
+  subject: string;
+  body: string;
+  responseRequired: boolean;
+  dueLabel?: string | null; // "Friday 12 Sep 2026"
+  toLine?: string | null; // "Jane Smith · Holmes Structural"
+  attachments: { filename: string; attached: boolean; bytesLabel: string }[];
+  openUrl: string;
+  replyName: string;
+  refLabel: string;
+  portalUrl?: string | null;
+  loginRequired?: boolean;
+  replyLogged?: boolean;
+};
+
+export function renderCorrespondenceEmail(opts: CorrespondenceEmailOptions): { html: string; text: string } {
+  const section = (label: string) =>
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding:16px 0 7px;font-family:${FONT};font-size:10.5px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;color:#7A8CA3;">${esc(label)}</td></tr></table>`;
+
+  const banner = opts.responseRequired
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;"><tr>
+    <td style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:9px 13px;font-family:${FONT};font-size:12.5px;font-weight:bold;color:#B45309;">&#9201; Response required${opts.dueLabel ? ` by ${esc(opts.dueLabel)}` : ""}</td>
+  </tr></table>`
+    : `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;"><tr>
+    <td style="background:#F1F5FA;border:1px solid #E2E8F0;border-radius:8px;padding:9px 13px;font-family:${FONT};font-size:12.5px;font-weight:bold;color:${SLATE};">For your records - no response needed unless you have a question</td>
+  </tr></table>`;
+
+  const meta = [
+    { label: "Type", value: opts.typeLabel },
+    { label: "To", value: opts.toLine ?? "-" },
+    { label: "Attachments", value: opts.attachments.length ? String(opts.attachments.length) : "none" },
+  ];
+  const metaCells = meta
+    .map(
+      (m) => `<td width="33%" style="width:33%;padding:9px 13px;border-right:1px solid #EDF2F7;border-bottom:1px solid #EDF2F7;">
+      <div style="font-family:${FONT};font-size:9.5px;font-weight:bold;letter-spacing:.06em;text-transform:uppercase;color:${MUT};">${esc(m.label)}</div>
+      <div style="font-family:${FONT};font-size:12.5px;font-weight:bold;color:${NAVY};margin-top:2px;">${esc(m.value)}</div>
+    </td>`
+    )
+    .join("");
+
+  const attachHtml = opts.attachments.length
+    ? `${section("Attachments")}<div style="font-family:${FONT};font-size:12.5px;color:#43586E;line-height:1.7;">${opts.attachments
+        .map((a) => `&#128206; ${esc(a.filename)} <span style="color:${MUT};">· ${esc(a.bytesLabel)}${a.attached ? "" : " · download from the page"}</span>`)
+        .join("<br/>")}</div>`
+    : "";
+
+  const bodyHtml = `${banner}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ${LINE};border-radius:10px;margin-bottom:4px;"><tr>${metaCells}</tr></table>
+${section(opts.typeLabel)}
+<div style="font-family:${FONT};font-size:14px;color:${INK};line-height:1.55;">${esc(opts.body).replace(/\n/g, "<br/>")}</div>
+${attachHtml}
+${ctaButton(opts.responseRequired ? "Open and respond in Soterra" : "Open in Soterra", opts.openUrl)}
+<div style="font-family:${FONT};font-size:12px;color:${MUT};margin:0 0 14px;">${opts.loginRequired ? "Opens for your Soterra account (free, one minute to set up)." : "No account needed."} The full item, its attachments and the thread are on the page; anything you write there is logged against ${esc(opts.label)}.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;"><tr>
+    <td style="background:#F8FAFC;border:1px dashed #D6DEE8;border-radius:8px;padding:11px 14px;font-family:${FONT};font-size:12.5px;color:#43586E;line-height:1.5;">&#8617; Or simply reply to this email - ${opts.replyLogged ? `your reply is logged straight into the ${esc(opts.label)} thread` : `it goes to ${esc(opts.replyName)}`}.</td>
+  </tr></table>
+${portalLine(opts.portalUrl, opts.loginRequired)}`;
+
+  const headerHtml = `<tr><td bgcolor="${NAVY}" style="background:${NAVY};padding:14px 28px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+    <td nowrap style="font-family:${FONT};font-size:16px;font-weight:bold;color:#ffffff;white-space:nowrap;">${esc(opts.label)}</td>
+    <td style="font-family:${FONT};font-size:13px;color:#B8CCE0;padding-left:12px;">${esc(opts.subject)}</td>
+  </tr></table>
+</td></tr>
+${header(opts.companyName, opts.contextLine)}`;
+
+  const html = shell({ headerHtml, bodyHtml, footerNote: "Sent with Soterra · soterra.co.nz", refLabel: opts.refLabel });
+  const text = [
+    `${opts.label} · ${opts.typeLabel} · ${opts.subject}`,
+    opts.companyName,
+    opts.contextLine,
+    "",
+    opts.responseRequired ? `Response required${opts.dueLabel ? ` by ${opts.dueLabel}` : ""}` : "For your records - no response needed unless you have a question",
+    "",
+    opts.body,
+    ...(opts.attachments.length ? ["", "ATTACHMENTS", ...opts.attachments.map((a) => `- ${a.filename} (${a.bytesLabel}${a.attached ? "" : ", download from the page"})`)] : []),
+    "",
+    `OPEN IN SOTERRA${opts.loginRequired ? "" : " (no account needed)"}: ${opts.openUrl}`,
+    "",
+    "Or simply reply to this email.",
+    ...portalText(opts.portalUrl),
+    "",
+    `Sent with Soterra · soterra.co.nz · ${opts.refLabel}`,
+  ].join("\n");
+  return { html, text };
+}
+
+// ─── A thread notice: "X wrote on <item>" ────────────────────────────────
+// One template for every "something arrived on your item" email: a reply on a
+// piece of correspondence, an email reply captured into an RFI or defect, or
+// our own follow-up going out to the other side. Small, like the RFI notice.
+
+export function renderThreadNotice(opts: {
+  companyName: string;
+  projectName: string;
+  heading: string; // "TR-003 · reply received" / "RFI-014 · reply by email"
+  subject: string; // the item's subject
+  actorLine: string; // "Jane Smith · Holmes Structural"
+  lead: string; // "replied on TR-003." - the sentence after the actor's name
+  body?: string | null; // the message itself
+  attachmentsLine?: string | null; // "2 attachments: A-201 Rev C.pdf · photo.jpg"
+  linkLabel: string; // "Open it in Soterra"
+  linkUrl: string;
+  linkNote?: string | null; // small print under the link
+  refLabel: string;
+  tone?: "blue" | "green" | "amber";
+  portalUrl?: string | null;
+  loginRequired?: boolean;
+}): { html: string; text: string } {
+  const tone =
+    opts.tone === "green"
+      ? { bg: "#F0FAF4", border: "#BFE8CE" }
+      : opts.tone === "amber"
+        ? { bg: "#FFF7ED", border: "#FDBA74" }
+        : { bg: "#EFF7FE", border: "#C9E4FA" };
+  const headerHtml = `<tr><td bgcolor="${NAVY}" style="background:${NAVY};padding:14px 28px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+    <td nowrap style="font-family:${FONT};font-size:16px;font-weight:bold;color:#ffffff;white-space:nowrap;">${esc(opts.heading)}</td>
+    <td style="font-family:${FONT};font-size:13px;color:#B8CCE0;padding-left:12px;">${esc(opts.subject)}</td>
+  </tr></table>
+</td></tr>
+${header(opts.companyName, `${opts.projectName} · ${opts.actorLine}`)}`;
+  const bodyHtml = `<div style="font-family:${FONT};font-size:14px;color:${INK};line-height:1.55;margin-bottom:6px;"><b>${esc(opts.actorLine)}</b> ${esc(opts.lead)}</div>
+${
+  opts.body
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:12px 0;"><tr>
+  <td style="background:${tone.bg};border:1px solid ${tone.border};border-radius:9px;padding:13px 15px;font-family:${FONT};font-size:13.5px;color:${INK};line-height:1.55;">${esc(opts.body).replace(/\n/g, "<br/>")}</td>
+</tr></table>`
+    : ""
+}
+${opts.attachmentsLine ? `<div style="font-family:${FONT};font-size:12.5px;color:#43586E;margin:0 0 10px;">&#128206; ${esc(opts.attachmentsLine)}</div>` : ""}
+${ctaButton(opts.linkLabel, opts.linkUrl)}
+${opts.linkNote ? `<div style="font-family:${FONT};font-size:12px;color:${MUT};margin:0 0 14px;">${esc(opts.linkNote)}</div>` : ""}
+${portalLine(opts.portalUrl, opts.loginRequired)}`;
+  const html = shell({ headerHtml, bodyHtml, footerNote: "Logged in the thread on Soterra", refLabel: opts.refLabel });
+  const text = [
+    `${opts.heading} · ${opts.subject}`,
+    `${opts.projectName} · ${opts.actorLine}`,
+    "",
+    `${opts.actorLine} ${opts.lead}`,
+    ...(opts.body ? ["", opts.body] : []),
+    ...(opts.attachmentsLine ? ["", opts.attachmentsLine] : []),
+    "",
+    `${opts.linkLabel}: ${opts.linkUrl}`,
+    ...portalText(opts.portalUrl),
   ].join("\n");
   return { html, text };
 }

@@ -5,6 +5,7 @@ import { upload } from "@vercel/blob/client";
 import { DOC_TYPES, DOC_TYPE_LABEL, docTypeOf, type DocType } from "@/lib/docType";
 import Landing from "./landing";
 import { InstallHint } from "./components/install-hint";
+import { CorrespondencePanel } from "./components/correspondence-panel";
 
 type Tab = "assistant" | "calendar" | "tasks" | "inspections" | "plans" | "upload" | "rfis" | "insights" | "programme";
 type Cite = {
@@ -106,7 +107,7 @@ type RfiRow = {
   consultantCompany: string | null; consultantName: string | null;
   dateRequiredBy: string | null; daysOpen: number; overdue: boolean; lateWd: number;
 };
-type RfiMsg = { id: string; type: string; authorSide: string; authorName: string | null; body: string; createdAt: string };
+type RfiMsg = { id: string; type: string; authorSide: string; authorName: string | null; body: string; via?: string | null; createdAt: string };
 type RfiFull = {
   rfi: RfiRow & {
     question: string; proposedSolution: string | null; codeRefs: string | null; location: string | null;
@@ -1008,6 +1009,10 @@ export default function Page() {
   const [rfiList, setRfiList] = useState<RfiRow[]>([]);
   const [rfiLoaded, setRfiLoaded] = useState(false);
   const [rfiView, setRfiView] = useState<"reg" | "ana">("reg");
+  // The RFIs tab has two areas, like Inspections: RFIs | Correspondence.
+  const [rfiArea, setRfiArea] = useState<"rfis" | "corr">("rfis");
+  // Company settings shown in the Directory: the sign-in gate on external links.
+  const [coSettings, setCoSettings] = useState<{ externalLoginRequired: boolean; inboundEnabled: boolean; role: string } | null>(null);
   const [rfiFilter, setRfiFilter] = useState<"all" | "open" | "overdue" | "answered" | "closed">("all");
   const [rfiOpen, setRfiOpen] = useState<RfiFull | null>(null);
   const [rfiAna, setRfiAna] = useState<RfiAna | null>(null);
@@ -2668,7 +2673,25 @@ export default function Page() {
     setDirForm({ name: "", company: "", discipline: "", trade: "", email: "" });
     setDirOpen(true);
     // Fresh lists every open - an add elsewhere shouldn't show stale here.
-    void loadConsultants(); void loadSubs();
+    void loadConsultants(); void loadSubs(); void loadCompanySettings();
+  };
+  const loadCompanySettings = async () => {
+    try {
+      const r = await apiFetch("/api/company");
+      const d = await r.json();
+      if (r.ok && typeof d.externalLoginRequired === "boolean") setCoSettings(d);
+    } catch { /* the checkbox just stays hidden */ }
+  };
+  const setExternalLogin = async (on: boolean) => {
+    setDirBusy(true); setDirErr(null);
+    try {
+      const r = await apiFetch("/api/company", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ externalLoginRequired: on }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Couldn't change that just now.");
+      setCoSettings((s) => (s ? { ...s, externalLoginRequired: d.externalLoginRequired } : s));
+    } catch (e) {
+      setDirErr(e instanceof Error ? e.message : "Couldn't change that just now.");
+    } finally { setDirBusy(false); }
   };
   const dirCreate = async () => {
     setDirBusy(true); setDirErr(null);
@@ -4214,6 +4237,22 @@ export default function Page() {
         {tab === "rfis" && (
           <div className="page"><div className="page-inner" style={{ maxWidth: 1060 }}>
             {!rfiOpen && (
+              <div className="rf-area">
+                <button className={"rf-areab" + (rfiArea === "rfis" ? " act" : "")} onClick={() => setRfiArea("rfis")}>RFIs</button>
+                <button className={"rf-areab" + (rfiArea === "corr" ? " act" : "")} onClick={() => { setRfiArea("corr"); void loadConsultants(); void loadSubs(); }}>Correspondence</button>
+              </div>
+            )}
+            {rfiArea === "corr" && !rfiOpen && projectId && (
+              <CorrespondencePanel
+                apiFetch={apiFetch}
+                projectId={projectId}
+                projName={projName}
+                consultants={conList}
+                subs={subsList}
+                openDirectory={openDirectory}
+              />
+            )}
+            {rfiArea === "rfis" && !rfiOpen && (
               <>
                 <div className="rf-head">
                   <div className="page-h" style={{ margin: 0 }}>RFIs</div>
@@ -4228,7 +4267,7 @@ export default function Page() {
               </>
             )}
 
-            {!rfiOpen && rfiView === "reg" && (
+            {rfiArea === "rfis" && !rfiOpen && rfiView === "reg" && (
               <>
                 <div className="rf-strip">
                   <div className="rf-tile"><b>{rfiAna?.tiles.openTotal ?? rfiList.filter((r) => r.status === "open" || r.status === "answered").length}</b><span>open</span><small>{rfiAna ? `${rfiAna.tiles.ballConsultants} with consultants` : ""}</small></div>
@@ -4284,7 +4323,7 @@ export default function Page() {
               </>
             )}
 
-            {!rfiOpen && rfiView === "ana" && (
+            {rfiArea === "rfis" && !rfiOpen && rfiView === "ana" && (
               <>
                 <div className="rf-strip">
                   <div className="rf-tile"><b>{rfiAna ? `${rfiAna.tiles.ballConsultants} / ${rfiAna.tiles.ballUs}` : "-"}</b><span>ball in court</span><small>design team / us</small></div>
@@ -4486,8 +4525,17 @@ export default function Page() {
 
                     {rfiOpen.messages.filter((m) => m.type === "followup").map((m) => (
                       <div className="rf-fu" key={m.id}>
-                        <div className="who">{m.authorName ?? (m.authorSide === "consultant" ? "Consultant" : "Us")} · {new Date(m.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</div>
+                        <div className="who">
+                          {m.authorName ?? (m.authorSide === "consultant" ? "Consultant" : "Us")} · {new Date(m.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}
+                          {m.via === "email" ? " · by email" : m.via === "portal" ? " · from the portal" : m.via === "link" ? " · from the link" : ""}
+                        </div>
                         <div className="body">{m.body}</div>
+                        {/* A consultant's note (an email reply, a comment) can become THE answer in one click. */}
+                        {m.authorSide === "consultant" && rfiOpen.rfi.status === "open" && (
+                          <button className="dir-act" style={{ marginTop: 8 }} disabled={rfiBusy} onClick={() => void rfiAction(rfiOpen.rfi.id, "promote", { messageId: m.id })}>
+                            Log this as the official answer
+                          </button>
+                        )}
                       </div>
                     ))}
 
@@ -5078,6 +5126,19 @@ export default function Page() {
                 <button className={"rf-vsb" + (dirTab === "consultants" ? " act" : "")} onClick={() => { setDirTab("consultants"); setDirEdit(null); setDirErr(null); }}>Consultants</button>
                 <button className={"rf-vsb" + (dirTab === "subs" ? " act" : "")} onClick={() => { setDirTab("subs"); setDirEdit(null); setDirErr(null); }}>Subs</button>
               </div>
+
+              {/* The sign-in gate on every link Soterra emails out (RFI answer,
+                  defect fix, sign-off, correspondence). On by default. */}
+              {coSettings && (
+                <label className="co-login">
+                  <input type="checkbox" checked={coSettings.externalLoginRequired} disabled={dirBusy || coSettings.role !== "admin"} onChange={(e) => void setExternalLogin(e.target.checked)} />
+                  <span>
+                    <b>Consultants and subs must sign in to open our links.</b> Each link opens only for a free Soterra account on the address it was sent to; they get a portal with everything we have sent them at soterra.co.nz/portal.
+                    {coSettings.role !== "admin" ? " Only a site admin can change this." : ""}
+                    {!coSettings.externalLoginRequired ? " Off: links open for whoever holds them, no account." : ""}
+                  </span>
+                </label>
+              )}
 
               <div className="dir-add">
                 <div className="dir-grid">
@@ -6002,6 +6063,7 @@ function SiteSetup(props: {
 
               {p.mandatory && (
                 <div style={{ textAlign: "center", marginTop: 16 }}>
+                  <a href="/portal" style={{ color: "var(--brand-d)", fontSize: 13, fontWeight: 600, textDecoration: "underline", marginRight: 14 }}>Consultant or subcontractor? Open your portal</a>
                   <button onClick={p.onSignOut} style={{ background: "none", border: "none", color: "var(--slate)", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>Sign out</button>
                 </div>
               )}

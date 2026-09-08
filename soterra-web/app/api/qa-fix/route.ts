@@ -1,13 +1,14 @@
-import { getFixByToken, markReadyByToken } from "@/lib/qaCloseout";
+import { fixGateEmails, getFixByToken, markReadyByToken } from "@/lib/qaCloseout";
+import { gateExternal, gateResponse } from "@/lib/externalAuth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// The sub's side of a QA defect - token-authorised, NO login. The sub_token in
-// the "Mark it fixed" link proves the holder was sent this exact defect; every
-// read + write is scoped to that one defect (see lib/qaCloseout.ts). Deliberately
-// public: a sub must be able to close a defect out from a phone without an
-// account, or the whole loop dies at a sign-up wall.
+// The sub's side of a QA defect - token-authorised. The sub_token in the
+// "Mark it fixed" link proves the holder was sent this exact defect; every
+// read + write is scoped to that one defect (see lib/qaCloseout.ts). The
+// company's sign-in gate (lib/externalAuth) can additionally require a Soterra
+// account on the address the defect was sent to.
 //
 //   GET  /api/qa-fix?token=…              -> the defect the /fix page renders
 //   POST /api/qa-fix {token, note?, photoPath?}
@@ -16,10 +17,20 @@ export const maxDuration = 60;
 
 const MAX_NOTE = 4000;
 
+async function gate(token: string) {
+  const g = await fixGateEmails(token);
+  if (!g) return { found: false, res: null };
+  const r = await gateExternal(g.companyId, g.emails);
+  return { found: true, res: r.ok ? null : gateResponse(r) };
+}
+
 export async function GET(req: Request) {
   const token = new URL(req.url).searchParams.get("token") ?? "";
-  const defect = await getFixByToken(token);
+  const { found, res } = await gate(token);
   // One generic miss for a bad token: a probe learns nothing.
+  if (!found) return Response.json({ error: "This link is no longer valid." }, { status: 404 });
+  if (res) return res;
+  const defect = await getFixByToken(token);
   if (!defect) return Response.json({ error: "This link is no longer valid." }, { status: 404 });
   return Response.json(defect, { headers: { "Cache-Control": "no-store" } });
 }
@@ -36,6 +47,10 @@ export async function POST(req: Request) {
   const photoPath = typeof body.photoPath === "string" ? body.photoPath : null;
 
   if (note.length > MAX_NOTE) return Response.json({ error: "That note is too long." }, { status: 413 });
+
+  const { found, res } = await gate(token);
+  if (!found) return Response.json({ error: "This link is no longer valid." }, { status: 404 });
+  if (res) return res;
 
   try {
     const result = await markReadyByToken(token, { photoBlobPath: photoPath, note });

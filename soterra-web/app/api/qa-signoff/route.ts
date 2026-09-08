@@ -1,12 +1,14 @@
-import { getSignoffByToken, signoffByToken } from "@/lib/qaCloseout";
+import { getSignoffByToken, signoffByToken, signoffGateEmails } from "@/lib/qaCloseout";
+import { gateExternal, gateResponse } from "@/lib/externalAuth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// The consultant's side of a QA defect sign-off - token-authorised, NO login.
-// The consultant_token in the "Sign it off" link proves the holder was asked to
+// The consultant's side of a QA defect sign-off - token-authorised. The
+// consultant_token in the "Sign it off" link proves the holder was asked to
 // sign off this exact defect; everything is scoped to that one defect (see
-// lib/qaCloseout.ts).
+// lib/qaCloseout.ts). The company's sign-in gate (lib/externalAuth) can
+// additionally require a Soterra account on the address it was sent to.
 //
 //   GET  /api/qa-signoff?token=…                  -> the defect the /signoff page renders
 //   POST /api/qa-signoff {token, decision, note?}
@@ -15,8 +17,18 @@ export const maxDuration = 60;
 
 const MAX_NOTE = 4000;
 
+async function gate(token: string) {
+  const g = await signoffGateEmails(token);
+  if (!g) return { found: false, res: null };
+  const r = await gateExternal(g.companyId, g.emails);
+  return { found: true, res: r.ok ? null : gateResponse(r) };
+}
+
 export async function GET(req: Request) {
   const token = new URL(req.url).searchParams.get("token") ?? "";
+  const { found, res } = await gate(token);
+  if (!found) return Response.json({ error: "This link is no longer valid." }, { status: 404 });
+  if (res) return res;
   const defect = await getSignoffByToken(token);
   if (!defect) return Response.json({ error: "This link is no longer valid." }, { status: 404 });
   return Response.json(defect, { headers: { "Cache-Control": "no-store" } });
@@ -43,6 +55,10 @@ export async function POST(req: Request) {
   if (decision === "reject" && !note) {
     return Response.json({ error: "Add a note so the sub knows what to put right." }, { status: 400 });
   }
+
+  const { found, res } = await gate(token);
+  if (!found) return Response.json({ error: "This link is no longer valid." }, { status: 404 });
+  if (res) return res;
 
   try {
     const result = await signoffByToken(token, { approve: decision === "approve", note });

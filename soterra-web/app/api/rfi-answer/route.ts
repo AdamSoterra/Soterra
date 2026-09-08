@@ -1,13 +1,16 @@
-import { answerByToken, commentByToken, getRfiThreadByToken } from "@/lib/rfi";
+import { answerByToken, commentByToken, getRfiThreadByToken, rfiByToken, rfiRecipients } from "@/lib/rfi";
+import { gateExternal, gateResponse } from "@/lib/externalAuth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// The consultant's side of an RFI - token-authorised, NO login. The token in
-// the emailed link proves the holder was sent this exact RFI; everything here
-// is scoped to that one RFI's thread (see lib/rfi.ts). Deliberately public:
-// a consultant must be able to answer without an account, or the whole
-// answer-online flow dies at a sign-up wall.
+// The consultant's side of an RFI - token-authorised. The token in the emailed
+// link proves the holder was sent this exact RFI; everything here is scoped to
+// that one RFI's thread (see lib/rfi.ts). On top of the token, the company's
+// sign-in gate (lib/externalAuth) can require a Soterra account on the address
+// the RFI was sent to - Adam's 2026-09-09 call: sensitive information, every
+// external party gets a password. With the gate off it is the original
+// no-account flow.
 //
 //   GET  /api/rfi-answer?token=…            → the thread the page renders
 //   POST /api/rfi-answer {token, kind, body, authorName}
@@ -16,10 +19,20 @@ export const maxDuration = 60;
 
 const MAX_BODY = 20000;
 
+async function gate(token: string) {
+  const rfi = await rfiByToken(token);
+  if (!rfi || rfi.status === "void" || rfi.status === "draft" || rfi.number == null) return { rfi: null, res: null };
+  const g = await gateExternal(rfi.companyId, rfiRecipients(rfi));
+  return { rfi, res: g.ok ? null : gateResponse(g) };
+}
+
 export async function GET(req: Request) {
   const token = new URL(req.url).searchParams.get("token") ?? "";
-  const thread = await getRfiThreadByToken(token);
+  const { rfi, res } = await gate(token);
   // One generic miss for bad token / void / draft: a probe learns nothing.
+  if (!rfi) return Response.json({ error: "This link is no longer valid." }, { status: 404 });
+  if (res) return res;
+  const thread = await getRfiThreadByToken(token);
   if (!thread) return Response.json({ error: "This link is no longer valid." }, { status: 404 });
   return Response.json(thread, { headers: { "Cache-Control": "no-store" } });
 }
@@ -43,6 +56,10 @@ export async function POST(req: Request) {
   }
   if (!text) return Response.json({ error: "Write the response first." }, { status: 400 });
   if (text.length > MAX_BODY) return Response.json({ error: "That response is too long." }, { status: 413 });
+
+  const { rfi, res } = await gate(token);
+  if (!rfi) return Response.json({ error: "This link is no longer valid." }, { status: 404 });
+  if (res) return res;
 
   try {
     const result =

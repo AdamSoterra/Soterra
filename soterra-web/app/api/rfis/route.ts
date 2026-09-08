@@ -9,6 +9,7 @@ import {
   getRfi,
   listRfis,
   logAnswer,
+  promoteToAnswer,
   rfiAnalytics,
   sendRfi,
   setRfiStatus,
@@ -139,6 +140,13 @@ export async function PATCH(req: Request) {
       const text = String(body.body ?? "").trim();
       if (!text) return Response.json({ error: "Paste the consultant's answer" }, { status: 400 });
       const rfi = await logAnswer(scope, id, text, { ...by, consultantName: String(body.consultantName ?? "").trim() || null });
+      return Response.json({ rfi: publicRfi(rfi) });
+    }
+    if (action === "promote") {
+      // A consultant's note (typically an email reply) becomes the official answer.
+      const messageId = String(body.messageId ?? "").trim();
+      if (!UUID_RE.test(messageId)) return Response.json({ error: "Bad message id" }, { status: 400 });
+      const rfi = await promoteToAnswer(scope, id, messageId, by);
       return Response.json({ rfi: publicRfi(rfi) });
     }
     if (action === "followup") {

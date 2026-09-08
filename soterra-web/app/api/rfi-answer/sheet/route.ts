@@ -1,12 +1,14 @@
-import { tokenSheetPng } from "@/lib/rfi";
+import { rfiByToken, rfiRecipients, tokenSheetPng } from "@/lib/rfi";
+import { gateExternal } from "@/lib/externalAuth";
 
 export const runtime = "nodejs";
 // Rendering a sheet + pins takes real time on big drawings.
 export const maxDuration = 60;
 
 // The pinned drawing for the public answer page, token-authorised like the
-// thread itself. The engine refuses any sheet this RFI did not actually pin,
-// so the token cannot be used to browse the drawing set.
+// thread itself (and behind the same sign-in gate). The engine refuses any
+// sheet this RFI did not actually pin, so the token cannot be used to browse
+// the drawing set.
 //   GET /api/rfi-answer/sheet?token=…&doc=…&page=3  → PNG
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -14,6 +16,11 @@ export async function GET(req: Request) {
   const doc = url.searchParams.get("doc") ?? "";
   const page = Number(url.searchParams.get("page") ?? "");
   if (!doc || !Number.isInteger(page) || page < 1) return new Response("Bad request", { status: 400 });
+
+  const rfi = await rfiByToken(token);
+  if (!rfi) return new Response("Not found", { status: 404 });
+  const g = await gateExternal(rfi.companyId, rfiRecipients(rfi));
+  if (!g.ok) return new Response(g.reason === "login" ? "Sign in" : "Forbidden", { status: g.reason === "login" ? 401 : 403 });
 
   const png = await tokenSheetPng(token, doc, page);
   if (!png) return new Response("Not found", { status: 404 });

@@ -17,6 +17,7 @@
 // a holiday calendar is a fast-follow refinement, not a correctness bug.
 
 import { randomBytes } from "node:crypto";
+import { clerkClient } from "@clerk/nextjs/server";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 import { consultants, contractInstructions, emailLog, planPins, projects, rfiMessages, rfis, rfiTransitions } from "./schema";
@@ -24,11 +25,14 @@ import type { Rfi } from "./schema";
 import type { Scope } from "./company";
 import { companyName } from "./company";
 import { emailEnabled, projectSenderAddress, sendEmail, type EmailAttachment } from "./email";
-import { renderRfiAnswerNotice, renderRfiEmail } from "./emailTemplates";
+import { renderRfiAnswerNotice, renderRfiEmail, renderThreadNotice } from "./emailTemplates";
 import { renderSheetWithPins } from "./pinSnapshot";
+import { companyRequiresLogin } from "./externalAuth";
+import { replyAddress } from "./inboundAddress";
 
 /** Where the consultant answer link points. One env override for previews. */
 const APP_URL = (process.env.APP_BASE_URL ?? "https://soterra.co.nz").replace(/\/+$/, "");
+const PORTAL_URL = `${APP_URL}/portal`;
 
 export const RFI_SLA_WORKING_DAYS = 7;
 
@@ -283,6 +287,10 @@ export async function sendRfi(
 
   const codeRefs: string[] = rfi.codeRefs ? JSON.parse(rfi.codeRefs) : [];
   const cc: string[] = rfi.cc ? JSON.parse(rfi.cc) : [];
+  // With inbound capture on, a plain email reply lands in this thread via the
+  // per-RFI reply address; otherwise it goes to the sender's inbox as before.
+  const loginRequired = await companyRequiresLogin(scope.companyId);
+  const inboundReplyTo = await replyAddress("rfi", answerToken);
   const meta = [
     { label: "Discipline", value: rfi.discipline ?? "General" },
     { label: "Priority", value: rfi.priority[0].toUpperCase() + rfi.priority.slice(1) },
@@ -306,6 +314,9 @@ export async function sendRfi(
     replyName: by.name ?? "the sender",
     refLabel: `${label} · Rev ${opened.revision}`,
     answerUrl: `${APP_URL}/answer/${answerToken}`,
+    portalUrl: PORTAL_URL,
+    loginRequired,
+    replyLogged: !!inboundReplyTo,
   });
 
   const result = await sendEmail({
@@ -317,7 +328,7 @@ export async function sendRfi(
     cc,
     fromName: `${company} (via Soterra)`,
     fromEmail: projectSenderAddress(projectName, scope.projectId),
-    replyTo: by.email ?? null,
+    replyTo: inboundReplyTo ?? by.email ?? null,
     subject: `${label} · ${projectName} · ${rfi.subject} · response needed by ${dueLabel}`,
     html: rendered.html,
     text: rendered.text,
@@ -370,7 +381,7 @@ export async function logAnswer(
   scope: Scope,
   rfiId: string,
   body: string,
-  by: { userId?: string | null; name?: string | null; consultantName?: string | null }
+  by: { userId?: string | null; name?: string | null; consultantName?: string | null; via?: string | null }
 ): Promise<Rfi> {
   const rfi = await ourRfi(scope, rfiId);
   if (!rfi) throw new Error("RFI not found");
@@ -408,8 +419,40 @@ export async function logAnswer(
     authorSide: "consultant",
     authorName: by.consultantName ?? rfi.consultantName ?? rfi.consultantCompany ?? null,
     body: body.trim(),
+    via: by.via ?? null,
   });
   return claimed;
+}
+
+/** Promote an existing consultant follow-up (typically one that arrived by
+ *  email) to THE official answer: same atomic open→answered claim as
+ *  logAnswer, the message body copied into an official_answer line, and a
+ *  system line saying which note it was. The original stays in the thread. */
+export async function promoteToAnswer(
+  scope: Scope,
+  rfiId: string,
+  messageId: string,
+  by: { userId?: string | null; name?: string | null }
+): Promise<Rfi> {
+  const [msg] = await db
+    .select()
+    .from(rfiMessages)
+    .where(and(eq(rfiMessages.id, messageId), eq(rfiMessages.rfiId, rfiId), eq(rfiMessages.projectId, scope.projectId)))
+    .limit(1);
+  if (!msg) throw new Error("That note isn't on this RFI");
+  if (msg.authorSide !== "consultant" || msg.type !== "followup") throw new Error("Only a consultant's note can become the answer");
+  const row = await logAnswer(scope, rfiId, msg.body, { ...by, consultantName: msg.authorName, via: msg.via ?? "app" });
+  await db.insert(rfiMessages).values({
+    companyId: scope.companyId,
+    projectId: scope.projectId,
+    rfiId,
+    type: "system",
+    authorSide: "contractor",
+    authorName: by.name ?? null,
+    body: `${by.name ?? "The site team"} logged ${msg.authorName ?? "the consultant"}'s ${msg.via === "email" ? "email reply" : "note"} as the official answer`,
+    via: "app",
+  });
+  return row;
 }
 
 export async function addFollowup(
@@ -580,12 +623,46 @@ export async function getRfi(scope: Scope, rfiId: string) {
 // client), so the blast radius of a leaked link is one RFI's thread, nothing
 // else. Void RFIs answer to nobody; a closed thread is read-only.
 
-async function rfiByToken(token: string): Promise<Rfi | null> {
+export async function rfiByToken(token: string): Promise<Rfi | null> {
   const clean = token.trim();
   // base64url of 24 bytes is 32 chars; reject junk before it reaches the db.
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(clean)) return null;
   const [row] = await db.select().from(rfis).where(eq(rfis.answerToken, clean)).limit(1);
   return row ?? null;
+}
+
+/** A sent RFI by id, for the portal (the caller has already matched the
+ *  signed-in email against the recipients; see rfiRecipients). */
+export async function sentRfiById(id: string): Promise<Rfi | null> {
+  const [row] = await db.select().from(rfis).where(eq(rfis.id, id)).limit(1);
+  if (!row || row.status === "void" || row.status === "draft" || row.number == null) return null;
+  return row;
+}
+
+/** The addresses an RFI went to (consultant + cc), lowercased. */
+export function rfiRecipients(rfi: Rfi): string[] {
+  const cc: string[] = rfi.cc ? (JSON.parse(rfi.cc) as string[]) : [];
+  return [rfi.consultantEmail, ...cc].filter((e): e is string => !!e).map((e) => e.trim().toLowerCase());
+}
+
+/** The sent RFIs addressed to any of these emails - the portal's list. */
+export async function rfisForEmails(emails: string[]): Promise<Rfi[]> {
+  if (!emails.length) return [];
+  const lower = emails.map((e) => e.toLowerCase());
+  const rows = await db
+    .select()
+    .from(rfis)
+    .where(
+      and(
+        inArray(rfis.status, ["open", "answered", "closed"]),
+        sql`(lower(${rfis.consultantEmail}) IN (${sql.join(lower.map((e) => sql`${e}`), sql`, `)}) OR ${sql.join(
+          lower.map((e) => sql`${rfis.cc} ILIKE ${"%" + e.replace(/[%_]/g, "") + "%"}`),
+          sql` OR `
+        )})`
+      )
+    )
+    .orderBy(desc(rfis.updatedAt));
+  return rows.filter((r) => r.number != null);
 }
 
 /** See the header note: token IS the authorisation, ids come from the row. */
@@ -607,6 +684,11 @@ export async function getRfiThreadByToken(token: string) {
   // because a crash inside sendRfi can leave number+token set with the status
   // flip unapplied — that half-sent state must stay invisible too.
   if (!rfi || rfi.status === "void" || rfi.status === "draft" || rfi.number == null) return null;
+  return rfiThreadView(rfi);
+}
+
+/** The external view of an RFI - shared by the token page and the portal. */
+export async function rfiThreadView(rfi: Rfi) {
   const scope = tokenScope(rfi);
   const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
   const company = (await companyName(scope.companyId)) ?? "The builder";
@@ -616,6 +698,7 @@ export async function getRfiThreadByToken(token: string) {
       authorSide: rfiMessages.authorSide,
       authorName: rfiMessages.authorName,
       body: rfiMessages.body,
+      via: rfiMessages.via,
       createdAt: rfiMessages.createdAt,
     })
     .from(rfiMessages)
@@ -632,6 +715,7 @@ export async function getRfiThreadByToken(token: string) {
     company,
     project: proj?.name ?? "The project",
     rfi: {
+      id: rfi.id,
       label: rfiLabel(rfi),
       revision: rfi.revision,
       subject: rfi.subject,
@@ -664,16 +748,27 @@ export async function getRfiThreadByToken(token: string) {
 export async function answerByToken(
   token: string,
   body: string,
-  authorName?: string | null
+  authorName?: string | null,
+  via: "link" | "portal" = "link"
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const rfi = await rfiByToken(token);
   if (!rfi || rfi.status === "void" || rfi.number == null) return { ok: false, error: "not-found" };
+  return answerAsConsultant(rfi, body, authorName, via);
+}
+
+/** The official answer from the other side, whichever door it came in. */
+export async function answerAsConsultant(
+  rfi: Rfi,
+  body: string,
+  authorName?: string | null,
+  via: "link" | "portal" | "email" = "link"
+): Promise<{ ok: true } | { ok: false; error: string }> {
   if (rfi.status === "closed") return { ok: false, error: "closed" };
   if (rfi.status !== "open") return { ok: false, error: "not-open" };
   const scope = tokenScope(rfi);
   const name = authorName?.trim().slice(0, 120) || rfi.consultantName || rfi.consultantCompany || "The consultant";
   try {
-    await logAnswer(scope, rfi.id, body, { userId: null, name, consultantName: name });
+    await logAnswer(scope, rfi.id, body, { userId: null, name, consultantName: name, via });
   } catch {
     // Lost the atomic claim: someone answered (or closed it) a moment ago.
     return { ok: false, error: "not-open" };
@@ -693,10 +788,20 @@ export async function answerByToken(
 export async function commentByToken(
   token: string,
   body: string,
-  authorName?: string | null
+  authorName?: string | null,
+  via: "link" | "portal" = "link"
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const rfi = await rfiByToken(token);
   if (!rfi || rfi.status === "void" || rfi.number == null) return { ok: false, error: "not-found" };
+  return commentAsConsultant(rfi, body, authorName, via);
+}
+
+export async function commentAsConsultant(
+  rfi: Rfi,
+  body: string,
+  authorName?: string | null,
+  via: "link" | "portal" | "email" = "link"
+): Promise<{ ok: true } | { ok: false; error: string }> {
   if (rfi.status !== "open" && rfi.status !== "answered") return { ok: false, error: "closed" };
   const name = authorName?.trim().slice(0, 120) || rfi.consultantName || rfi.consultantCompany || "The consultant";
   await db.insert(rfiMessages).values({
@@ -707,8 +812,162 @@ export async function commentByToken(
     authorSide: "consultant",
     authorName: name,
     body: body.trim(),
+    via,
   });
   return { ok: true };
+}
+
+/** An email reply that arrived on the RFI's reply address (lib/inbound.ts).
+ *  From the consultant's side it is logged as a consultant note - never
+ *  auto-promoted to the official answer, because "I'll look tomorrow" is
+ *  also an email reply; the site team promotes it with one click in the
+ *  thread (promoteToAnswer). From our own side (the sender replying from
+ *  their inbox) it is logged as our follow-up. Either way the OTHER side is
+ *  told, so nobody has to watch two inboxes. */
+export async function emailReplyOnRfi(
+  rfi: Rfi,
+  from: { email: string; name: string },
+  text: string,
+  attachmentsLine: string | null
+): Promise<{ handled: "rfi_comment" | "rfi_followup" | "rejected" }> {
+  if (rfi.status === "void" || rfi.number == null) return { handled: "rejected" };
+  const scope = tokenScope(rfi);
+  const fromLower = from.email.toLowerCase();
+  const senderLower = (await senderEmailOf(rfi))?.toLowerCase() ?? null;
+  // Our own sender replying from their inbox is the one internal case; anyone
+  // else on the reply address is the other side (the consultant, their cc).
+  const external = !senderLower || fromLower !== senderLower;
+  const body = text.trim() || "(no text - see attachments)";
+  const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
+  const projectName = proj?.name ?? "The project";
+  const company = (await companyName(scope.companyId)) ?? "The builder";
+  const label = rfiLabel(rfi);
+
+  if (external) {
+    // Closed RFIs still take the note (a late "thanks" or a correction is
+    // worth keeping); the ball does not move.
+    await db.insert(rfiMessages).values({
+      companyId: rfi.companyId,
+      projectId: rfi.projectId,
+      rfiId: rfi.id,
+      type: "followup",
+      authorSide: "consultant",
+      authorName: from.name || rfi.consultantName || rfi.consultantCompany || from.email,
+      body,
+      via: "email",
+    });
+    // Tell whoever pressed Send, with the one-click promote in the app.
+    const to = await senderEmailOf(rfi);
+    if (to) {
+      const rendered = renderThreadNotice({
+        companyName: company,
+        projectName,
+        heading: `${label} · reply by email`,
+        subject: rfi.subject,
+        actorLine: from.name || from.email,
+        lead: `replied to ${label} by email. It is in the thread${rfi.status === "open" ? " - open the RFI to log it as the official answer if it is one" : ""}.`,
+        body,
+        attachmentsLine,
+        linkLabel: "Open the RFI in Soterra",
+        linkUrl: APP_URL,
+        refLabel: `${label} · ${projectName}`.slice(0, 80),
+        tone: "green",
+      });
+      await sendEmail({
+        scope,
+        kind: "inbound",
+        recordType: "rfi",
+        recordIds: [rfi.id],
+        to: { email: to },
+        replyTo: rfi.consultantEmail ?? null,
+        fromName: "Soterra",
+        fromEmail: projectSenderAddress(projectName, scope.projectId),
+        subject: `${label} reply · ${projectName} · ${rfi.subject}`,
+        html: rendered.html,
+        text: rendered.text,
+        sentByName: from.name || from.email,
+      });
+    }
+    return { handled: "rfi_comment" };
+  }
+
+  // Our side replying from their own inbox: log it as our follow-up and pass
+  // it on to the consultant with the answer link.
+  await db.insert(rfiMessages).values({
+    companyId: rfi.companyId,
+    projectId: rfi.projectId,
+    rfiId: rfi.id,
+    type: "followup",
+    authorSide: "contractor",
+    authorName: from.name || from.email,
+    body,
+    via: "email",
+  });
+  if (rfi.consultantEmail && rfi.answerToken) {
+    const loginRequired = await companyRequiresLogin(scope.companyId);
+    const rendered = renderThreadNotice({
+      companyName: company,
+      projectName,
+      heading: `${label} · follow-up`,
+      subject: rfi.subject,
+      actorLine: `${from.name || from.email} · ${company}`,
+      lead: `added to ${label}.`,
+      body,
+      attachmentsLine,
+      linkLabel: "Open the RFI",
+      linkUrl: `${APP_URL}/answer/${rfi.answerToken}`,
+      linkNote: loginRequired ? "Opens for your Soterra account on the address this was sent to." : "No account needed.",
+      refLabel: `${label} · ${projectName}`.slice(0, 80),
+      portalUrl: PORTAL_URL,
+      loginRequired,
+    });
+    await sendEmail({
+      scope,
+      kind: "inbound",
+      recordType: "rfi",
+      recordIds: [rfi.id],
+      to: { name: rfi.consultantName || rfi.consultantCompany, email: rfi.consultantEmail },
+      replyTo: (await replyAddress("rfi", rfi.answerToken)) ?? from.email,
+      fromName: `${company} (via Soterra)`,
+      fromEmail: projectSenderAddress(projectName, scope.projectId),
+      subject: `${label} · ${projectName} · ${rfi.subject}`,
+      html: rendered.html,
+      text: rendered.text,
+      sentByName: from.name || from.email,
+    });
+  }
+  return { handled: "rfi_followup" };
+}
+
+/** Whoever pressed Send: the Reply-To stamped on the outbound send, read back
+ *  from the email log. With inbound on, that Reply-To is the reply address,
+ *  so we fall through to the sender recorded on the log row instead. */
+async function senderEmailOf(rfi: Rfi): Promise<string | null> {
+  if (!rfi.emailLogId) return null;
+  const [logRow] = await db
+    .select({ replyTo: emailLog.replyTo, sentBy: emailLog.sentBy })
+    .from(emailLog)
+    .where(eq(emailLog.id, rfi.emailLogId))
+    .limit(1);
+  const to = logRow?.replyTo?.trim();
+  if (to && !/^(rfi|cor|fix|so)-[A-Za-z0-9_-]{20,64}@/i.test(to)) return to;
+  // Inbound was on at send time, so the Reply-To is the reply address, not a
+  // person. The log still knows WHO pressed Send (their Clerk id).
+  return clerkPrimaryEmail(logRow?.sentBy ?? null);
+}
+
+/** A Clerk user's primary email, for notices to whoever pressed Send. */
+export async function clerkPrimaryEmail(userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  try {
+    const client = await clerkClient();
+    const u = await client.users.getUser(userId);
+    const primary = u.emailAddresses.find((e) => e.id === u.primaryEmailAddressId) ?? u.emailAddresses[0];
+    return primary?.emailAddress ?? null;
+  } catch (e) {
+    console.error("clerk user lookup failed:", e);
+    return null;
+  }
 }
 
 /** Sheet render for the public page — only sheets this RFI actually pinned. */
@@ -739,9 +998,7 @@ export async function tokenSheetPng(token: string, doc: string, page: number): P
 /** Tell whoever pressed Send that the answer is in. Their address is the
  *  Reply-To we stamped on the outbound send — read back from the email log. */
 async function notifyAnswer(scope: Scope, rfi: Rfi, answer: string, consultantLine: string) {
-  if (!rfi.emailLogId) return;
-  const [logRow] = await db.select({ replyTo: emailLog.replyTo }).from(emailLog).where(eq(emailLog.id, rfi.emailLogId)).limit(1);
-  const to = logRow?.replyTo?.trim();
+  const to = await senderEmailOf(rfi);
   if (!to) return;
   const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
   const projectName = proj?.name ?? "Your project";

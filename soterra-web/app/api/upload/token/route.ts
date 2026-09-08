@@ -49,8 +49,24 @@ export async function POST(request: Request) {
         // allowed too — but only under "<projectId>/checklists/", so a photo
         // token can't be used to slip a JPEG into the plan set.
         const isPhoto = pathname.startsWith(`${projectId}/checklists/`);
+        // Correspondence attachments (transmittals carry drawings, shop
+        // drawings, office documents, zips) - under the item's own folder only.
+        const isCorr = pathname.startsWith(`${projectId}/correspondence/`);
+        const corrTypes = [
+          "application/pdf",
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "application/zip",
+          "application/x-zip-compressed",
+          "application/acad",
+          "image/vnd.dwg",
+          "application/octet-stream",
+        ];
         return {
-          allowedContentTypes: isPhoto ? ["image/jpeg", "image/png", "image/webp"] : ["application/pdf"],
+          allowedContentTypes: isPhoto ? ["image/jpeg", "image/png", "image/webp"] : isCorr ? corrTypes : ["application/pdf"],
           maximumSizeInBytes: isPhoto ? 12 * 1024 * 1024 : 100 * 1024 * 1024, // 12 MB a photo, 100 MB a drawing set
           addRandomSuffix: true, // avoid collisions + make URLs unguessable
           tokenPayload: JSON.stringify({ uploadedBy: userId, projectId }),

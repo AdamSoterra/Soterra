@@ -1,5 +1,15 @@
 import { get, put } from "@vercel/blob";
-import { fixPhotoByToken, fixPhotoPrefix, fixUploadTarget } from "@/lib/qaCloseout";
+import { fixPhotoByToken, fixPhotoPrefix, fixUploadTarget, photoGateEmails } from "@/lib/qaCloseout";
+import { gateExternal } from "@/lib/externalAuth";
+
+/** The company's sign-in gate, same as the /fix and /signoff routes. */
+async function gated(token: string): Promise<Response | null> {
+  const g = await photoGateEmails(token);
+  if (!g) return null; // unknown token: the caller's own 404 follows
+  const r = await gateExternal(g.companyId, g.emails);
+  if (r.ok) return null;
+  return new Response(r.reason === "login" ? "Sign in" : "Forbidden", { status: r.reason === "login" ? 401 : 403 });
+}
 
 // The sub's photo of the fix. Token-authorised, NO login - same rail as the
 // rest of the /fix flow. Private Blob, so it has no fetchable URL:
@@ -21,6 +31,8 @@ export async function POST(req: Request) {
   const token = new URL(req.url).searchParams.get("token") ?? "";
   const target = await fixUploadTarget(token);
   if (!target) return Response.json({ error: "This link is no longer valid." }, { status: 404 });
+  const denied = await gated(token);
+  if (denied) return denied;
   if (!target.canSubmit) return Response.json({ error: "This item has already been marked fixed." }, { status: 409 });
 
   const contentType = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
@@ -57,6 +69,8 @@ export async function GET(req: Request) {
   const token = new URL(req.url).searchParams.get("token") ?? "";
   const path = await fixPhotoByToken(token);
   if (!path) return new Response("Not found", { status: 404 });
+  const denied = await gated(token);
+  if (denied) return denied;
   try {
     const got = await get(path, { access: "private" });
     if (!got || got.statusCode !== 200 || !got.stream) return new Response("Not found", { status: 404 });

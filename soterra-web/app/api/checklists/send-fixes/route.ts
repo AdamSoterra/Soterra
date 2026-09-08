@@ -10,6 +10,8 @@ import { emailEnabled, projectSenderAddress, sendEmail, type EmailAttachment } f
 import { renderItemsEmail, type EmailItem } from "@/lib/emailTemplates";
 import { renderSheetWithPins } from "@/lib/pinSnapshot";
 import { resolveRecipients, recipientsLabel } from "@/lib/sendRecipients";
+import { companyRequiresLogin } from "@/lib/externalAuth";
+import { PORTAL_URL } from "@/lib/appUrl";
 
 export const runtime = "nodejs";
 // Renders drawing snapshots and fetches photos — give it room.
@@ -176,6 +178,8 @@ export async function POST(req: Request) {
     replyName: `${senderName} at ${company}`,
     footerNote: "Sent with Soterra · recorded on the project QA log",
     refLabel: `${checklist.title} · item${sendItems.length === 1 ? "" : "s"} ${sendItems.map((i) => i.n).join(", ")}`,
+    portalUrl: PORTAL_URL,
+    loginRequired: await companyRequiresLogin(scope.companyId),
   });
 
   const results: { sub: string; items: number; status: string }[] = [];

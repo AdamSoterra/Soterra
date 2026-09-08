@@ -8,6 +8,9 @@ import { emailEnabled, projectSenderAddress, sendEmail, type EmailAttachment } f
 import { renderItemsEmail } from "@/lib/emailTemplates";
 import { renderSheetWithPins } from "@/lib/pinSnapshot";
 import { armFlagFix } from "@/lib/qaCloseout";
+import { companyRequiresLogin } from "@/lib/externalAuth";
+import { replyAddress } from "@/lib/inboundAddress";
+import { PORTAL_URL } from "@/lib/appUrl";
 
 export const runtime = "nodejs";
 // Sending renders the drawing snapshot.
@@ -242,6 +245,8 @@ export async function PATCH(req: Request) {
     replyName: `${senderName} at ${company}`,
     footerNote: "Sent with Soterra · recorded on the project QA log",
     refLabel: `Flag ${flag.n} · ${flag.doc}`,
+    portalUrl: PORTAL_URL,
+    loginRequired: await companyRequiresLogin(scope.companyId),
   });
 
   const result = await sendEmail({
@@ -252,7 +257,8 @@ export async function PATCH(req: Request) {
     to: { name: subName, email: subEmail },
     fromName: `${company} (via Soterra)`,
     fromEmail: projectSenderAddress(projectName, scope.projectId),
-    replyTo: senderEmail,
+    // With inbound on, a plain reply lands against this defect (lib/inbound).
+    replyTo: (fix ? await replyAddress("fix", fix.token) : null) ?? senderEmail,
     subject: `${projectName} · 1 item to put right · ${flag.trade || "QA"} · ${flag.doc}`,
     html: rendered.html,
     text: rendered.text,

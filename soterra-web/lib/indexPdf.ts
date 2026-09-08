@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { extractText, getDocumentProxy } from "unpdf";
 import { db } from "@/lib/db";
 import { planPages } from "@/lib/schema";
-import { detectDocType } from "@/lib/docType";
+import { detectDocType, type DocType } from "@/lib/docType";
 
 // The shared indexing core: PDF bytes in, one plan_pages row per readable page
 // out, scoped to a site. Deliberately knows nothing about auth or where the
@@ -27,12 +27,15 @@ export async function indexPdf({
   doc,
   bytes,
   file,
+  docType: forcedType,
 }: {
   projectId: string;
   doc: string;
   bytes: Uint8Array;
   /** Blob pathname we can fetch the original back from, stored on every row. */
   file: string;
+  /** Skip detection and stamp this type (a transmittal filed as "drawings"). */
+  docType?: DocType | null;
 }): Promise<IndexPdfResult> {
   // Extract per-page text.
   let totalPages = 0;
@@ -60,7 +63,7 @@ export async function indexPdf({
 
   // Classify the document once — filename first, first readable page as the
   // tiebreak — and stamp every row with it. The Documents tab can override.
-  const docType = detectDocType(doc, rows[0].text);
+  const docType = forcedType ?? detectDocType(doc, rows[0].text);
   const typedRows = rows.map((r) => ({ ...r, docType }));
 
   // Replace any prior pages for this doc on this site (so re-indexing refreshes

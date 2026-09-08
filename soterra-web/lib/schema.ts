@@ -10,7 +10,24 @@ import { pgTable, text, timestamp, boolean, uuid, index, integer, uniqueIndex, d
 export const companies = pgTable("companies", {
   id: text("id").primaryKey(), // app-generated uuid
   name: text("name").notNull(),
+  // When true, the private links Soterra emails to consultants and subs (RFI
+  // answer, defect fix, sign-off, correspondence) open only for a signed-in
+  // Soterra account whose verified email is the one the link was sent to.
+  // Adam's call (2026-09-09): "these info can be sensitive so all parties
+  // need a password". Off = the original no-login token flow.
+  externalLoginRequired: boolean("external_login_required").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── App-wide settings the code reads at runtime (key → value). Exists so
+//     infrastructure secrets that arrive AFTER a deploy (the inbound-email
+//     webhook signing secret, the inbound domain) can be stored without a
+//     redeploy or dashboard access. Env vars win when set; this is the
+//     fallback (lib/settings.ts). ───
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ─── Sites (projects): the top-level container. A PM signs up, creates a site,
@@ -352,6 +369,10 @@ export const inspectionItems = pgTable(
     sentTo: text("sent_to"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     sentStatus: text("sent_status"), // sent | recorded (see checklist_items)
+    // JSON array of the recipient emails the item was sent to (lowercased).
+    // sent_to is a display label; this is what the external portal matches a
+    // signed-in sub against. Added by dev/migrate-correspondence.
+    subEmails: text("sub_emails"),
     // ── Close-out loop (added by dev/migrate-qa-closeout). Same loop as qa_flags,
     //    PLUS the consultant leg: an item off a CONSULTANT report (parent
     //    inspections.source = 'consultant') runs open -> sent -> ready ->
@@ -727,6 +748,9 @@ export const rfiMessages = pgTable(
     authorSide: text("author_side").default("contractor").notNull(), // contractor | consultant | client
     authorName: text("author_name"),
     body: text("body").notNull(),
+    // How the line arrived: app | link | portal | email. Null = app (legacy).
+    // "email" lines came in through the inbound webhook (lib/inbound.ts).
+    via: text("via"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({ byRfi: index("rfi_messages_rfi_idx").on(t.rfiId) })
@@ -773,7 +797,121 @@ export const contractInstructions = pgTable(
   (t) => ({ byProject: index("cis_project_idx").on(t.projectId) })
 );
 
+// ─── General correspondence — the register next to RFIs for everything that
+//     is NOT a question: notices, site instructions, transmittals (plans, shop
+//     drawings, documents going out) and general letters. Same rails as an RFI
+//     (Soterra sends it, records it, the recipient replies from a private
+//     link, the thread lives here) but no answer/ball semantics: a
+//     "response required" flag + due date is as far as the clock goes.
+//     Numbers are per project PER TYPE (NOT-001, SI-001, TR-001, COR-001),
+//     assigned on send. The recipient fields are plain text + email exactly
+//     like an RFI's consultant: the other side does not need an account.
+//     Adam's brief (2026-09-09): "the more info goes through the system the
+//     better" — a transmittal's PDFs can also be filed straight into the
+//     project's Documents (plan_pages) so the assistant sees them. ───
+export const correspondence = pgTable(
+  "correspondence",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    type: text("type").default("general").notNull(), // notice | instruction | transmittal | general
+    number: integer("number"), // per project per type, burned on send
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+    status: text("status").default("draft").notNull(), // draft | sent | responded | closed | void
+    responseRequired: boolean("response_required").default(false).notNull(),
+    dateDue: timestamp("date_due", { withTimezone: true }),
+    toKind: text("to_kind"), // consultant | sub | other
+    toName: text("to_name"),
+    toCompany: text("to_company"),
+    toEmail: text("to_email"), // stored LOWERCASED (the portal matches on it)
+    cc: text("cc"), // JSON array of emails (lowercased)
+    // JSON array of {filename, path, bytes, contentType, filedAs?: {doc, docType}}.
+    // path = private Blob pathname under <projectId>/correspondence/<id>/…
+    attachments: text("attachments"),
+    // Transmittal option: file the PDF attachments into Documents on send.
+    fileAsDocs: boolean("file_as_docs").default(false).notNull(),
+    docType: text("doc_type"), // lib/docType DocType, when filing
+    createdBy: text("created_by"),
+    createdByName: text("created_by_name"),
+    sentBy: text("sent_by"),
+    sentByName: text("sent_by_name"),
+    senderEmail: text("sender_email"), // whoever pressed Send — where notices go
+    dateSent: timestamp("date_sent", { withTimezone: true }),
+    dateResponded: timestamp("date_responded", { withTimezone: true }),
+    dateClosed: timestamp("date_closed", { withTimezone: true }),
+    emailLogId: uuid("email_log_id"),
+    // The secret in the recipient's "Open in Soterra" link. Partial unique
+    // index in the migration (WHERE token IS NOT NULL). Never sent to the
+    // browser — lib/correspondence.ts strips it.
+    token: text("token"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byProject: index("correspondence_project_idx").on(t.projectId),
+    byCompany: index("correspondence_company_idx").on(t.companyId),
+    byToEmail: index("correspondence_to_email_idx").on(t.toEmail),
+  })
+);
+
+// The thread on a piece of correspondence: our follow-ups, their replies
+// (from the link, the portal, or a plain email reply), and system lines.
+export const correspondenceMessages = pgTable(
+  "correspondence_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    corrId: uuid("corr_id").notNull(),
+    type: text("type").default("message").notNull(), // message | system
+    authorSide: text("author_side").default("contractor").notNull(), // contractor | external
+    authorName: text("author_name"),
+    authorEmail: text("author_email"),
+    via: text("via"), // app | link | portal | email
+    body: text("body").notNull(),
+    attachments: text("attachments"), // JSON array of {filename, path, bytes, contentType}
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({ byCorr: index("correspondence_messages_corr_idx").on(t.corrId) })
+);
+
+// ─── Inbound email log — every email that came BACK through the reply
+//     addresses (lib/inbound.ts). The record it matched (an RFI, a piece of
+//     correspondence, a defect) gets the message written into its own thread
+//     where it has one; this table is the raw, complete audit of what arrived
+//     and what was done with it. providerId (Resend's email id) is unique so
+//     a redelivered webhook can never double-post. ───
+export const inboundEmails = pgTable(
+  "inbound_emails",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id"),
+    projectId: text("project_id"),
+    recordType: text("record_type"), // rfi | correspondence | qa_flag | inspection_item | null (unmatched)
+    recordId: text("record_id"),
+    providerId: text("provider_id").notNull(), // Resend received-email id
+    messageId: text("message_id"),
+    fromEmail: text("from_email"),
+    fromName: text("from_name"),
+    toAddress: text("to_address"), // the reply address it was sent to
+    subject: text("subject"),
+    text: text("text"), // the reply, quoted history stripped
+    attachments: text("attachments"), // JSON array of {filename, path, bytes, contentType}
+    handled: text("handled").notNull(), // rfi_comment | corr_reply | defect_note | unmatched | rejected
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byRecord: index("inbound_emails_record_idx").on(t.recordType, t.recordId),
+    onceProvider: uniqueIndex("inbound_emails_provider_uq").on(t.providerId),
+  })
+);
+
 export type Company = typeof companies.$inferSelect;
+export type Correspondence = typeof correspondence.$inferSelect;
+export type CorrespondenceMessage = typeof correspondenceMessages.$inferSelect;
+export type InboundEmail = typeof inboundEmails.$inferSelect;
 export type Inspection = typeof inspections.$inferSelect;
 export type InspectionItem = typeof inspectionItems.$inferSelect;
 export type Checklist = typeof checklists.$inferSelect;

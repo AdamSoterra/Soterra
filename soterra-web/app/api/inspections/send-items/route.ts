@@ -8,6 +8,9 @@ import { emailEnabled, projectSenderAddress, sendEmail } from "@/lib/email";
 import { renderItemsEmail, type EmailItem } from "@/lib/emailTemplates";
 import { resolveRecipients, recipientsLabel } from "@/lib/sendRecipients";
 import { armItemsFix } from "@/lib/qaCloseout";
+import { companyRequiresLogin } from "@/lib/externalAuth";
+import { replyAddress } from "@/lib/inboundAddress";
+import { PORTAL_URL } from "@/lib/appUrl";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -68,7 +71,7 @@ export async function POST(req: Request) {
   // Close-out loop: mint (or reuse) each item's "Mark it fixed" link BEFORE
   // composing, so every defect carries its own link in the one email. Failure-
   // isolated: if arming trips, the send still goes out (just without the links).
-  let fixUrls = new Map<string, string>();
+  let fixUrls = new Map<string, { url: string; token: string }>();
   try {
     fixUrls = await armItemsFix(scope, sendItems.map((i) => i.id));
   } catch (e) {
@@ -83,8 +86,13 @@ export async function POST(req: Request) {
     // The inspector's own wording, quoted — that's what the sub answers to.
     note: it.detail ? `Inspector: "${it.detail}"` : null,
     statusLabel: it.workStatus === "in_progress" ? "in progress" : "not done",
-    fixUrl: fixUrls.get(it.id) ?? null,
+    fixUrl: fixUrls.get(it.id)?.url ?? null,
   }));
+  const loginRequired = await companyRequiresLogin(scope.companyId);
+  // One email carries several defects; a plain reply is logged against the
+  // first one in the list (the reply address can only name one).
+  const firstToken = fixUrls.get(sendItems[0].id)?.token ?? null;
+  const inboundReplyTo = firstToken ? await replyAddress("fix", firstToken) : null;
 
   const rendered = renderItemsEmail({
     companyName: company,
@@ -98,6 +106,8 @@ export async function POST(req: Request) {
     replyExtra: "Each item is tracked on the project until it is closed.",
     footerNote: "Sent with Soterra · from the filed inspection report",
     refLabel: `${inspectionLabel} · item${sendItems.length === 1 ? "" : "s"} ${sendItems.map((i) => i.n).join(", ")}`,
+    portalUrl: PORTAL_URL,
+    loginRequired,
   });
 
   const results: { sub: string; items: number; status: string }[] = [];
@@ -112,7 +122,7 @@ export async function POST(req: Request) {
       to: recipient,
       fromName: `${company} (via Soterra)`,
       fromEmail: projectSenderAddress(projectName, scope.projectId),
-      replyTo: senderEmail,
+      replyTo: inboundReplyTo ?? senderEmail,
       subject: `${projectName} · ${sendItems.length} failed inspection item${sendItems.length === 1 ? "" : "s"} to close out · ${inspectionLabel}`,
       html: rendered.html,
       text: rendered.text,
@@ -133,6 +143,9 @@ export async function POST(req: Request) {
       .update(inspectionItems)
       .set({
         sentTo: recipientsLabel(okRecipients),
+        // The addresses themselves: the portal and the sign-in gate match a
+        // signed-in sub against these (sentTo is only a display label).
+        subEmails: JSON.stringify(okRecipients.map((r) => r.email.toLowerCase())),
         sentAt: new Date(),
         sentStatus: okStatuses.has("sent") ? "sent" : "recorded",
       })
