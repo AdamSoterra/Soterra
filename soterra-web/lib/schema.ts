@@ -392,6 +392,7 @@ export const inspectionItems = pgTable(
     readyAt: timestamp("ready_at", { withTimezone: true }), // the sub marked it fixed
     submittedAt: timestamp("submitted_at", { withTimezone: true }), // forwarded to the consultant
     closedAt: timestamp("closed_at", { withTimezone: true }), // signed off (MC internal, or consultant)
+    closedByName: text("closed_by_name"), // who closed it (site team name, or the consultant)
     fixPhoto: text("fix_photo"), // Blob pathname of the sub's photo of the fix (private)
     subNote: text("sub_note"), // the sub's note when they marked it fixed
     reviewNote: text("review_note"), // the MC / consultant note on close or bounce-back
@@ -468,6 +469,22 @@ export const checklistItems = pgTable(
     checkedBy: text("checked_by"),
     checkedByName: text("checked_by_name"),
     checkedAt: timestamp("checked_at", { withTimezone: true }),
+    // ── Close-out loop on a Needs-fixing check item (added by
+    //    dev/migrate-item-closeout, 2026-09-09). Same rails as qa_flags: the
+    //    item can be SENT to a sub on its own (with a "Mark it fixed" link),
+    //    the sub marks it ready with a photo, and the site team CLOSES it
+    //    individually — "close a few or even one and work in the area can
+    //    proceed" (Adam). status above stays the walk result (ok/issue/na).
+    closeoutStatus: text("closeout_status").default("open").notNull(), // open | sent | ready | closed
+    subToken: text("sub_token"), // partial unique index in the migration
+    subEmails: text("sub_emails"), // JSON array of the recipient emails (lowercased)
+    senderEmail: text("sender_email"),
+    readyAt: timestamp("ready_at", { withTimezone: true }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closedByName: text("closed_by_name"),
+    fixPhoto: text("fix_photo"),
+    subNote: text("sub_note"),
+    reviewNote: text("review_note"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
@@ -661,6 +678,7 @@ export const qaFlags = pgTable(
     senderEmail: text("sender_email"), // whoever pressed Send - where the "marked fixed" notice goes
     readyAt: timestamp("ready_at", { withTimezone: true }), // the sub marked it fixed
     closedAt: timestamp("closed_at", { withTimezone: true }), // the MC signed it off
+    closedByName: text("closed_by_name"),
     fixPhoto: text("fix_photo"), // Blob pathname of the sub's photo of the fix (private)
     subNote: text("sub_note"), // the sub's note when they marked it fixed
     reviewNote: text("review_note"), // the MC's note on close or bounce-back
@@ -778,8 +796,14 @@ export const rfiTransitions = pgTable(
   (t) => ({ byRfi: index("rfi_transitions_rfi_idx").on(t.rfiId) })
 );
 
-// Contract instructions spawned from an answered RFI. The link that lets the
-// assistant treat the CI as governing the drawing it amends.
+// Contract / client instructions. Originally only spawned from an answered
+// RFI; since 2026-09-09 a full register: a CI can be raised on its own ("the
+// client wants a pendant light over the kitchen island"), with the
+// instruction text, who issued it, where it applies, the trades it touches
+// and the client's own document attached (PDF text extracted so the register
+// is searchable). The assistant treats a CI as governing the drawing it
+// amends (search_directives), and generated QA checks put the instruction's
+// items FIRST for the trades it names (lib/checklist.ts).
 export const contractInstructions = pgTable(
   "contract_instructions",
   {
@@ -791,8 +815,21 @@ export const contractInstructions = pgTable(
     sourceRfiId: uuid("source_rfi_id"),
     amendsDrawings: text("amends_drawings"), // JSON array of {doc, fromRev, toRev}
     cost: text("cost"),
+    // ── the register fields (dev/migrate-item-closeout) ──
+    body: text("body"), // what is instructed, in words
+    issuedBy: text("issued_by"), // client | architect | engineer | other
+    issuedByName: text("issued_by_name"), // "J. Client · Kauri Developments"
+    dateIssued: timestamp("date_issued", { withTimezone: true }),
+    location: text("location"), // "Unit 4 kitchen"
+    trades: text("trades"), // JSON array of CATEGORIES the instruction touches
+    status: text("status").default("open").notNull(), // open | done | void
+    file: text("file"), // private Blob pathname of the client's document
+    fileName: text("file_name"),
+    fileText: text("file_text"), // extracted text of the PDF, for search + generation
     createdBy: text("created_by"),
+    createdByName: text("created_by_name"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({ byProject: index("cis_project_idx").on(t.projectId) })
 );

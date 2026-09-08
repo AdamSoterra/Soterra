@@ -51,7 +51,9 @@ export async function POST(request: Request) {
         const isPhoto = pathname.startsWith(`${projectId}/checklists/`);
         // Correspondence attachments (transmittals carry drawings, shop
         // drawings, office documents, zips) - under the item's own folder only.
-        const isCorr = pathname.startsWith(`${projectId}/correspondence/`);
+        // A client instruction's document (PDF, or a photo of the letter)
+        // lives under instructions/ and takes the same list.
+        const isCorr = pathname.startsWith(`${projectId}/correspondence/`) || pathname.startsWith(`${projectId}/instructions/`);
         const corrTypes = [
           "application/pdf",
           "image/jpeg",

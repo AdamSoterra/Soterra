@@ -21,7 +21,8 @@ async function target(req: Request, side: "sub" | "consultant") {
   const url = new URL(req.url);
   const id = url.searchParams.get("id") ?? "";
   if (!UUID_RE.test(id)) return null;
-  const table = url.searchParams.get("table") === "flag" ? "flag" : "item";
+  const t = url.searchParams.get("table");
+  const table = t === "flag" ? "flag" : t === "check" ? "check" : "item";
   const user = await currentUser();
   return defectForEmail(table, id, verifiedEmails(user as never), side);
 }

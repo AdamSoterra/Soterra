@@ -680,18 +680,24 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
           amends?: unknown; location?: string | null; issued: string | null; hay: string;
         };
         const all: Directive[] = [
-          ...cis.map((c): Directive => {
+          ...cis.filter((c) => c.status !== "void").map((c): Directive => {
             let amends: unknown = null;
             try { amends = c.amendsDrawings ? JSON.parse(c.amendsDrawings) : null; } catch { /* keep null */ }
-            const directs = c.sourceRfiId ? answerFor.get(c.sourceRfiId)?.body ?? null : null;
+            // The register's own text first (a CI raised on its own), else the
+            // source RFI's official answer; the client's attached document is
+            // searchable too (its text was extracted on attach).
+            const own = c.body?.trim() || null;
+            const fromRfi = c.sourceRfiId ? answerFor.get(c.sourceRfiId)?.body ?? null : null;
+            const directs = [own ?? fromRfi, c.fileText ? `From the attached document: ${c.fileText.slice(0, 1500)}` : null].filter(Boolean).join("\n") || null;
             return {
               label: `CI-${String(c.number).padStart(3, "0")}`,
               kind: "contract_instruction",
               title: c.title,
               directs,
               amends,
-              issued: c.createdAt?.toISOString().slice(0, 10) ?? null,
-              hay: `${c.title} ${directs ?? ""} ${c.amendsDrawings ?? ""}`.toLowerCase(),
+              location: c.location,
+              issued: (c.dateIssued ?? c.createdAt)?.toISOString().slice(0, 10) ?? null,
+              hay: `${c.title} ${own ?? ""} ${fromRfi ?? ""} ${c.fileText?.slice(0, 6000) ?? ""} ${c.location ?? ""} ${c.trades ?? ""} ${c.amendsDrawings ?? ""}`.toLowerCase(),
             };
           }),
           ...answeredRfis.map((r): Directive => {

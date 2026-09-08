@@ -171,11 +171,22 @@ export async function PATCH(req: Request) {
   const action = String(body.action ?? "");
 
   if (action === "done") {
-    const [row] = await db.update(qaFlags).set({ status: "done", fixedAt: new Date() }).where(eq(qaFlags.id, id)).returning();
+    // "Done" on the sheet IS the close-out: the loop closes with it, by name.
+    const user = await currentUser();
+    const now = new Date();
+    const [row] = await db
+      .update(qaFlags)
+      .set({ status: "done", fixedAt: now, closeoutStatus: "closed", closedAt: now, closedByName: user?.firstName || user?.username || null })
+      .where(eq(qaFlags.id, id))
+      .returning();
     return Response.json({ flag: publicFlag(row) });
   }
   if (action === "reopen") {
-    const [row] = await db.update(qaFlags).set({ status: flag.sentAt ? "sent" : "open", fixedAt: null }).where(eq(qaFlags.id, id)).returning();
+    const [row] = await db
+      .update(qaFlags)
+      .set({ status: flag.sentAt ? "sent" : "open", fixedAt: null, closeoutStatus: flag.sentAt ? "sent" : "open", closedAt: null, closedByName: null })
+      .where(eq(qaFlags.id, id))
+      .returning();
     return Response.json({ flag: publicFlag(row) });
   }
   if (action !== "send") return Response.json({ error: "Unknown action" }, { status: 400 });

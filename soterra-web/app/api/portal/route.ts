@@ -65,7 +65,8 @@ export async function GET(req: Request) {
       return Response.json(await rfiThreadView(rfi), { headers: { "Cache-Control": "no-store" } });
     }
     if (kind === "fix") {
-      const table = url.searchParams.get("table") === "flag" ? "flag" : "item";
+      const t = url.searchParams.get("table");
+      const table = t === "flag" ? "flag" : t === "check" ? "check" : "item";
       const found = await defectForEmail(table, id, who.emails, "sub");
       if (!found) return Response.json({ error: "Not found" }, { status: 404 });
       return Response.json(await fixView(found), { headers: { "Cache-Control": "no-store" } });
@@ -131,7 +132,10 @@ export async function GET(req: Request) {
       overdue: false,
       due: null as Date | null,
       at: f.row.readyAt ?? f.row.sentAt ?? f.row.createdAt,
-      meta: [f.kind === "flag" ? f.row.trade : f.row.category, f.kind === "flag" ? `${f.row.doc} · p${f.row.page}` : f.row.location].filter(Boolean).join(" · "),
+      meta: [
+        f.kind === "flag" ? f.row.trade : f.row.category,
+        f.kind === "flag" ? `${f.row.doc} · p${f.row.page}` : f.kind === "item" ? f.row.location : "QA check",
+      ].filter(Boolean).join(" · "),
     })),
     ...defects.signoffs.map((s) => ({
       kind: "signoff" as const,
@@ -183,7 +187,8 @@ export async function POST(req: Request) {
       return Response.json({ ok: true, view: fresh ? await rfiThreadView(fresh) : null });
     }
     if (kind === "fix") {
-      const table = String(body.table ?? "item") === "flag" ? "flag" : "item";
+      const t = String(body.table ?? "item");
+      const table = t === "flag" ? "flag" : t === "check" ? "check" : "item";
       const found = await defectForEmail(table, id, who.emails, "sub");
       if (!found) return Response.json({ error: "Not found" }, { status: 404 });
       const photoPath = typeof body.photoPath === "string" ? body.photoPath : null;

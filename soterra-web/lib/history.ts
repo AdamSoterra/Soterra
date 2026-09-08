@@ -229,6 +229,18 @@ export async function inspectionDetail(scope: Scope, inspectionId: string) {
       sentTo: inspectionItems.sentTo,
       sentAt: inspectionItems.sentAt,
       sentStatus: inspectionItems.sentStatus,
+      // The close-out loop, so each item can be closed / bounced / forwarded
+      // on its own from the report sheet (tokens deliberately not selected).
+      closeoutStatus: inspectionItems.closeoutStatus,
+      readyAt: inspectionItems.readyAt,
+      submittedAt: inspectionItems.submittedAt,
+      closedAt: inspectionItems.closedAt,
+      closedByName: inspectionItems.closedByName,
+      subNote: inspectionItems.subNote,
+      reviewNote: inspectionItems.reviewNote,
+      consultantName: inspectionItems.consultantName,
+      consultantEmail: inspectionItems.consultantEmail,
+      hasFixPhoto: sql<boolean>`(${inspectionItems.fixPhoto} is not null)`,
     })
     .from(inspectionItems)
     .where(and(eq(inspectionItems.inspectionId, inspectionId), eq(inspectionItems.companyId, scope.companyId)));

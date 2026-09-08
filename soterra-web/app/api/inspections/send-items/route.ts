@@ -55,9 +55,13 @@ export async function POST(req: Request) {
   if (typeof recipients === "string") return Response.json({ error: recipients }, { status: 400 });
   if (!recipients.length) return Response.json({ error: "Pick at least one recipient" }, { status: 400 });
 
-  // Every recipient gets the SAME email: all the still-open items.
-  const sendItems = items.map((it, idx) => ({ ...it, n: idx + 1 })).filter((it) => (it.workStatus ?? "not_done") !== "done");
-  if (!sendItems.length) return Response.json({ error: "Every item on this report is already done" }, { status: 400 });
+  // Every recipient gets the SAME email: all the still-open items — or just
+  // the ones named in itemIds (one item to one sub, since 2026-09-09).
+  const onlyIds = Array.isArray(body.itemIds) ? new Set(body.itemIds.map((x) => String(x))) : null;
+  const sendItems = items
+    .map((it, idx) => ({ ...it, n: idx + 1 }))
+    .filter((it) => (it.workStatus ?? "not_done") !== "done" && (!onlyIds || onlyIds.has(it.id)));
+  if (!sendItems.length) return Response.json({ error: onlyIds ? "That item is already done" : "Every item on this report is already done" }, { status: 400 });
 
   const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
   const projectName = proj?.name ?? "This project";

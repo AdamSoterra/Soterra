@@ -35,7 +35,7 @@
 import { randomBytes } from "node:crypto";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "./db";
-import { inspectionItems, inspections, projects, qaFlags } from "./schema";
+import { checklistItems, checklists, inspectionItems, inspections, projects, qaFlags } from "./schema";
 import type { Scope } from "./company";
 import { companyName } from "./company";
 import { projectSenderAddress, sendEmail } from "./email";
@@ -55,9 +55,13 @@ function mintToken(): string {
   return randomBytes(24).toString("base64url");
 }
 
-export type CloseoutKind = "flag" | "item";
+// "check" = a Needs-fixing item on one of the site's own QA checks
+// (checklist_items), in the loop since 2026-09-09 so every item can be sent
+// and closed on its own, exactly like a flag.
+export type CloseoutKind = "flag" | "item" | "check";
 type FlagRow = typeof qaFlags.$inferSelect;
 type ItemRow = typeof inspectionItems.$inferSelect;
+type CheckRow = typeof checklistItems.$inferSelect;
 
 /** Ids come from the ROW, never the client (see the header note). */
 function tokenScope(row: { projectId: string; companyId: string }): Scope {
@@ -71,16 +75,18 @@ function tokenScope(row: { projectId: string; companyId: string }): Scope {
 
 // ─── token lookups ─────────────────────────────────────────────────────────
 
-/** A sub_token belongs to exactly one defect on one of the two tables. Flags are
- *  checked first; the tables share the token namespace but a collision across
- *  them is astronomically unlikely (24 random bytes each). */
-async function bySubToken(token: string): Promise<{ kind: "flag"; row: FlagRow } | { kind: "item"; row: ItemRow } | null> {
+/** A sub_token belongs to exactly one defect on one of the three tables. Flags
+ *  are checked first; the tables share the token namespace but a collision
+ *  across them is astronomically unlikely (24 random bytes each). */
+async function bySubToken(token: string): Promise<FoundDefect | null> {
   const clean = token.trim();
   if (!TOKEN_RE.test(clean)) return null;
   const [flag] = await db.select().from(qaFlags).where(eq(qaFlags.subToken, clean)).limit(1);
   if (flag) return { kind: "flag", row: flag };
   const [item] = await db.select().from(inspectionItems).where(eq(inspectionItems.subToken, clean)).limit(1);
   if (item) return { kind: "item", row: item };
+  const [check] = await db.select().from(checklistItems).where(eq(checklistItems.subToken, clean)).limit(1);
+  if (check) return { kind: "check", row: check };
   return null;
 }
 
@@ -136,6 +142,23 @@ export async function armFlagFix(scope: Scope, flagId: string): Promise<{ token:
   return { token, url: fixUrl(token) };
 }
 
+/** Mint + persist sub_tokens for a batch of QA CHECK items (checklist_items);
+ *  return id -> url + token. Same shape as armItemsFix. */
+export async function armChecksFix(scope: Scope, itemIds: string[]): Promise<Map<string, { url: string; token: string }>> {
+  const out = new Map<string, { url: string; token: string }>();
+  if (!itemIds.length) return out;
+  const rows = await db
+    .select({ id: checklistItems.id, subToken: checklistItems.subToken })
+    .from(checklistItems)
+    .where(and(eq(checklistItems.companyId, scope.companyId), eq(checklistItems.projectId, scope.projectId), inArray(checklistItems.id, itemIds)));
+  for (const r of rows) {
+    const token = r.subToken ?? mintToken();
+    if (!r.subToken) await db.update(checklistItems).set({ subToken: token }).where(eq(checklistItems.id, r.id));
+    out.set(r.id, { url: fixUrl(token), token });
+  }
+  return out;
+}
+
 /** Mint + persist sub_tokens for a batch of inspection items; return id -> url
  *  (+ the token, for the reply address). Items already carrying a token keep
  *  it (a resend reuses the same link). */
@@ -162,7 +185,12 @@ export async function armItemsFix(scope: Scope, itemIds: string[]): Promise<Map<
 
 // ─── lookups shared by the token pages, the portal and inbound email ────────
 
-export type FoundDefect = { kind: "flag"; row: FlagRow } | { kind: "item"; row: ItemRow };
+export type FoundDefect = { kind: "flag"; row: FlagRow } | { kind: "item"; row: ItemRow } | { kind: "check"; row: CheckRow };
+
+/** The title any of the three rows shows. */
+export function defectTitle(found: FoundDefect): string {
+  return found.row.title;
+}
 
 /** A reply-address token → the defect it belongs to. "fix" = the sub's
  *  token (either table); "so" = the consultant's token (items only). */
@@ -187,6 +215,12 @@ export function subEmailsOf(found: FoundDefect): string[] {
   }
 }
 
+/** The check a QA check item belongs to (title + location), for the sub's page. */
+async function checkContext(row: CheckRow): Promise<{ title: string; location: string | null }> {
+  const [c] = await db.select({ title: checklists.title, location: checklists.location }).from(checklists).where(eq(checklists.id, row.checklistId)).limit(1);
+  return { title: c?.title ?? "QA check", location: c?.location ?? null };
+}
+
 /** The portal: every defect sent to any of these emails, on either side. */
 export async function defectsForEmails(emails: string[]): Promise<{ fixes: FoundDefect[]; signoffs: ItemRow[] }> {
   if (!emails.length) return { fixes: [], signoffs: [] };
@@ -201,6 +235,11 @@ export async function defectsForEmails(emails: string[]): Promise<{ fixes: Found
     .select()
     .from(inspectionItems)
     .where(and(isNotNull(inspectionItems.subToken), sql`(${likeAny})`));
+  const likeAnyCheck = sql.join(lower.map((e) => sql`${checklistItems.subEmails} ILIKE ${"%" + e.replace(/[%_]/g, "") + "%"}`), sql` OR `);
+  const checks = await db
+    .select()
+    .from(checklistItems)
+    .where(and(isNotNull(checklistItems.subToken), sql`(${likeAnyCheck})`));
   const signoffs = await db
     .select()
     .from(inspectionItems)
@@ -208,6 +247,7 @@ export async function defectsForEmails(emails: string[]): Promise<{ fixes: Found
   const fixes: FoundDefect[] = [
     ...flags.map((row) => ({ kind: "flag" as const, row })),
     ...items.filter((i) => subEmailsOf({ kind: "item", row: i }).some((e) => lower.includes(e))).map((row) => ({ kind: "item" as const, row })),
+    ...checks.filter((i) => subEmailsOf({ kind: "check", row: i }).some((e) => lower.includes(e))).map((row) => ({ kind: "check" as const, row })),
   ];
   return { fixes, signoffs };
 }
@@ -220,6 +260,12 @@ export async function defectForEmail(kind: CloseoutKind, id: string, emails: str
     const [row] = await db.select().from(qaFlags).where(eq(qaFlags.id, id)).limit(1);
     if (!row || !row.subToken) return null;
     return subEmailsOf({ kind: "flag", row }).some((e) => lower.has(e)) ? { kind: "flag", row } : null;
+  }
+  if (kind === "check") {
+    if (side !== "sub") return null;
+    const [row] = await db.select().from(checklistItems).where(eq(checklistItems.id, id)).limit(1);
+    if (!row || !row.subToken) return null;
+    return subEmailsOf({ kind: "check", row }).some((e) => lower.has(e)) ? { kind: "check", row } : null;
   }
   const [row] = await db.select().from(inspectionItems).where(eq(inspectionItems.id, id)).limit(1);
   if (!row) return null;
@@ -249,12 +295,25 @@ export async function fixView(found: FoundDefect) {
           location: `${(row as FlagRow).doc} · p${(row as FlagRow).page}`,
           category: (row as FlagRow).trade,
         }
-      : {
-          title: (row as ItemRow).title,
-          detail: (row as ItemRow).detail,
-          location: (row as ItemRow).location,
-          category: (row as ItemRow).category,
-        };
+      : found.kind === "item"
+        ? {
+            title: (row as ItemRow).title,
+            detail: (row as ItemRow).detail,
+            location: (row as ItemRow).location,
+            category: (row as ItemRow).category,
+          }
+        : await (async () => {
+            const c = await checkContext(row as CheckRow);
+            const r = row as CheckRow;
+            return {
+              title: r.title,
+              // The site team's note on the walk is what the sub answers to;
+              // the generated "what good looks like" is the backstop.
+              detail: [r.note, r.detail].filter(Boolean).join("\n\n") || null,
+              location: [c.location, c.title].filter(Boolean).join(" · ") || null,
+              category: r.category,
+            };
+          })();
   return {
     company,
     project,
@@ -302,23 +361,99 @@ export async function markReadyRow(
   const claimed =
     found.kind === "flag"
       ? (await db.update(qaFlags).set(set).where(and(eq(qaFlags.id, row.id), eq(qaFlags.closeoutStatus, "sent"))).returning())[0]
-      : (await db.update(inspectionItems).set(set).where(and(eq(inspectionItems.id, row.id), eq(inspectionItems.closeoutStatus, "sent"))).returning())[0];
+      : found.kind === "item"
+        ? (await db.update(inspectionItems).set(set).where(and(eq(inspectionItems.id, row.id), eq(inspectionItems.closeoutStatus, "sent"))).returning())[0]
+        : (await db.update(checklistItems).set(set).where(and(eq(checklistItems.id, row.id), eq(checklistItems.closeoutStatus, "sent"))).returning())[0];
   if (!claimed) {
     // Lost the claim: already ready / closed, or never sent.
     return { ok: false, error: row.closeoutStatus === "sent" ? "race" : "not-open" };
   }
 
   try {
-    await notifyMc(found.kind, claimed, {
+    await notifyMc(found.kind, claimed as FlagRow | ItemRow | CheckRow, {
       kind: "ready",
-      actorLine: subLine(found.kind, claimed),
+      actorLine: subLine(found.kind, claimed as FlagRow | ItemRow | CheckRow),
       note,
-      nextLine: "marked this fixed. Review it and close it out, or forward it to the consultant to sign off.",
+      nextLine: found.kind === "item" ? "marked this fixed. Review it and close it out, or forward it to the consultant to sign off." : "marked this fixed. Review it and close it out.",
     });
   } catch (e) {
     console.error("qa markReady notice failed:", e);
   }
   return { ok: true };
+}
+
+// ─── per-item close and reopen (the site team, any kind, any stage) ─────────
+//
+// "Sometimes you might close a few or even one and work in the area can
+// proceed" (Adam, 2026-09-09). A defect can be closed on its own at ANY stage
+// short of closed - never sent, sent to a sub, marked ready - because the site
+// team saw it fixed on the wall. reviewClose above stays the strict path
+// (ready only); this is the direct one, with who closed it and a note on
+// record. A consultant-report item closed directly is closed by the site team,
+// not signed off by the consultant; the row says so (closed_by_name).
+
+async function rowOf(scope: Scope, kind: CloseoutKind, id: string): Promise<FoundDefect | null> {
+  if (kind === "flag") {
+    const row = await ourFlag(scope, id);
+    return row ? { kind: "flag", row } : null;
+  }
+  if (kind === "item") {
+    const row = await ourItem(scope, id);
+    return row ? { kind: "item", row } : null;
+  }
+  const [row] = await db.select().from(checklistItems).where(and(eq(checklistItems.id, id), eq(checklistItems.projectId, scope.projectId))).limit(1);
+  return row ? { kind: "check", row } : null;
+}
+
+export async function closeDirect(
+  scope: Scope,
+  kind: CloseoutKind,
+  id: string,
+  input: { note?: string | null; byName?: string | null }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const found = await rowOf(scope, kind, id);
+  if (!found) return { ok: false, error: "not-found" };
+  if (found.row.closeoutStatus === "closed") return { ok: false, error: "already-closed" };
+  const now = new Date();
+  const note = input.note?.trim().slice(0, 4000) || null;
+  const byName = input.byName?.trim().slice(0, 120) || null;
+  if (kind === "flag") {
+    await db.update(qaFlags).set({ closeoutStatus: "closed", closedAt: now, closedByName: byName, reviewNote: note, status: "done", fixedAt: now }).where(eq(qaFlags.id, id));
+  } else if (kind === "item") {
+    await db.update(inspectionItems).set({ closeoutStatus: "closed", closedAt: now, closedByName: byName, reviewNote: note, workStatus: "done" }).where(eq(inspectionItems.id, id));
+  } else {
+    await db.update(checklistItems).set({ closeoutStatus: "closed", closedAt: now, closedByName: byName, reviewNote: note }).where(eq(checklistItems.id, id));
+    await db.update(checklists).set({ updatedAt: now }).where(eq(checklists.id, (found.row as CheckRow).checklistId));
+  }
+  return { ok: true };
+}
+
+/** Undo a close: back to "sent" if it had gone to a sub (their link comes
+ *  alive again), else "open". */
+export async function reopenDefect(scope: Scope, kind: CloseoutKind, id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const found = await rowOf(scope, kind, id);
+  if (!found) return { ok: false, error: "not-found" };
+  if (found.row.closeoutStatus !== "closed") return { ok: false, error: "not-closed" };
+  const wasSent = !!(found.row as { sentAt?: Date | null }).sentAt || !!(found.row as { subToken?: string | null }).subToken;
+  const back = wasSent ? "sent" : "open";
+  if (kind === "flag") {
+    await db.update(qaFlags).set({ closeoutStatus: back, closedAt: null, closedByName: null, status: wasSent ? "sent" : "open", fixedAt: null }).where(eq(qaFlags.id, id));
+  } else if (kind === "item") {
+    await db.update(inspectionItems).set({ closeoutStatus: back, closedAt: null, closedByName: null, workStatus: "not_done" }).where(eq(inspectionItems.id, id));
+  } else {
+    await db.update(checklistItems).set({ closeoutStatus: back, closedAt: null, closedByName: null }).where(eq(checklistItems.id, id));
+  }
+  return { ok: true };
+}
+
+/** Bounce a ready QA CHECK item back to the sub (flags/items use reject()). */
+export async function rejectCheck(scope: Scope, id: string, note: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+  const [row] = await db
+    .update(checklistItems)
+    .set({ closeoutStatus: "sent", reviewNote: note?.trim().slice(0, 4000) || null })
+    .where(and(eq(checklistItems.id, id), eq(checklistItems.projectId, scope.projectId), eq(checklistItems.closeoutStatus, "ready")))
+    .returning();
+  return row ? { ok: true } : { ok: false, error: "not-ready" };
 }
 
 // ─── the consultant's /signoff page (token-authorised, no login) ────────────
@@ -533,23 +668,23 @@ export async function reject(
 
 // ─── the MC notice ──────────────────────────────────────────────────────────
 
-function subLine(kind: CloseoutKind, row: FlagRow | ItemRow): string {
+function subLine(kind: CloseoutKind, row: FlagRow | ItemRow | CheckRow): string {
   if (kind === "flag") return (row as FlagRow).subName || (row as FlagRow).subEmail || "The subcontractor";
-  return (row as ItemRow).sentTo || "The subcontractor";
+  return (row as ItemRow | CheckRow).sentTo || "The subcontractor";
 }
 
 /** Tell whoever pressed Send that the ball moved. sender_email is stamped on the
  *  defect at send time; with no address there is nobody to notify (best-effort). */
 async function notifyMc(
   kind: CloseoutKind,
-  row: FlagRow | ItemRow,
+  row: FlagRow | ItemRow | CheckRow,
   n: { kind: "ready" | "signed_off" | "bounced"; actorLine: string; note: string | null; nextLine: string }
 ): Promise<void> {
   const to = (row as { senderEmail?: string | null }).senderEmail?.trim();
   if (!to) return;
   const scope = tokenScope(row);
   const { project, company } = await projectAndCompany(scope);
-  const title = kind === "flag" ? (row as FlagRow).title : (row as ItemRow).title;
+  const title = row.title;
   const rendered = renderQaCloseoutNotice({
     companyName: company,
     projectName: project,
@@ -564,7 +699,7 @@ async function notifyMc(
   await sendEmail({
     scope,
     kind: kind === "flag" ? "qa_flags" : "inspection_items",
-    recordType: kind === "flag" ? "qa_flag" : "inspection_item",
+    recordType: kind === "flag" ? "qa_flag" : kind === "item" ? "inspection_item" : "checklist_item",
     recordIds: [row.id],
     to: { email: to },
     fromName: "Soterra",
@@ -592,7 +727,7 @@ export async function emailReplyOnDefect(
   const row = found.row;
   const scope = tokenScope(row);
   const { project, company } = await projectAndCompany(scope);
-  const title = found.kind === "flag" ? (row as FlagRow).title : (row as ItemRow).title;
+  const title = row.title;
   const fromLower = from.email.toLowerCase();
   const senderLower = (row as { senderEmail?: string | null }).senderEmail?.toLowerCase() ?? null;
   const attLine = attachments.length ? `${attachments.length} attachment${attachments.length === 1 ? "" : "s"}: ${attachments.map((a) => a.filename).join(" · ")}` : null;
@@ -618,7 +753,7 @@ export async function emailReplyOnDefect(
     await sendEmail({
       scope,
       kind: "inbound",
-      recordType: found.kind === "flag" ? "qa_flag" : "inspection_item",
+      recordType: found.kind === "flag" ? "qa_flag" : found.kind === "item" ? "inspection_item" : "checklist_item",
       recordIds: [row.id],
       to: { email: senderLower },
       replyTo: from.email,
@@ -642,7 +777,7 @@ export async function emailReplyOnDefect(
     const emails = subEmailsOf(found);
     const token = (row as { subToken?: string | null }).subToken;
     if (emails.length && token) {
-      to = { name: found.kind === "flag" ? (row as FlagRow).subName : (row as ItemRow).sentTo, email: emails[0] };
+      to = { name: found.kind === "flag" ? (row as FlagRow).subName : (row as ItemRow | CheckRow).sentTo, email: emails[0] };
       link = fixUrl(token);
       replyTo = await replyAddress("fix", token);
     }
@@ -674,7 +809,7 @@ export async function emailReplyOnDefect(
   await sendEmail({
     scope,
     kind: "inbound",
-    recordType: found.kind === "flag" ? "qa_flag" : "inspection_item",
+    recordType: found.kind === "flag" ? "qa_flag" : found.kind === "item" ? "inspection_item" : "checklist_item",
     recordIds: [row.id],
     to,
     replyTo: replyTo ?? from.email,
@@ -742,6 +877,12 @@ export function fixPhotoOf(found: FoundDefect): string | null {
   return found.row.fixPhoto ?? null;
 }
 
+/** The site team's own read of a defect's fix photo (any kind), scoped. */
+export async function fixPhotoForScope(scope: Scope, kind: CloseoutKind, id: string): Promise<string | null> {
+  const found = await rowOf(scope, kind, id);
+  return found?.row.fixPhoto ?? null;
+}
+
 // ─── the scorecard ──────────────────────────────────────────────────────────
 
 type Agg = { sub: string; status: string; sentAt: Date | null; readyAt: Date | null; closedAt: Date | null };
@@ -761,13 +902,19 @@ export async function analytics(scope: Scope, opts: { level?: "project" | "compa
     opts.level === "company"
       ? and(eq(inspectionItems.companyId, scope.companyId), isNotNull(inspectionItems.sentAt))
       : and(eq(inspectionItems.companyId, scope.companyId), eq(inspectionItems.projectId, scope.projectId), isNotNull(inspectionItems.sentAt));
+  const checkWhere =
+    opts.level === "company"
+      ? and(eq(checklistItems.companyId, scope.companyId), isNotNull(checklistItems.sentAt))
+      : and(eq(checklistItems.companyId, scope.companyId), eq(checklistItems.projectId, scope.projectId), isNotNull(checklistItems.sentAt));
   const flags = await db.select().from(qaFlags).where(flagWhere);
   const items = await db.select().from(inspectionItems).where(itemWhere);
+  const checks = await db.select().from(checklistItems).where(checkWhere);
   const now = new Date();
 
   const rows: Agg[] = [
     ...flags.map((f) => ({ sub: f.subName || f.subEmail || "Unassigned", status: f.closeoutStatus, sentAt: f.sentAt, readyAt: f.readyAt, closedAt: f.closedAt })),
     ...items.map((i) => ({ sub: i.sentTo || "Unassigned", status: i.closeoutStatus, sentAt: i.sentAt, readyAt: i.readyAt, closedAt: i.closedAt })),
+    ...checks.map((c) => ({ sub: c.sentTo || "Unassigned", status: c.closeoutStatus, sentAt: c.sentAt, readyAt: c.readyAt, closedAt: c.closedAt })),
   ];
 
   type Row = { sub: string; open: number; overdue: number; turnarounds: number[]; total: number };

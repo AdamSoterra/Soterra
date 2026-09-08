@@ -694,6 +694,22 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .src-history{background:rgba(239,68,68,.1);color:var(--red)}
 .src-ccc{background:rgba(16,185,129,.12);color:var(--green)}
 .src-hsw{background:rgba(245,158,11,.16);color:#B45309}
+.src-ci{background:rgba(245,158,11,.2);color:#92400E;border:1px solid rgba(245,158,11,.5)}
+/* Per-item close-out on a check / report item: the loop's status line + its
+   small actions (send this one, close it out, bounce back, reopen). */
+.ck-co{margin-top:9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--slate);font-weight:600}
+.ck-co .st{padding:3px 8px;border-radius:20px;font-size:10.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;background:rgba(148,166,190,.16);color:var(--slate)}
+.ck-co .st.sent{background:rgba(14,143,230,.1);color:var(--brand-d)}
+.ck-co .st.ready{background:rgba(245,158,11,.14);color:#B45309}
+.ck-co .st.submitted{background:rgba(139,92,246,.12);color:#6D28D9}
+.ck-co .st.closed{background:rgba(16,185,129,.13);color:#0E7A55}
+.ck-co button{font-family:var(--font);font-size:11.5px;font-weight:700;color:var(--slate);background:#fff;border:1.5px solid var(--line);border-radius:8px;padding:4px 10px;cursor:pointer}
+.ck-co button:hover{border-color:rgba(14,143,230,.45);color:var(--brand-d)}
+.ck-co button.go{color:#0E7A55;border-color:rgba(16,185,129,.45)}
+.ck-co button:disabled{opacity:.5;cursor:default}
+.ck-co .note{flex-basis:100%;font-weight:500;color:#43586E;background:#F8FAFC;border:1px solid var(--line2);border-radius:9px;padding:7px 10px;line-height:1.45}
+.ck-co .note b{color:var(--navy)}
+.ck-co .fixpic{flex-basis:100%;max-width:260px;border-radius:9px;border:1px solid var(--line);display:block}
 .src-ref{font-size:11.5px;color:var(--mut);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ck-actions{margin-top:11px}
 .ck-extra{margin-top:11px}

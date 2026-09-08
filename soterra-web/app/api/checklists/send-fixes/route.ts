@@ -12,6 +12,8 @@ import { renderSheetWithPins } from "@/lib/pinSnapshot";
 import { resolveRecipients, recipientsLabel } from "@/lib/sendRecipients";
 import { companyRequiresLogin } from "@/lib/externalAuth";
 import { PORTAL_URL } from "@/lib/appUrl";
+import { armChecksFix } from "@/lib/qaCloseout";
+import { replyAddress } from "@/lib/inboundAddress";
 
 export const runtime = "nodejs";
 // Renders drawing snapshots and fetches photos — give it room.
@@ -63,9 +65,14 @@ export async function POST(req: Request) {
   if (typeof recipients === "string") return Response.json({ error: recipients }, { status: 400 });
   if (!recipients.length) return Response.json({ error: "Pick at least one recipient" }, { status: 400 });
 
-  // Every recipient gets the SAME email: all the Needs-fixing items.
-  const sendItems = items.map((it, idx) => ({ ...it, n: idx + 1 })).filter((it) => it.status === "issue");
-  if (!sendItems.length) return Response.json({ error: "Nothing marked Needs fixing to send" }, { status: 400 });
+  // Every recipient gets the SAME email: all the Needs-fixing items — or,
+  // since 2026-09-09, just the ones named in itemIds (a single item can be
+  // sent on its own to the sub responsible). Closed-out items never re-send.
+  const onlyIds = Array.isArray(body.itemIds) ? new Set(body.itemIds.map((x) => String(x))) : null;
+  const sendItems = items
+    .map((it, idx) => ({ ...it, n: idx + 1 }))
+    .filter((it) => it.status === "issue" && it.closeoutStatus !== "closed" && (!onlyIds || onlyIds.has(it.id)));
+  if (!sendItems.length) return Response.json({ error: onlyIds ? "That item isn't marked Needs fixing, or it is already closed" : "Nothing marked Needs fixing to send" }, { status: 400 });
 
   const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
   const projectName = proj?.name ?? "This project";
@@ -140,6 +147,18 @@ export async function POST(req: Request) {
     }
   }
 
+  // Close-out loop: mint (or reuse) each item's "Mark it fixed" link BEFORE
+  // composing, so every item carries its own link (lib/qaCloseout.ts).
+  // Failure-isolated: if arming trips, the send still goes out without links.
+  let fixUrls = new Map<string, { url: string; token: string }>();
+  try {
+    fixUrls = await armChecksFix(scope, sendItems.map((i) => i.id));
+  } catch (e) {
+    console.error("qa arm (checks) failed:", e);
+  }
+  const firstToken = fixUrls.get(sendItems[0].id)?.token ?? null;
+  const inboundReplyTo = firstToken ? await replyAddress("fix", firstToken) : null;
+
   // ── Now the body, claiming only what's real.
   const emailItems: EmailItem[] = sendItems.map((it) => {
     const attached = photoAttached.get(it.id) ?? 0;
@@ -147,6 +166,7 @@ export async function POST(req: Request) {
     return {
       n: it.n,
       title: it.title,
+      fixUrl: fixUrls.get(it.id)?.url ?? null,
       meta: [
         it.category,
         it.pins?.[0] ? `${it.pins[0].doc}${snapCidByItem.has(it.id) ? " (pinned)" : ""}` : null,
@@ -194,7 +214,7 @@ export async function POST(req: Request) {
       to: recipient,
       fromName: `${company} (via Soterra)`,
       fromEmail: projectSenderAddress(projectName, scope.projectId),
-      replyTo: senderEmail,
+      replyTo: inboundReplyTo ?? senderEmail,
       subject: `${projectName} · ${sendItems.length} item${sendItems.length === 1 ? "" : "s"} to put right · ${checklist.title}`,
       html: rendered.html,
       text: rendered.text,
@@ -211,14 +231,22 @@ export async function POST(req: Request) {
   // The stamp names only the recipients whose send went through; all-failed
   // stamps nothing so the UI never claims a dead send.
   if (okRecipients.length) {
+    const ids = sendItems.map((i) => i.id);
     await db
       .update(checklistItems)
       .set({
         sentTo: recipientsLabel(okRecipients),
+        subEmails: JSON.stringify(okRecipients.map((r) => r.email.toLowerCase())),
         sentAt: new Date(),
         sentStatus: okStatuses.has("sent") ? "sent" : "recorded",
       })
-      .where(and(eq(checklistItems.companyId, scope.companyId), inArray(checklistItems.id, sendItems.map((i) => i.id))));
+      .where(and(eq(checklistItems.companyId, scope.companyId), inArray(checklistItems.id, ids)));
+    // The close-out entry is GUARDED like the inspection items: a resend never
+    // drags a 'ready' item (sub already fixed it) back to 'sent'.
+    await db
+      .update(checklistItems)
+      .set({ closeoutStatus: "sent", senderEmail })
+      .where(and(eq(checklistItems.companyId, scope.companyId), inArray(checklistItems.id, ids), inArray(checklistItems.closeoutStatus, ["open", "sent"])));
   }
 
   return Response.json({ sent: results, transmitting: emailEnabled() });

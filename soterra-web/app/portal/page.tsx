@@ -29,7 +29,7 @@ import {
 type Item = {
   kind: "rfi" | "corr" | "fix" | "signoff";
   id: string;
-  table?: "flag" | "item";
+  table?: "flag" | "item" | "check";
   label: string;
   title: string;
   project: string;

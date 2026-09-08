@@ -10,6 +10,7 @@ import { getCodeIndex, codeLabel } from "./codeIndex";
 import { getManufacturerIndex, manufacturerLabel, visibleTo } from "./manufacturerIndex";
 import { excerpt, retrieve, searchManufacturerPages } from "./retrieve";
 import { blockersFor } from "./inspectionOrder";
+import { relevantInstructions, type RelevantCi } from "./instructions";
 
 // ─── The checklist engine ────────────────────────────────────────────────
 //
@@ -101,8 +102,8 @@ const ITEM_LIST_SCHEMA = {
         properties: {
           title: { type: "string", description: "What to check, as an instruction, under 14 words. Start with the thing, not a verb: \"Membrane upstand — 150mm minimum above finished level\"." },
           detail: { type: "string", description: "What good looks like, including the actual figure or the actual plan requirement. One or two sentences." },
-          source: { type: "string", enum: ["plans", "code", "manufacturer", "history"] },
-          source_ref: { type: "string", description: "The EXACT page label you were given for the page this came from, copied verbatim. For a history item, the count, e.g. \"Failed 3 times before\"." },
+          source: { type: "string", enum: ["ci", "plans", "code", "manufacturer", "history"] },
+          source_ref: { type: "string", description: "The EXACT page label you were given for the page this came from, copied verbatim. For a history item, the count, e.g. \"Failed 3 times before\". For an instruction item, the instruction's label exactly, e.g. \"CI-003\"." },
           category: { type: "string", enum: [...CATEGORIES] },
         },
         required: ["title", "detail", "source", "source_ref", "category"],
@@ -116,7 +117,8 @@ const ITEM_LIST_SCHEMA = {
 
 const GEN_SYSTEM = `You write the pre-inspection checklist a New Zealand site manager walks the job with an hour before the inspector arrives.
 
-You are given four sources. Use every one that has something ON-SUBJECT for this inspection (see the subject rule below); ignore the parts that aren't:
+You are given up to five sources. Use every one that has something ON-SUBJECT for this inspection (see the subject rule below); ignore the parts that aren't:
+0. CLIENT & CONTRACT INSTRUCTIONS (when present) — formal changes to what the drawings say: the client wants a pendant light over the kitchen island, the engineer instructs an extra nog, the architect moves a door. An instruction OUTRANKS the drawing it amends, and the crew is the one who has to build it — so it is the thing most likely to be missed. RULE: every instruction listed that touches THIS inspection's trade, system or location becomes the FIRST item(s) on the checklist, before anything else, phrased for THIS inspection's stage and trade — on an electrical check "cable run in for the additional pendant over the kitchen island, as per CI-003"; on a pre-line check "ceiling nog fixed for the pendant over the kitchen island, as per CI-003"; on a post-line check "pendant point cut and made good, as per CI-003". source = "ci", source_ref = the instruction's label exactly (e.g. "CI-003"), and put the label in the item title. One instruction can be one item or two if it genuinely has two things to check at this stage. An instruction that clearly belongs to another trade or another location on this stage is NOT an item here — leave it out.
 1. THIS PROJECT'S DRAWINGS — pages from the site's own consented drawings and specs. Every "as per plan" item comes from here, WITH the actual value the plan gives. "Cavity battens as per plan" is useless; "Cavity battens — 20mm H3.1 treated, at 600 crs per A-302" is a check someone can do.
 2. THE BUILDING CODE — pages from the MBIE Acceptable Solutions and Verification Methods. Every numeric item comes from here, with the actual figure.
 3. THE MANUFACTURER'S MANUAL — pages from the maker's own installation manual (e.g. GIB). This is what the inspector actually checks a proprietary system against, and it is FREQUENTLY STRICTER than the Code minimum. Fastener type and centres, sheet layout, back-blocking, control joints, the specific system build-up — take these from here, with the exact figure, and cite the manual page. Where the manual and the Code differ, the manual governs the warranty, so lead with the manual's figure. ⚠️ BUT ONLY FOR THE SYSTEM THE DRAWINGS NAME. The manual pages below were retrieved by keyword, so they can include a NEIGHBOURING system from the same maker that this job does NOT use — a maker often documents several fire or acoustic systems in one manual. If the drawings name a system (see SPECIFIED SYSTEMS in the request), take proprietary items ONLY from that system; if a manual page in front of you describes a different system or a different product than the drawings specify, DROP IT — do not write its items, and never substitute a different brand or product for the one the drawings call for. Citing the wrong maker's system is the worst error you can make here: it puts a check on the wall that does not apply to this job. AND EVEN FOR THE RIGHT SYSTEM, the manual is the STANDARD build, not the last word on THIS job: the architect may hold a project-specific approval or a variation from the maker that you cannot see. So a manufacturer item is a prompt to VERIFY, not a verdict — write its detail to CONFIRM against the job's approved detail ("the standard system fixes the wall clips two per H-stud — confirm this matches the approved detail"), never as an absolute requirement. Lead with the plans; reach for the manual only to add the one specific figure the plans leave out for the specified system, and use it sparingly — three manual checks that matter beat a wall of manual detail this job may not follow.
@@ -134,7 +136,7 @@ RULES
 - Never invent a clause number, a dimension, a product or a page label.
 - Put the figure IN the item. A checklist item without the number is just a reminder to go and look it up.
 - THE PLANS LEAD; the manual confirms. A manufacturer figure is something to CONFIRM against the job's approved detail, not a rule to enforce — the architect may hold an approval you cannot see. Keep manufacturer items FEW and specific, and word them as a confirmation ("...— confirm against the approved detail"); when in doubt, drop one. A plan-sourced item and a history item are worth more than a manual item. Every manufacturer item must carry a specific spec to confirm — a figure, product, spacing or build-up; generic manufacturer good-practice with no specific spec ("keep the boards dry", "store flat") is not a pre-inspection check, so leave it out.
-- Order by what fails an inspection: history items first, then anything weathertightness or fire, then the rest.
+- Order by what fails an inspection: instruction (CI) items first, then history items, then anything weathertightness or fire, then the rest.
 - 10 to 20 items. This is walked on a phone, on site, in the rain. Ruthless beats thorough.
 - Write like an experienced site manager talking to another one. No filler, no "ensure that", no "it is recommended".
 - If a source gives you nothing useful, use fewer items rather than padding with generic ones.`;
@@ -352,11 +354,25 @@ export async function generateChecklistItems(
       ? topItems(scope, { category: type.category, limit: 10 })
       : historyForCode(scope, opts.inspectionCode, 10);
 
-  const [projectIdx, codeIdx, mfrIdx, history] = await Promise.all([
+  // The open client / contract instructions that touch this check: a trade
+  // tag matching this inspection's category is decisive, a location match is
+  // strong, text overlap is the tiebreak (lib/instructions.ts). Handed to the
+  // model as source 0 AND guaranteed by the fallback after generation.
+  const cisQuery = relevantInstructions(scope, {
+    category: type?.category ?? null,
+    location: opts.location?.label ?? null,
+    subject: `${opts.title} ${q}`,
+  }).catch((e) => {
+    console.error("instructions lookup failed:", e);
+    return [] as RelevantCi[];
+  });
+
+  const [projectIdx, codeIdx, mfrIdx, history, cis] = await Promise.all([
     getProjectIndex(scope.projectId),
     getCodeIndex(),
     getManufacturerIndex(),
     historyQuery,
+    cisQuery,
   ]);
 
   // Location scoping: when the check is scoped to a location that owns sheets,
@@ -400,7 +416,25 @@ export async function generateChecklistItems(
   const planLabel = (p: (typeof planPages)[number]) =>
     [p.doc, p.code, p.title].filter(Boolean).join(" · ") + ` · page ${p.page} of ${p.npages}`;
 
+  const ciBlock = cis.length
+    ? `CLIENT & CONTRACT INSTRUCTIONS — open on this project, most relevant first\n${cis
+        .map((c) => {
+          const bits = [
+            c.issuedBy ? `issued by the ${c.issuedBy}${c.issuedByName ? ` (${c.issuedByName})` : ""}` : null,
+            c.dateIssued ? c.dateIssued.toISOString().slice(0, 10) : null,
+            c.location ? `location: ${c.location}` : null,
+            c.trades.length ? `trades: ${c.trades.join(", ")}` : null,
+            c.amendsDrawings.length ? `amends: ${c.amendsDrawings.map((a) => a.doc).join(", ")}` : null,
+            `why it is here: ${c.why}`,
+          ].filter(Boolean);
+          const text = [c.directs, c.fileText ? `From the attached document: ${excerpt(c.fileText, q, 900)}` : null].filter(Boolean).join("\n");
+          return `--- ${c.label}: ${c.title}\n${bits.join(" · ")}\n${text || "(no further detail on record)"}`;
+        })
+        .join("\n\n")}`
+    : null;
+
   const sources = [
+    ...(ciBlock ? [ciBlock] : []),
     planPages.length
       ? `THIS PROJECT'S DRAWINGS\n${planPages.map((p) => `--- PAGE LABEL: ${planLabel(p)}\n${excerpt(p.text, q, 2200)}`).join("\n\n")}`
       : "THIS PROJECT'S DRAWINGS\n(no drawings uploaded for this site yet — do not invent any)",
@@ -456,12 +490,42 @@ export async function generateChecklistItems(
       .map((r) => ({
         title: String(r.title ?? "").trim(),
         detail: String(r.detail ?? "").trim(),
-        source: ["plans", "code", "manufacturer", "history"].includes(String(r.source)) ? String(r.source) : "manual",
+        source: ["ci", "plans", "code", "manufacturer", "history"].includes(String(r.source)) ? String(r.source) : "manual",
         sourceRef: String(r.source_ref ?? "").trim() || null,
         category: isCategory(r.category) ? r.category : "Other",
       }))
       .filter((r) => r.title.length > 2);
-    // The council's own hard dependencies go FIRST, ahead of anything the
+
+    // ── Instructions FIRST, and never dropped. The model was told to lead with
+    // them; this makes it true whatever it did. An item is "the CI's" when its
+    // source_ref or title carries the label. Any trade-tagged instruction for
+    // THIS inspection's category that the model produced nothing for gets a
+    // deterministic item at the top — the site manager then sees the
+    // instruction exists and decides, rather than never knowing. Untagged /
+    // text-only matches are left to the model's judgement.
+    const labelled = (it: { title: string; sourceRef: string | null }, label: string) =>
+      (it.sourceRef ?? "").toUpperCase().includes(label) || it.title.toUpperCase().includes(label);
+    const must = cis.filter((c) => type?.category && c.trades.includes(type.category));
+    const forced = must
+      .filter((c) => !items.some((it) => labelled(it, c.label)))
+      .map((c) => ({
+        title: `${c.label} — ${c.title}: instructed work in place for this stage`,
+        detail: [
+          c.directs ? c.directs.slice(0, 400) : "See the instruction on the register.",
+          c.location ? `Location: ${c.location}.` : null,
+          "Confirm what this stage needs for it is done before the inspector arrives.",
+        ].filter(Boolean).join(" "),
+        source: "ci",
+        sourceRef: c.label,
+        category: type?.category ?? ("Other" as const),
+      }));
+    const modelCi = items.filter((it) => it.source === "ci" || cis.some((c) => labelled(it, c.label)));
+    const rest = items.filter((it) => !modelCi.includes(it));
+    const ciFirst = [...forced, ...modelCi.map((it) => ({ ...it, source: "ci" }))];
+    items.length = 0;
+    items.push(...ciFirst, ...rest);
+
+    // The council's own hard dependencies go next, ahead of anything the
     // model found. "Pre-line building cannot be approved until pre-line
     // plumbing has been completed" isn't a detail to check on the wall — it
     // decides whether the inspection can happen at all, and getting it wrong
@@ -477,7 +541,9 @@ export async function generateChecklistItems(
       sourceRef: "Auckland Council · Building consents booklet AC1229 V13 · typical order of notifiable inspections",
       category: "Other" as const,
     }));
-    if (blockers.length) items.unshift(...blockers);
+    // Instructions stay at the very top ("item number one"); the blockers
+    // slot in right after them.
+    if (blockers.length) items.splice(ciFirst.length, 0, ...blockers);
 
     if (!items.length) {
       return {

@@ -93,6 +93,7 @@ export function CorrespondencePanel({
   consultants,
   subs,
   openDirectory,
+  onRaiseCi,
 }: {
   apiFetch: ApiFetch;
   projectId: string;
@@ -100,6 +101,8 @@ export function CorrespondencePanel({
   consultants: Consultant[];
   subs: Sub[];
   openDirectory: (tab: "consultants" | "subs") => void;
+  /** A client instruction often arrives as correspondence: raise the CI from it, prefilled. */
+  onRaiseCi?: (prefill: { title: string; body: string; issuedByName?: string }) => void;
 }) {
   const [list, setList] = useState<Row[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -421,6 +424,23 @@ export function CorrespondencePanel({
               {it.dateResponded && <div className="rf-kv"><span className="k2">Responded</span><span className="v">{fmt(it.dateResponded)}</span></div>}
               {it.type === "transmittal" && <div className="rf-kv"><span className="k2">Filed in Documents</span><span className="v">{it.attachments.filter((a) => a.filedAs).length} of {it.attachments.length}</span></div>}
             </div>
+            {onRaiseCi && it.status !== "draft" && (
+              <div className="rf-card">
+                <div className="k">Is this an instruction?</div>
+                <p className="page-sub" style={{ margin: "0 0 10px" }}>If the client, architect or engineer is instructing a change here, raise it as a CI so the assistant treats it as amending the drawings and it goes first on the related QA checks.</p>
+                <button
+                  className="lg-btn"
+                  style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }}
+                  onClick={() => {
+                    const theirs = open.messages.filter((m) => m.type === "message" && m.authorSide === "external");
+                    const last = theirs[theirs.length - 1];
+                    onRaiseCi({ title: it.subject, body: last ? last.body : it.body, issuedByName: [it.toName, it.toCompany].filter(Boolean).join(" · ") });
+                  }}
+                >
+                  Raise a CI from this
+                </button>
+              </div>
+            )}
             <div className="rf-card">
               <div className="k">How they reply</div>
               <p className="page-sub" style={{ margin: 0 }}>

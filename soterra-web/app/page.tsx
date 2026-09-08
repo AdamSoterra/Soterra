@@ -6,6 +6,7 @@ import { DOC_TYPES, DOC_TYPE_LABEL, docTypeOf, type DocType } from "@/lib/docTyp
 import Landing from "./landing";
 import { InstallHint } from "./components/install-hint";
 import { CorrespondencePanel } from "./components/correspondence-panel";
+import { InstructionsPanel, type CiPrefill } from "./components/instructions-panel";
 
 type Tab = "assistant" | "calendar" | "tasks" | "inspections" | "plans" | "upload" | "rfis" | "insights" | "programme";
 type Cite = {
@@ -91,8 +92,19 @@ type ChecklistItem = {
   source: string; sourceRef: string | null; status: "pending" | "ok" | "issue" | "na";
   note: string | null; checkedByName: string | null; photos: ChecklistPhoto[]; pins?: ItemPin[];
   sentTo?: string | null; sentAt?: string | null; sentStatus?: string | null;
+  // The close-out loop on a Needs-fixing item (2026-09-09): sent to a sub on
+  // its own, marked fixed with a photo, closed individually.
+  closeoutStatus?: string; readyAt?: string | null; closedAt?: string | null; closedByName?: string | null;
+  subNote?: string | null; reviewNote?: string | null; fixPhoto?: string | null;
   // Only present on a programme critique (kind='programme').
   findingType?: string | null; severity?: string | null;
+};
+// A failed item off a filed inspection report, with its close-out loop.
+type InsItem = {
+  id: string; category: string; title: string; detail: string | null; location: string | null;
+  workStatus?: string; sentTo?: string | null; sentAt?: string | null; sentStatus?: string | null;
+  closeoutStatus?: string; readyAt?: string | null; submittedAt?: string | null; closedAt?: string | null; closedByName?: string | null;
+  subNote?: string | null; reviewNote?: string | null; consultantName?: string | null; consultantEmail?: string | null; hasFixPhoto?: boolean;
 };
 // A subcontractor contact (Feature 4): company-scoped, trade = a category.
 type Sub = { id: string; name: string; email: string; trade: string | null };
@@ -352,7 +364,9 @@ function outcomeChip(source: string, outcome: string, itemCount: number): { cls:
 
 // Where a checklist item came from. An item with no source is a guess, so the
 // badge is deliberately loud about which of the three sources backed it.
-const SRC_LABEL: Record<string, string> = { plans: "Plans", code: "Code", manufacturer: "GIB manual", history: "Our history", ccc: "CCC pack", template: "Premade template", hsw: "HSWA / WorkSafe", manual: "Added", spec: "Spec", scope: "Scope", sequence: "Inspection order" };
+const SRC_LABEL: Record<string, string> = { ci: "Instruction", plans: "Plans", code: "Code", manufacturer: "GIB manual", history: "Our history", ccc: "CCC pack", template: "Premade template", hsw: "HSWA / WorkSafe", manual: "Added", spec: "Spec", scope: "Scope", sequence: "Inspection order" };
+// The close-out loop's status, as the site team reads it on an item.
+const CO_LABEL: Record<string, string> = { open: "not sent", sent: "with the sub", ready: "marked fixed", submitted: "with the consultant", closed: "closed out" };
 // Programme-critique finding types → the section heading each groups under.
 const FINDING_GROUPS: { key: string; label: string }[] = [
   { key: "missing_scope", label: "Missing scope" },
@@ -930,7 +944,16 @@ export default function Page() {
   const [izSearch, setIzSearch] = useState("");
   const [izDisc, setIzDisc] = useState(""); // "" = all trades
   const [izOutcome, setIzOutcome] = useState(""); // "" = all outcomes
-  const [openInspection, setOpenInspection] = useState<{ inspection: InspectionRow; items: { id: string; category: string; title: string; detail: string | null; location: string | null; workStatus?: string; sentTo?: string | null; sentAt?: string | null; sentStatus?: string | null }[] } | null>(null);
+  const [openInspection, setOpenInspection] = useState<{ inspection: InspectionRow; items: InsItem[] } | null>(null);
+  // Per-item send: when set, the send modal carries ONLY these items.
+  const [sendItemIds, setSendItemIds] = useState<string[] | null>(null);
+  const [insSendItemIds, setInsSendItemIds] = useState<string[] | null>(null);
+  // Per-item close-out: the item whose close / bounce / forward mini-form is open.
+  const [coFor, setCoFor] = useState<{ kind: "check" | "item"; id: string; mode: "close" | "reject" | "forward" } | null>(null);
+  const [coNote, setCoNote] = useState("");
+  const [coEmail, setCoEmail] = useState("");
+  const [coName, setCoName] = useState("");
+  const [coBusy, setCoBusy] = useState(false);
   const reportFileRef = useRef<HTMLInputElement>(null);
   const [repCurrent, setRepCurrent] = useState<{ name: string; phase: string; pct: number } | null>(null);
   const [repItems, setRepItems] = useState<{ name: string; ok: boolean; note: string }[]>([]);
@@ -1009,8 +1032,10 @@ export default function Page() {
   const [rfiList, setRfiList] = useState<RfiRow[]>([]);
   const [rfiLoaded, setRfiLoaded] = useState(false);
   const [rfiView, setRfiView] = useState<"reg" | "ana">("reg");
-  // The RFIs tab has two areas, like Inspections: RFIs | Correspondence.
-  const [rfiArea, setRfiArea] = useState<"rfis" | "corr">("rfis");
+  // The RFIs tab has three areas, like Inspections: RFIs | Correspondence | Instructions.
+  const [rfiArea, setRfiArea] = useState<"rfis" | "corr" | "ci">("rfis");
+  // A CI raised from a piece of correspondence arrives in the register prefilled.
+  const [ciPrefill, setCiPrefill] = useState<CiPrefill | null>(null);
   // Company settings shown in the Directory: the sign-in gate on external links.
   const [coSettings, setCoSettings] = useState<{ externalLoginRequired: boolean; inboundEnabled: boolean; role: string } | null>(null);
   const [rfiFilter, setRfiFilter] = useState<"all" | "open" | "overdue" | "answered" | "closed">("all");
@@ -2435,9 +2460,11 @@ export default function Page() {
       </>
     );
   };
-  const openInsSend = async () => {
+  // itemIds: send just these (one item to the sub responsible); omitted = every open item.
+  const openInsSend = async (itemIds?: string[]) => {
     if (!openInspection) return;
     setInsErr(null); setInsSendMsg("");
+    setInsSendItemIds(itemIds ?? null);
     let list: Sub[] = subsList;
     try {
       const r = await apiFetch("/api/subs");
@@ -2445,7 +2472,8 @@ export default function Page() {
       if (Array.isArray(d?.subs)) list = d.subs;
     } catch { /* manual add still works */ }
     setSubsList(list);
-    preTickRecipients(list, openInspection.items.filter((i) => (i.workStatus ?? "not_done") !== "done").map((i) => i.category));
+    const pool = openInspection.items.filter((i) => (i.workStatus ?? "not_done") !== "done" && (!itemIds || itemIds.includes(i.id)));
+    preTickRecipients(list, pool.map((i) => i.category));
     setInsSendOpen(true);
   };
   const sendInsItems = async () => {
@@ -2455,7 +2483,7 @@ export default function Page() {
     try {
       const r = await apiFetch("/api/inspections/send-items", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inspectionId: openInspection.inspection.id, ...recipientPayload(), message: insSendMsg.trim() || undefined }),
+        body: JSON.stringify({ inspectionId: openInspection.inspection.id, ...recipientPayload(), message: insSendMsg.trim() || undefined, ...(insSendItemIds ? { itemIds: insSendItemIds } : {}) }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Couldn't send just now.");
@@ -2484,9 +2512,10 @@ export default function Page() {
   };
   // Open the send-fixes modal: load the company's subs and pre-tick the ones
   // whose trade matches anything on the Needs-fixing list.
-  const openSendFixes = async () => {
+  const openSendFixes = async (itemIds?: string[]) => {
     if (!openChecklist) return;
     setSendErr(null); setSendMsg("");
+    setSendItemIds(itemIds ?? null);
     let list: Sub[] = [];
     try {
       const r = await apiFetch("/api/subs");
@@ -2494,7 +2523,8 @@ export default function Page() {
       if (Array.isArray(d?.subs)) list = d.subs;
     } catch { /* manual add still works */ }
     setSubsList(list);
-    preTickRecipients(list, openChecklist.items.filter((i) => i.status === "issue").map((i) => i.category));
+    const pool = openChecklist.items.filter((i) => i.status === "issue" && (!itemIds || itemIds.includes(i.id)));
+    preTickRecipients(list, pool.map((i) => i.category));
     setSendOpen(true);
   };
   const sendFixes = async () => {
@@ -2504,7 +2534,7 @@ export default function Page() {
     try {
       const r = await apiFetch("/api/checklists/send-fixes", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ checklistId: openChecklist.checklist.id, ...recipientPayload(), message: sendMsg.trim() || undefined }),
+        body: JSON.stringify({ checklistId: openChecklist.checklist.id, ...recipientPayload(), message: sendMsg.trim() || undefined, ...(sendItemIds ? { itemIds: sendItemIds } : {}) }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Couldn't send just now.");
@@ -2529,6 +2559,71 @@ export default function Page() {
       setSendBusy(false);
     }
   };
+  // ─── per-item close-out (checks + report items): close / reopen / bounce / forward ───
+  const closeoutAction = async (kind: "check" | "item", id: string, action: "close" | "reopen" | "reject" | "forward", extra: Record<string, unknown> = {}) => {
+    setCoBusy(true);
+    try {
+      const r = await apiFetch("/api/qa-closeout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, id, action, ...extra }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "That didn't work just now.");
+      setCoFor(null); setCoNote(""); setCoEmail(""); setCoName("");
+      if (kind === "check" && openChecklist) await openChecklistById(openChecklist.checklist.id);
+      if (kind === "item" && openInspection) {
+        const rr = await apiFetch(`/api/inspections?id=${encodeURIComponent(openInspection.inspection.id)}`);
+        const dd = await rr.json();
+        if (dd?.inspection) setOpenInspection(dd);
+      }
+      setCoLoaded(false); // the scorecard picks the change up next time it opens
+      return true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "That didn't work just now.";
+      if (kind === "check") setClErr(msg); else setInsErr(msg);
+      return false;
+    } finally { setCoBusy(false); }
+  };
+  /** The close-out line under a check item or a report item: status + the actions that make sense now. */
+  const renderCloseout = (kind: "check" | "item", it: { id: string; closeoutStatus?: string; readyAt?: string | null; closedAt?: string | null; closedByName?: string | null; subNote?: string | null; reviewNote?: string | null; sentTo?: string | null; consultantName?: string | null; consultantEmail?: string | null; hasPhoto: boolean; canSend: boolean; consultantReport?: boolean }) => {
+    const st = it.closeoutStatus ?? "open";
+    const d = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString("en-NZ", { day: "numeric", month: "short" }) : "");
+    const mini = coFor?.kind === kind && coFor.id === it.id ? coFor.mode : null;
+    return (
+      <div className="ck-co">
+        <span className={"st " + st}>{CO_LABEL[st] ?? st}</span>
+        {st === "ready" && <span>fixed by {it.sentTo || "the sub"}{it.readyAt ? ` · ${d(it.readyAt)}` : ""}</span>}
+        {st === "submitted" && <span>{it.consultantName || it.consultantEmail || "consultant"} to sign off</span>}
+        {st === "closed" && <span>{it.closedByName ? `by ${it.closedByName}` : ""}{it.closedAt ? ` · ${d(it.closedAt)}` : ""}</span>}
+        {st !== "closed" && it.canSend && <button disabled={coBusy} onClick={() => void (kind === "check" ? openSendFixes([it.id]) : openInsSend([it.id]))}>✉ {st === "open" ? "Send to sub" : "Resend"}</button>}
+        {st !== "closed" && <button className="go" disabled={coBusy} onClick={() => { setCoFor({ kind, id: it.id, mode: "close" }); setCoNote(""); }}>✓ Close out</button>}
+        {st === "ready" && <button disabled={coBusy} onClick={() => { setCoFor({ kind, id: it.id, mode: "reject" }); setCoNote(""); }}>↩ Bounce back</button>}
+        {st === "ready" && kind === "item" && it.consultantReport && <button disabled={coBusy} onClick={() => { setCoFor({ kind, id: it.id, mode: "forward" }); setCoName(it.consultantName ?? ""); setCoEmail(it.consultantEmail ?? ""); }}>→ Forward for sign-off</button>}
+        {st === "closed" && <button disabled={coBusy} onClick={() => void closeoutAction(kind, it.id, "reopen")}>Reopen</button>}
+        {it.subNote && (st === "ready" || st === "submitted" || st === "closed") && <div className="note"><b>{it.sentTo || "Sub"}:</b> {it.subNote}</div>}
+        {it.reviewNote && <div className="note"><b>Note:</b> {it.reviewNote}</div>}
+        {it.hasPhoto && (st === "ready" || st === "submitted" || st === "closed") && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="fixpic" alt="The sub's photo of the fix" src={`/api/qa-closeout/photo?kind=${kind}&id=${encodeURIComponent(it.id)}`} />
+        )}
+        {mini && (
+          <div className="note" style={{ background: "#fff" }}>
+            {mini === "forward" && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                <input className="ev-in" style={{ flex: 1, minWidth: 140 }} value={coName} placeholder="Consultant's name" onChange={(e) => setCoName(e.target.value)} />
+                <input className="ev-in" style={{ flex: 1.4, minWidth: 180 }} type="email" value={coEmail} placeholder="their@email.co.nz" onChange={(e) => setCoEmail(e.target.value)} />
+              </div>
+            )}
+            <textarea className="ev-in" rows={2} autoFocus value={coNote} placeholder={mini === "close" ? "Note (optional) - e.g. checked on site, collar in and sealed" : mini === "reject" ? "What still needs doing (the sub sees this)" : "A note for the consultant (optional)"} onChange={(e) => setCoNote(e.target.value)} />
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button className="go" disabled={coBusy || (mini === "reject" && !coNote.trim()) || (mini === "forward" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(coEmail.trim()))} onClick={() => void closeoutAction(kind, it.id, mini, mini === "forward" ? { note: coNote, name: coName, email: coEmail } : { note: coNote })}>
+                {coBusy ? "Saving…" : mini === "close" ? "Close it out" : mini === "reject" ? "Bounce it back" : "Send for sign-off"}
+              </button>
+              <button disabled={coBusy} onClick={() => setCoFor(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ─── QA flag actions (Feature 7) ───
   const loadSubs = async () => {
     try {
@@ -4240,6 +4335,7 @@ export default function Page() {
               <div className="rf-area">
                 <button className={"rf-areab" + (rfiArea === "rfis" ? " act" : "")} onClick={() => setRfiArea("rfis")}>RFIs</button>
                 <button className={"rf-areab" + (rfiArea === "corr" ? " act" : "")} onClick={() => { setRfiArea("corr"); void loadConsultants(); void loadSubs(); }}>Correspondence</button>
+                <button className={"rf-areab" + (rfiArea === "ci" ? " act" : "")} onClick={() => setRfiArea("ci")}>Instructions</button>
               </div>
             )}
             {rfiArea === "corr" && !rfiOpen && projectId && (
@@ -4250,6 +4346,17 @@ export default function Page() {
                 consultants={conList}
                 subs={subsList}
                 openDirectory={openDirectory}
+                onRaiseCi={(p) => { setCiPrefill(p); setRfiArea("ci"); }}
+              />
+            )}
+            {rfiArea === "ci" && !rfiOpen && projectId && (
+              <InstructionsPanel
+                apiFetch={apiFetch}
+                projectId={projectId}
+                projName={projName}
+                categories={TRADES}
+                prefill={ciPrefill}
+                onPrefillUsed={() => setCiPrefill(null)}
               />
             )}
             {rfiArea === "rfis" && !rfiOpen && (
@@ -4969,7 +5076,7 @@ export default function Page() {
               {!insBusy && <button className="sh-x" onClick={() => setInsSendOpen(false)}>✕</button>}
             </div>
             <div className="form-body">
-              {openInspection.items.map((it, i) => (it.workStatus ?? "not_done") !== "done" ? (
+              {openInspection.items.map((it, i) => (it.workStatus ?? "not_done") !== "done" && (!insSendItemIds || insSendItemIds.includes(it.id)) ? (
                 <div key={it.id} className="sf-row">
                   <div className="sf-txt">
                     <b>{i + 1}. {it.title}</b>
@@ -4983,11 +5090,11 @@ export default function Page() {
               <label className="ev-lbl" style={{ marginTop: 14 }}>Message (top of the email)</label>
               <textarea
                 className="ev-in" rows={2} value={insSendMsg}
-                placeholder="The inspection failed these items - please work through the list and reply when each is done."
+                placeholder={insSendItemIds ? "This item failed the inspection - please put it right and tap Mark it fixed with a photo." : "The inspection failed these items - please work through the list and reply when each is done."}
                 onChange={(e) => setInsSendMsg(e.target.value)}
               />
               <p className="page-sub" style={{ margin: "10px 0 0" }}>
-                Everyone picked gets the full list in one email, in the inspector&apos;s own words. Every send is recorded on the items and the project log.
+                {insSendItemIds ? "Just this item goes, with its own Mark-it-fixed link, in the inspector's own words." : "Everyone picked gets the full list in one email, in the inspector's own words."} Every send is recorded on the item and the project log.
               </p>
               {insErr && <div className="ev-err">{insErr}</div>}
               <div className="form-actions">
@@ -5248,7 +5355,7 @@ export default function Page() {
               {!sendBusy && <button className="sh-x" onClick={() => setSendOpen(false)}>✕</button>}
             </div>
             <div className="form-body">
-              {openChecklist.items.map((it, i) => it.status === "issue" ? (
+              {openChecklist.items.map((it, i) => it.status === "issue" && it.closeoutStatus !== "closed" && (!sendItemIds || sendItemIds.includes(it.id)) ? (
                 <div key={it.id} className="sf-row">
                   <div className="sf-txt">
                     <b>{i + 1}. {it.title}</b>
@@ -5266,7 +5373,7 @@ export default function Page() {
                 onChange={(e) => setSendMsg(e.target.value)}
               />
               <p className="page-sub" style={{ margin: "10px 0 0" }}>
-                Everyone picked gets the full list in one email, from {projName ? `your ${projName}` : "this site's"} Soterra address - pins, photos and notes ride along, and replies land in your own inbox. Every send is recorded on the items and the project log.
+                {sendItemIds ? "Just this item goes, with its own Mark-it-fixed link, " : "Everyone picked gets the full list in one email, "}from {projName ? `your ${projName}` : "this site's"} Soterra address - pins, photos and notes ride along. Every send is recorded on the item and the project log.
               </p>
 
               {sendErr && <div className="ev-err">{sendErr}</div>}
@@ -5735,16 +5842,20 @@ export default function Page() {
                       {it.sentStatus === "sent" ? " · recorded" : " · emails when sending goes live"}
                     </div>
                   )}
+                  {/* Each Needs-fixing item runs its own close-out: send it to the sub on its
+                      own, see it marked fixed, close it out individually. */}
+                  {openChecklist.checklist.kind !== "swms" && (it.status === "issue" || (it.closeoutStatus && it.closeoutStatus !== "open")) &&
+                    renderCloseout("check", { ...it, hasPhoto: !!it.fixPhoto, canSend: it.status === "issue" })}
                 </div>
               ))}
               {openChecklist.items.length === 0 && <div className="page-sub" style={{ marginBottom: 0 }}>This check has no items.</div>}
-              {openChecklist.checklist.kind !== "swms" && openChecklist.items.some((i) => i.status === "issue") && (
+              {openChecklist.checklist.kind !== "swms" && openChecklist.items.some((i) => i.status === "issue" && i.closeoutStatus !== "closed") && (
                 <div className="ck-sendbar">
                   <div className="cs-txt">
-                    <b>{openChecklist.items.filter((i) => i.status === "issue").length} need{openChecklist.items.filter((i) => i.status === "issue").length === 1 ? "s" : ""} fixing</b>
-                    <small>Email each one to the sub responsible. Pins, photos and notes ride along, and it&apos;s recorded on the item.</small>
+                    <b>{openChecklist.items.filter((i) => i.status === "issue" && i.closeoutStatus !== "closed").length} still to close out</b>
+                    <small>Send them all in one email, or each one on its own from the item above. Pins, photos and notes ride along; every item is closed individually.</small>
                   </div>
-                  <button className="lg-btn primary" style={{ height: 40, margin: 0, width: "auto", padding: "0 16px", fontSize: 13.5, flexShrink: 0 }} onClick={() => void openSendFixes()}>Send to subs</button>
+                  <button className="lg-btn primary" style={{ height: 40, margin: 0, width: "auto", padding: "0 16px", fontSize: 13.5, flexShrink: 0 }} onClick={() => void openSendFixes()}>Send all to subs</button>
                 </div>
               )}
             </div>
@@ -5861,17 +5972,20 @@ export default function Page() {
                           {it.sentStatus === "sent" ? "" : " · emails when sending goes live"}
                         </div>
                       )}
+                      {/* Each failed item runs its own close-out: one item to one sub, closed on its
+                          own, forwarded for sign-off when it came off a consultant's report. */}
+                      {renderCloseout("item", { ...it, hasPhoto: !!it.hasFixPhoto, canSend: (it.workStatus ?? "not_done") !== "done", consultantReport: openInspection.inspection.source === "consultant" })}
                     </div>
                   </div>
                 ))
               )}
-              {openInspection.items.some((i) => (i.workStatus ?? "not_done") !== "done") && (
+              {openInspection.items.some((i) => (i.workStatus ?? "not_done") !== "done" && i.closeoutStatus !== "closed") && (
                 <div className="ck-sendbar">
                   <div className="cs-txt">
-                    <b>{openInspection.items.filter((i) => (i.workStatus ?? "not_done") !== "done").length} still to close out</b>
-                    <small>Email each failed item to the sub responsible, in the inspector&apos;s own words. Recorded on the item until it&apos;s done.</small>
+                    <b>{openInspection.items.filter((i) => (i.workStatus ?? "not_done") !== "done" && i.closeoutStatus !== "closed").length} still to close out</b>
+                    <small>Send them all in one email, in the inspector&apos;s own words, or each one on its own from the item above. Every item is closed individually.</small>
                   </div>
-                  <button className="lg-btn primary" style={{ height: 40, margin: 0, width: "auto", padding: "0 16px", fontSize: 13.5, flexShrink: 0 }} onClick={() => void openInsSend()}>Send to subs</button>
+                  <button className="lg-btn primary" style={{ height: 40, margin: 0, width: "auto", padding: "0 16px", fontSize: 13.5, flexShrink: 0 }} onClick={() => void openInsSend()}>Send all to subs</button>
                 </div>
               )}
               {/* A badly-read report used to be permanent — the only correction
