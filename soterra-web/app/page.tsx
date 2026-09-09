@@ -1059,6 +1059,8 @@ export default function Page() {
   // Everyone the new RFI is assigned to (the PM decides: architect + electrical
   // engineer, say). The first is the accountable one; the typed fields add one more.
   const [nrAssignees, setNrAssignees] = useState<RfiAssignee[]>([]);
+  const [nrCompany, setNrCompany] = useState<string | null>(null); // the firm whose people are showing
+  const [nrManual, setNrManual] = useState(false); // "someone not in the directory" row open
   // Files on the New RFI form upload straight to the private store (under a
   // per-form staging key) and are recorded on the draft when it is created.
   // Follow-ups and drafts carry their own files under the RFI's folder.
@@ -3032,6 +3034,8 @@ export default function Page() {
       setNewRfiOpen(false);
       setNrFiles([]);
       setNrAssignees([]);
+      setNrCompany(null);
+      setNrManual(false);
       nrKeyRef.current = Math.random().toString(36).slice(2, 10);
       setNr({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "", criticalPath: false, costImpact: "unknown", costEstimate: "", programmeImpact: "unknown", programmeDays: "" });
     } catch (e) {
@@ -5352,27 +5356,62 @@ export default function Page() {
               <button type="button" className="co-drop" disabled={nrUploading || rfiBusy} onClick={() => nrFileRef.current?.click()}>
                 {nrUploading ? "Uploading…" : "📎 Attach files (drawings, photos, documents)"}
               </button>
-              {/* Assigned to: as many consultants as the job needs (the architect AND the
-                  electrical engineer, say) - the PM decides. Tap saved consultants to add
-                  them; anyone new is typed once and saved to the Directory on send. The
-                  first one listed is the accountable party the clock counts against. */}
+              {/* Assigned to: company FIRST, then the people at that company, email
+                  filled in for you (Adam 2026-09-10: "we should not even be typing
+                  email"). As many as the job needs; the first one listed is the
+                  accountable party. Someone not in the directory is the last resort,
+                  tucked away, and is saved to the directory on send. */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
-                <label className="ev-lbl" style={{ margin: 0 }}>Assigned to <span className="opt">· pick as many as it needs</span></label>
+                <label className="ev-lbl" style={{ margin: 0 }}>Assigned to <span className="opt">· pick the company, then the person</span></label>
                 <button type="button" className="dir-link" style={{ marginLeft: "auto" }} onClick={() => openDirectory("consultants")}>Manage directory</button>
               </div>
-              {conList.length > 0 && (
-                <div className="rf-filters" style={{ marginBottom: 0, marginTop: 6 }}>
-                  {conList.map((c) => {
-                    const em = c.email.toLowerCase();
-                    const on = nrAssignees.some((a) => a.email === em);
-                    return (
-                      <button key={c.id} type="button" className={"rf-f" + (on ? " act" : "")} title={c.email} onClick={() => setNrAssignees((xs) => (on ? xs.filter((a) => a.email !== em) : [...xs, { name: c.name, company: c.company, email: em }]))}>
-                        {[c.name, c.company].filter(Boolean).join(" · ") || c.email}{c.discipline ? ` · ${c.discipline}` : ""}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              {(() => {
+                // Saved consultants grouped by firm; a consultant with no firm sits under their own name.
+                const groups = new Map<string, Consultant[]>();
+                for (const c of conList) {
+                  const key = (c.company || c.name || c.email).trim();
+                  groups.set(key, [...(groups.get(key) ?? []), c]);
+                }
+                const companies = [...groups.keys()].sort((a, b) => a.localeCompare(b));
+                const people = nrCompany ? groups.get(nrCompany) ?? [] : [];
+                const chosenAt = (co: string) => nrAssignees.filter((a) => (groups.get(co) ?? []).some((c) => c.email.toLowerCase() === a.email)).length;
+                return (
+                  <>
+                    {companies.length > 0 ? (
+                      <div className="rf-filters" style={{ marginBottom: 0, marginTop: 6 }}>
+                        {companies.map((co) => {
+                          const n = chosenAt(co);
+                          const disc = [...new Set((groups.get(co) ?? []).map((c) => c.discipline).filter(Boolean))].join(", ");
+                          return (
+                            <button key={co} type="button" className={"rf-f" + (nrCompany === co ? " act" : "")} style={n ? { borderColor: "var(--brand)" } : undefined} onClick={() => setNrCompany(nrCompany === co ? null : co)}>
+                              {co}{disc ? ` · ${disc}` : ""}{n ? ` · ${n} picked` : ""}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="page-sub" style={{ margin: "6px 0 0", fontSize: 12.5 }}>No consultants saved yet. Add them in the Directory once and pick them here every time after; or type one below.</p>
+                    )}
+                    {nrCompany && (
+                      <div className="rf-prop" style={{ marginTop: 8, padding: "10px 12px" }}>
+                        <div className="k" style={{ marginBottom: 6, fontSize: 10, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--mut)" }}>Who at {nrCompany}</div>
+                        <div className="rf-filters" style={{ marginBottom: 0 }}>
+                          {people.map((c) => {
+                            const em = c.email.toLowerCase();
+                            const on = nrAssignees.some((a) => a.email === em);
+                            return (
+                              <button key={c.id} type="button" className={"rf-f" + (on ? " act" : "")} title={c.email} onClick={() => setNrAssignees((xs) => (on ? xs.filter((a) => a.email !== em) : [...xs, { name: c.name, company: c.company, email: em }]))}>
+                                {on ? "✓ " : ""}{c.name || c.email}{c.discipline ? ` · ${c.discipline}` : ""}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="page-sub" style={{ margin: "6px 0 0", fontSize: 12 }}>Tap a name to add them. Their email comes from the directory.</p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
               {nrAssignees.length > 0 && (
                 <div style={{ marginTop: 8 }}>
                   {nrAssignees.map((a, i) => (
@@ -5388,21 +5427,25 @@ export default function Page() {
                   ))}
                 </div>
               )}
-              <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "flex-end" }}>
-                <div style={{ flex: 1 }}>
-                  <label className="ev-lbl">{nrAssignees.length ? "Add someone else" : "Or type who it goes to"}</label>
-                  <input className="ev-in" value={nr.consultantName} placeholder="Jane Smith" onChange={(e) => setNr((v) => ({ ...v, consultantName: e.target.value }))} />
+              {!nrManual ? (
+                <button type="button" className="dir-link" style={{ marginTop: 10, display: "inline-block" }} onClick={() => setNrManual(true)}>Someone not in the directory…</button>
+              ) : (
+                <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "flex-end" }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="ev-lbl">Name</label>
+                    <input className="ev-in" value={nr.consultantName} placeholder="Jane Smith" onChange={(e) => setNr((v) => ({ ...v, consultantName: e.target.value }))} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="ev-lbl">Their company</label>
+                    <input className="ev-in" value={nr.consultantCompany} placeholder="Holmes Structural" onChange={(e) => setNr((v) => ({ ...v, consultantCompany: e.target.value }))} />
+                  </div>
+                  <div style={{ flex: 1.2 }}>
+                    <label className="ev-lbl">Their email</label>
+                    <input className="ev-in" type="email" value={nr.consultantEmail} placeholder="jane@holmes.co.nz" onChange={(e) => setNr((v) => ({ ...v, consultantEmail: e.target.value }))} />
+                  </div>
+                  <button type="button" className="lg-btn" style={{ height: 42, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} disabled={!EMAIL_OK.test(nr.consultantEmail.trim())} onClick={addTypedAssignee}>Add</button>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label className="ev-lbl">Their company</label>
-                  <input className="ev-in" value={nr.consultantCompany} placeholder="Holmes Structural" onChange={(e) => setNr((v) => ({ ...v, consultantCompany: e.target.value }))} />
-                </div>
-                <div style={{ flex: 1.2 }}>
-                  <label className="ev-lbl">Their email</label>
-                  <input className="ev-in" type="email" value={nr.consultantEmail} placeholder="jane@holmes.co.nz" onChange={(e) => setNr((v) => ({ ...v, consultantEmail: e.target.value }))} />
-                </div>
-                <button type="button" className="lg-btn" style={{ height: 42, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} disabled={!EMAIL_OK.test(nr.consultantEmail.trim())} onClick={addTypedAssignee}>Add</button>
-              </div>
+              )}
               <div style={{ marginTop: 12 }}>
                 <label className="ev-lbl">Cc</label>
                 <input className="ev-in" value={nr.cc} placeholder="everyone else who should know" onChange={(e) => setNr((v) => ({ ...v, cc: e.target.value }))} />
