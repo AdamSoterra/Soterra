@@ -21,6 +21,7 @@ import { demoPagesFor } from "@/lib/standardDemo";
 import { canSeeStandardsDemo, getManufacturerIndex, manufacturerLabel, visibleTo } from "@/lib/manufacturerIndex";
 import { companyIdForProject, type Scope } from "@/lib/company";
 import { searchHistory } from "@/lib/history";
+import { searchProgrammeReviews } from "@/lib/programmeReviews";
 import { generateChecklistItems, createChecklist } from "@/lib/checklist";
 import { orderForPrompt } from "@/lib/inspectionOrder";
 
@@ -214,6 +215,20 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
         category: { type: "string", description: "Optional category filter: Structural, Weathertightness / Cladding, Fire, Electrical, Plumbing & Drainage, Mechanical, Interior / Linings, Access & Barriers, Site / External, Acoustic, Seismic, Architect." },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "search_programme_reviews",
+    description:
+      "Read THIS SITE's own programme reviews - the findings Soterra raised when the build programme was uploaded and checked against the job (Upload tab → Build programme): scope that is missing from the programme, activities out of sequence, durations that look unrealistic, and council inspection hold-points the programme leaves out. Call it for anything about how the job is PLANNED or sequenced: 'what did the programme review flag?', 'did the programme miss any inspections?', 'is pre-line sequenced right?', 'what did the review say about the cladding?', 'are there hold-points before the roof goes on?'. Results are this project's own reviews, newest first, each finding with its severity and the programme line it came from. Answer from the rows it returns, name the review and its date, and say when a finding is from an older review that a newer one may have superseded. If there are no reviews, say the programme has not been reviewed yet and that a PDF export can be dropped on the Upload tab. This is context on the plan, NEVER authority for what to build - the drawings, CIs and the Code decide that.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to look for, in plain English (e.g. 'pre-line', 'cladding sequence', 'hold points', 'roof'). Leave empty to get the newest review's findings." },
+        severity: { type: "string", description: "Optional: only findings of this severity - high, medium or low." },
+        finding_type: { type: "string", description: "Optional: missing_scope | out_of_sequence | unrealistic_duration | missing_hold_point." },
+      },
+      required: [],
     },
   },
   {
@@ -918,6 +933,23 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         };
       }
 
+      case "search_programme_reviews": {
+        // The programme is the job's own, so this reads THIS project only (the
+        // verified scope), unlike search_history which spans the company.
+        if (!ctx.scope) return { content: JSON.stringify({ reviews: [], findings: [], note: "No programme reviews are set up for this site yet." }), cards: [] };
+        const res = await searchProgrammeReviews(ctx.scope, s(input.query) ?? "", { severity: s(input.severity), findingType: s(input.finding_type), limit: 30 });
+        if (res.reviews.length === 0) return { content: JSON.stringify({ reviews: [], findings: [], note: "The build programme has not been reviewed on this site yet. A PDF export of the programme can be dropped on the Upload tab under Build programme." }), cards: [] };
+        if (res.findings.length === 0) return { content: JSON.stringify({ reviews: res.reviews, findings: [], note: "This site's programme reviews have no finding matching that. The reviews on file are listed." }), cards: [] };
+        return {
+          content: JSON.stringify({
+            note: "These are THIS site's own programme review findings (newest review first). Name the review and date; a finding from an older review may be superseded by a newer one.",
+            reviews: res.reviews,
+            findings: res.findings.map((f) => ({ review: f.review, reviewedOn: f.reviewedOn, type: f.typeLabel, severity: f.severity, finding: f.title, detail: f.detail, programmeLine: f.programmeLine })),
+          }),
+          cards: [],
+        };
+      }
+
       case "create_checklist": {
         // The interactive checklist saves to a company + site, so it needs the
         // verified scope. A legacy project with no company can't hold one.
@@ -1218,6 +1250,8 @@ Never invent a proprietary figure, and never present a general or web figure as 
 4) CONSTRUCTION EXPERT — general construction knowledge (methods, sequencing, materials, detailing, terminology, H&S, best practice) from your own expertise — no "Source:" line. This is for GENERIC know-how only. You may NOT use it to state any manufacturer's product figure, spec, material, rating or system requirement — those MUST go through search_manufacturer (section 3), and a Building-Code requirement MUST go through search_code (section 2). Use web_search only for genuinely general external context, never to source a GIB product spec.
 PRIORITY — THE ORDER OF PRECEDENCE. For anything about THIS project, the project's own record governs, in this order, higher beating lower wherever they disagree: (1) CONTRACT INSTRUCTIONS and site instructions, latest first, and (2) ANSWERED RFIs — both live in search_directives; (3) the LATEST REVISION of any document; (4) the project SPECIFICATION and the DRAWINGS, which sit at the SAME level — search_plans/review_plans read both, and a spec page carries the same authority as a drawing sheet. If the spec and a drawing conflict on the same item and no CI, RFI answer or newer revision resolves it, give BOTH figures, say plainly that the project documents disagree, and recommend raising an RFI — never quietly pick one; (5) CONSULTANT REPORTS and PRODUCER STATEMENTS, which govern within their own discipline; (6) the BUILDING CODE (search_code) — a FLOOR, never a ceiling: the job may exceed it and never go below it, so a stricter project or manufacturer requirement governs over the Code minimum, and no project document can relax a Code requirement; (7) the NZ STANDARDS the Code cites; (8) the MANUFACTURER'S manual for the SPECIFIED product (search_manufacturer); (9) company inspection HISTORY (search_history) — context on what keeps going wrong, never authority for what to build. Cross-cutting rules: the latest document beats the earlier one (judged by the uploaded date, per the REVISIONS rule above); a specific detail beats a general note; figured dimensions beat scaled. So for a project question, search_plans comes first (plus search_directives when something may have changed); if the project documents don't cover it, then the Code or the maker's manual as the question needs. When a question is purely about a GIB product or system (not tied to this project's drawings), go straight to search_manufacturer.
 5) INSPECTION HISTORY — answer "what have we been pulled up on before?" by calling search_history. It searches THIS COMPANY's own filed inspection reports (all their sites, council and consultant). Use it for "what failed on the last cavity wrap?", "do we keep failing passive fire?", "what did the inspector pick up at pre-line last time?", and whenever someone is preparing for an inspection. Answer from the rows it returns — say how many times a thing has come up and when it last did, because the repeat count is the point. It is this builder's own data, so be direct about it. Never present it as a code requirement; it's what happened.
+5b) PROGRAMME REVIEWS — answer "what did the programme review flag?" by calling search_programme_reviews. It reads THIS SITE's own reviews of the uploaded build programme (Upload tab → Build programme): missing scope, activities out of sequence, unrealistic durations, and council inspection hold-points the programme leaves out, each with a severity and the programme line it came from. Use it for anything about how the job is planned or sequenced — "did the programme miss any inspections?", "is pre-line in the right order?", "what did the review say about the roof?" — and when someone is planning the next few weeks. Answer from the rows it returns, name the review and its date, and flag a finding that comes from an older review a newer one may have replaced. If no review exists, say so and point them at the Upload tab. It is context on the plan, never authority: the drawings, the CIs and the Code say what to build; the review only says where the programme looks wrong about it.
+
 6) CHECKS & SAFETY PLANS — these are interactive TOOLS, not prose. When the user asks you to make/generate/prep a QA or inspection checklist, call create_checklist. When they ask for a safety plan, SWMS, JSA, task/site risk assessment or "the H&S for <task>", call create_safety_plan (grounded in HSWA 2015 + WorkSafe good practice). Don't write either out as text yourself — the tool builds the tickable version and returns a card. A plain H&S question they just want answered ("do I need edge protection here?") is your own expertise (section 4), not a plan to build. Soterra is NOT a calendar or scheduler: you do not book events, set reminders or manage to-dos. If asked to schedule something, say that lives in their own calendar, and offer what you DO own — get them ready for that inspection and build the check.
 
 If the user attaches a photo or PDF, read it and answer about it.
@@ -1365,6 +1399,7 @@ export async function POST(req: Request) {
     search_manufacturer: "Checking the manufacturer's manual…",
     search_determinations: "Checking MBIE determinations…",
     search_history: "Checking your inspection history…",
+    search_programme_reviews: "Reading the programme reviews…",
     standards_handoff: "Finding the standard…",
     create_checklist: "Building the check…",
     create_safety_plan: "Building the safety plan…",
