@@ -84,11 +84,13 @@ function tokenScope(row: { projectId: string; companyId: string }): Scope {
 async function bySubToken(token: string): Promise<FoundDefect | null> {
   const clean = token.trim();
   if (!TOKEN_RE.test(clean)) return null;
-  const [flag] = await db.select().from(qaFlags).where(eq(qaFlags.subToken, clean)).limit(1);
+  // lower() on both sides: an MTA may fold the local part of a reply address.
+  const lc = clean.toLowerCase();
+  const [flag] = await db.select().from(qaFlags).where(sql`lower(${qaFlags.subToken}) = ${lc}`).limit(1);
   if (flag) return { kind: "flag", row: flag };
-  const [item] = await db.select().from(inspectionItems).where(eq(inspectionItems.subToken, clean)).limit(1);
+  const [item] = await db.select().from(inspectionItems).where(sql`lower(${inspectionItems.subToken}) = ${lc}`).limit(1);
   if (item) return { kind: "item", row: item };
-  const [check] = await db.select().from(checklistItems).where(eq(checklistItems.subToken, clean)).limit(1);
+  const [check] = await db.select().from(checklistItems).where(sql`lower(${checklistItems.subToken}) = ${lc}`).limit(1);
   if (check) return { kind: "check", row: check };
   return null;
 }
@@ -97,7 +99,7 @@ async function bySubToken(token: string): Promise<FoundDefect | null> {
 async function byConsultantToken(token: string): Promise<ItemRow | null> {
   const clean = token.trim();
   if (!TOKEN_RE.test(clean)) return null;
-  const [item] = await db.select().from(inspectionItems).where(eq(inspectionItems.consultantToken, clean)).limit(1);
+  const [item] = await db.select().from(inspectionItems).where(sql`lower(${inspectionItems.consultantToken}) = ${clean.toLowerCase()}`).limit(1);
   return item ?? null;
 }
 
@@ -132,31 +134,48 @@ function fixUrl(token: string): string {
   return `${APP_URL}/fix/${token}`;
 }
 
-/** Mint + persist a flag's sub_token if absent; return its "Mark it fixed" url. */
-export async function armFlagFix(scope: Scope, flagId: string): Promise<{ token: string; url: string } | null> {
+/** Mint + persist a flag's sub_token if absent; return its "Mark it fixed" url.
+ *  `forEmail` = who this send goes to: a different sub than last time gets a
+ *  fresh token, so the previous sub's link stops working. */
+export async function armFlagFix(scope: Scope, flagId: string, forEmail?: string | null): Promise<{ token: string; url: string } | null> {
   const [flag] = await db
-    .select({ id: qaFlags.id, subToken: qaFlags.subToken })
+    .select({ id: qaFlags.id, subToken: qaFlags.subToken, subEmail: qaFlags.subEmail })
     .from(qaFlags)
     .where(and(eq(qaFlags.id, flagId), eq(qaFlags.projectId, scope.projectId)))
     .limit(1);
   if (!flag) return null;
-  const token = flag.subToken ?? mintToken();
-  if (!flag.subToken) await db.update(qaFlags).set({ subToken: token }).where(eq(qaFlags.id, flagId));
+  const sameSub = !forEmail || !flag.subEmail || normalizeEmail(flag.subEmail) === normalizeEmail(forEmail);
+  const token = flag.subToken && sameSub ? flag.subToken : mintToken();
+  if (token !== flag.subToken) await db.update(qaFlags).set({ subToken: token }).where(eq(qaFlags.id, flagId));
   return { token, url: fixUrl(token) };
+}
+
+/** A stored token is reused only while the send still goes to (at least one
+ *  of) the people it went to before; a send to a different sub gets a fresh
+ *  one, so the previous sub's link stops working. */
+function reuseToken(stored: string | null, storedEmailsJson: string | null, forEmails: string[] | undefined): boolean {
+  if (!stored) return false;
+  if (!forEmails || !forEmails.length || !storedEmailsJson) return true;
+  try {
+    const prev = (JSON.parse(storedEmailsJson) as string[]).map((e) => normalizeEmail(String(e)));
+    return forEmails.some((e) => prev.includes(normalizeEmail(e)));
+  } catch {
+    return true;
+  }
 }
 
 /** Mint + persist sub_tokens for a batch of QA CHECK items (checklist_items);
  *  return id -> url + token. Same shape as armItemsFix. */
-export async function armChecksFix(scope: Scope, itemIds: string[]): Promise<Map<string, { url: string; token: string }>> {
+export async function armChecksFix(scope: Scope, itemIds: string[], forEmails?: string[]): Promise<Map<string, { url: string; token: string }>> {
   const out = new Map<string, { url: string; token: string }>();
   if (!itemIds.length) return out;
   const rows = await db
-    .select({ id: checklistItems.id, subToken: checklistItems.subToken })
+    .select({ id: checklistItems.id, subToken: checklistItems.subToken, subEmails: checklistItems.subEmails })
     .from(checklistItems)
     .where(and(eq(checklistItems.companyId, scope.companyId), eq(checklistItems.projectId, scope.projectId), inArray(checklistItems.id, itemIds)));
   for (const r of rows) {
-    const token = r.subToken ?? mintToken();
-    if (!r.subToken) await db.update(checklistItems).set({ subToken: token }).where(eq(checklistItems.id, r.id));
+    const token = reuseToken(r.subToken, r.subEmails, forEmails) ? r.subToken! : mintToken();
+    if (token !== r.subToken) await db.update(checklistItems).set({ subToken: token }).where(eq(checklistItems.id, r.id));
     out.set(r.id, { url: fixUrl(token), token });
   }
   return out;
@@ -165,11 +184,11 @@ export async function armChecksFix(scope: Scope, itemIds: string[]): Promise<Map
 /** Mint + persist sub_tokens for a batch of inspection items; return id -> url
  *  (+ the token, for the reply address). Items already carrying a token keep
  *  it (a resend reuses the same link). */
-export async function armItemsFix(scope: Scope, itemIds: string[]): Promise<Map<string, { url: string; token: string }>> {
+export async function armItemsFix(scope: Scope, itemIds: string[], forEmails?: string[]): Promise<Map<string, { url: string; token: string }>> {
   const out = new Map<string, { url: string; token: string }>();
   if (!itemIds.length) return out;
   const rows = await db
-    .select({ id: inspectionItems.id, subToken: inspectionItems.subToken })
+    .select({ id: inspectionItems.id, subToken: inspectionItems.subToken, subEmails: inspectionItems.subEmails })
     .from(inspectionItems)
     .where(
       and(
@@ -179,8 +198,8 @@ export async function armItemsFix(scope: Scope, itemIds: string[]): Promise<Map<
       )
     );
   for (const r of rows) {
-    const token = r.subToken ?? mintToken();
-    if (!r.subToken) await db.update(inspectionItems).set({ subToken: token }).where(eq(inspectionItems.id, r.id));
+    const token = reuseToken(r.subToken, r.subEmails, forEmails) ? r.subToken! : mintToken();
+    if (token !== r.subToken) await db.update(inspectionItems).set({ subToken: token }).where(eq(inspectionItems.id, r.id));
     out.set(r.id, { url: fixUrl(token), token });
   }
   return out;
@@ -233,7 +252,7 @@ export async function defectsForEmails(emails: string[]): Promise<{ fixes: Found
   // pre-filter must let the tagged rows through, the exact match below
   // (subEmailsOf) then decides.
   const variants = lower.map((e) => {
-    const clean = e.replace(/[%_]/g, "");
+    const clean = e.replace(/[\\%_]/g, "\\$&"); // escape, never delete: john_smith must still match
     const at = clean.lastIndexOf("@");
     return { e, clean, tagged: at > 0 ? `${clean.slice(0, at)}+%${clean.slice(at)}` : null };
   });
@@ -283,7 +302,7 @@ export async function defectForEmail(kind: CloseoutKind, id: string, emails: str
   const [row] = await db.select().from(inspectionItems).where(eq(inspectionItems.id, id)).limit(1);
   if (!row) return null;
   if (side === "sub") return row.subToken && subEmailsOf({ kind: "item", row }).some((e) => lower.has(e)) ? { kind: "item", row } : null;
-  return row.consultantToken && row.consultantEmail && lower.has(row.consultantEmail.toLowerCase()) ? { kind: "item", row } : null;
+  return row.consultantToken && row.consultantEmail && lower.has(normalizeEmail(row.consultantEmail)) ? { kind: "item", row } : null;
 }
 
 // ─── the sub's /fix page (token-authorised, no login) ───────────────────────
@@ -353,7 +372,7 @@ export async function fixView(found: FoundDefect) {
  *  effort: the fix is recorded whatever happens to the email). */
 export async function markReadyByToken(
   token: string,
-  input: { photoBlobPath?: string | null; note?: string | null }
+  input: { photoBlobPath?: string | null; note?: string | null; files?: Attachment[] }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const found = await bySubToken(token);
   if (!found) return { ok: false, error: "not-found" };
@@ -362,11 +381,12 @@ export async function markReadyByToken(
 
 export async function markReadyRow(
   found: FoundDefect,
-  input: { photoBlobPath?: string | null; note?: string | null; via?: "link" | "portal" }
+  input: { photoBlobPath?: string | null; note?: string | null; via?: "link" | "portal"; files?: Attachment[] }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const row = found.row;
   const now = new Date();
   const note = input.note?.trim().slice(0, 4000) || null;
+  const files = input.files ?? [];
   // Only accept a photo path that lives under THIS defect's own blob namespace,
   // proving it came from this defect's upload (the path is built server-side in
   // the photo route from the row's ids, never trusted from the client verbatim).
@@ -386,19 +406,30 @@ export async function markReadyRow(
     // Lost the claim: already ready / closed, or never sent.
     return { ok: false, error: row.closeoutStatus === "sent" ? "race" : "not-open" };
   }
-  await logDefect(row, found.kind, { type: "ready", authorSide: "sub", authorName: subLine(found.kind, row), via: input.via ?? "link", body: note ?? "Marked fixed" });
+  await logDefect(row, found.kind, { type: "ready", authorSide: "sub", authorName: subLine(found.kind, row), via: input.via ?? "link", body: note ?? "Marked fixed", attachments: files });
 
   try {
+    // The photo of the fix and any files the sub added ride in the notice to
+    // whoever pressed Send, so the inbox holds the evidence, not just a link.
     await notifyMc(found.kind, claimed as FlagRow | ItemRow | CheckRow, {
       kind: "ready",
       actorLine: subLine(found.kind, claimed as FlagRow | ItemRow | CheckRow),
       note,
       nextLine: found.kind === "item" ? "marked this fixed. Review it and close it out, or forward it to the consultant to sign off." : "marked this fixed. Review it and close it out.",
-    });
+    }, [...fixPhotoAttachment(photo), ...files]);
   } catch (e) {
     console.error("qa markReady notice failed:", e);
   }
   return { ok: true };
+}
+
+/** The sub's fix photo as an email attachment. The phone shrinks it to ~1600px
+ *  before upload (well under the email budget), so it is packed first; the
+ *  size is not on the row, hence the nominal byte count. */
+function fixPhotoAttachment(path: string | null | undefined): Attachment[] {
+  if (!path) return [];
+  const ext = (path.match(/\.(jpe?g|png|webp)(?:-[A-Za-z0-9]+)?$/i)?.[1] ?? "jpg").toLowerCase();
+  return [{ filename: `fix-photo.${ext === "jpeg" ? "jpg" : ext}`, path, bytes: 1, contentType: ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg" }];
 }
 
 // ─── per-item close and reopen (the site team, any kind, any stage) ─────────
@@ -428,7 +459,7 @@ export async function closeDirect(
   scope: Scope,
   kind: CloseoutKind,
   id: string,
-  input: { note?: string | null; byName?: string | null }
+  input: { note?: string | null; byName?: string | null; files?: Attachment[] }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const found = await rowOf(scope, kind, id);
   if (!found) return { ok: false, error: "not-found" };
@@ -444,7 +475,8 @@ export async function closeDirect(
     await db.update(checklistItems).set({ closeoutStatus: "closed", closedAt: now, closedByName: byName, reviewNote: note }).where(eq(checklistItems.id, id));
     await db.update(checklists).set({ updatedAt: now }).where(eq(checklists.id, (found.row as CheckRow).checklistId));
   }
-  await logDefect(found.row, kind, { type: "closed", authorSide: "contractor", authorName: byName, body: note ?? "Closed out" });
+  // A photo of the closed defect on the line = the evidence in the QA record.
+  await logDefect(found.row, kind, { type: "closed", authorSide: "contractor", authorName: byName, body: note ?? "Closed out", attachments: input.files ?? [] });
   return { ok: true };
 }
 
@@ -453,30 +485,36 @@ export async function closeDirect(
 export async function reopenDefect(scope: Scope, kind: CloseoutKind, id: string, byName?: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
   const found = await rowOf(scope, kind, id);
   if (!found) return { ok: false, error: "not-found" };
-  if (found.row.closeoutStatus !== "closed") return { ok: false, error: "not-closed" };
+  // A flag fixed before the close-out loop existed has status "done" and no
+  // closeout_status - it reopens the same way.
+  if (found.row.closeoutStatus !== "closed" && !(kind === "flag" && (found.row as FlagRow).status === "done")) return { ok: false, error: "not-closed" };
   const wasSent = !!(found.row as { sentAt?: Date | null }).sentAt || !!(found.row as { subToken?: string | null }).subToken;
   const back = wasSent ? "sent" : "open";
+  // The close-out note is cleared: left in place, the sub's page would show
+  // "checked on site, all good" as a bounce-back note.
   if (kind === "flag") {
-    await db.update(qaFlags).set({ closeoutStatus: back, closedAt: null, closedByName: null, status: wasSent ? "sent" : "open", fixedAt: null }).where(eq(qaFlags.id, id));
+    await db.update(qaFlags).set({ closeoutStatus: back, closedAt: null, closedByName: null, reviewNote: null, status: wasSent ? "sent" : "open", fixedAt: null }).where(eq(qaFlags.id, id));
   } else if (kind === "item") {
-    await db.update(inspectionItems).set({ closeoutStatus: back, closedAt: null, closedByName: null, workStatus: "not_done" }).where(eq(inspectionItems.id, id));
+    await db.update(inspectionItems).set({ closeoutStatus: back, closedAt: null, closedByName: null, reviewNote: null, workStatus: "not_done" }).where(eq(inspectionItems.id, id));
   } else {
-    await db.update(checklistItems).set({ closeoutStatus: back, closedAt: null, closedByName: null }).where(eq(checklistItems.id, id));
+    await db.update(checklistItems).set({ closeoutStatus: back, closedAt: null, closedByName: null, reviewNote: null }).where(eq(checklistItems.id, id));
   }
   await logDefect(found.row, kind, { type: "reopened", authorSide: "contractor", authorName: byName ?? null, body: back === "sent" ? "Reopened - back with the sub" : "Reopened" });
+  // Back with the sub = their link is live again; they need to know.
+  if (back === "sent") await notifySubBounced(found, byName ?? null, "Reopened - please have another look and mark it fixed again.");
   return { ok: true };
 }
 
 /** Bounce a ready QA CHECK item back to the sub (flags/items use reject()). */
-export async function rejectCheck(scope: Scope, id: string, note: string | null, byName?: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function rejectCheck(scope: Scope, id: string, note: string | null, byName?: string | null, files: Attachment[] = []): Promise<{ ok: true } | { ok: false; error: string }> {
   const [row] = await db
     .update(checklistItems)
     .set({ closeoutStatus: "sent", reviewNote: note?.trim().slice(0, 4000) || null })
     .where(and(eq(checklistItems.id, id), eq(checklistItems.projectId, scope.projectId), eq(checklistItems.closeoutStatus, "ready")))
     .returning();
   if (!row) return { ok: false, error: "not-ready" };
-  await logDefect(row, "check", { type: "bounced", authorSide: "contractor", authorName: byName ?? null, body: note?.trim() || "Bounced back" });
-  await notifySubBounced({ kind: "check", row }, byName ?? null, note?.trim() || null);
+  await logDefect(row, "check", { type: "bounced", authorSide: "contractor", authorName: byName ?? null, body: note?.trim() || "Bounced back", attachments: files });
+  await notifySubBounced({ kind: "check", row }, byName ?? null, note?.trim() || null, files);
   return { ok: true };
 }
 
@@ -627,7 +665,7 @@ export async function reviewClose(
 export async function forwardToConsultant(
   scope: Scope,
   itemId: string,
-  input: { name?: string | null; email: string; byName?: string | null }
+  input: { name?: string | null; email: string; byName?: string | null; note?: string | null; files?: Attachment[] }
 ): Promise<{ ok: true; emailStatus: string } | { ok: false; error: string }> {
   const item = await ourItem(scope, itemId);
   if (!item) return { ok: false, error: "not-found" };
@@ -637,7 +675,9 @@ export async function forwardToConsultant(
   const name = input.name?.trim().slice(0, 120) || null;
 
   const now = new Date();
-  const token = item.consultantToken ?? mintToken();
+  // Same consultant as before: the same link. A different one: a fresh token,
+  // so the previous consultant's link and reply address stop working.
+  const token = item.consultantToken && item.consultantEmail && normalizeEmail(item.consultantEmail) === normalizeEmail(email) ? item.consultantToken : mintToken();
   const [claimed] = await db
     .update(inspectionItems)
     .set({
@@ -650,10 +690,21 @@ export async function forwardToConsultant(
     .where(and(eq(inspectionItems.id, itemId), eq(inspectionItems.projectId, scope.projectId), eq(inspectionItems.closeoutStatus, "ready")))
     .returning();
   if (!claimed) return { ok: false, error: "not-ready" };
-  await logDefect(claimed, "item", { type: "forwarded", authorSide: "contractor", authorName: input.byName ?? null, body: `Sent to ${name ? `${name} (${email})` : email} to sign off` });
+  const fwdNote = input.note?.trim().slice(0, 4000) || null;
+  const files = input.files ?? [];
+  await logDefect(claimed, "item", {
+    type: "forwarded",
+    authorSide: "contractor",
+    authorName: input.byName ?? null,
+    body: `Sent to ${name ? `${name} (${email})` : email} to sign off${fwdNote ? `: ${fwdNote}` : ""}`,
+    attachments: files,
+  });
 
   const { project, company } = await projectAndCompany(scope);
   const loginRequired = await companyRequiresLogin(scope.companyId);
+  // The sub's photo and the builder's files ride in the request, so the
+  // consultant can decide from the inbox; the page has them too.
+  const packed = await packForEmail([...fixPhotoAttachment(claimed.fixPhoto), ...files]);
   const rendered = renderQaSignoffEmail({
     companyName: company,
     contextLine: `${project} · ${claimed.category ?? "Inspection"} · marked fixed`,
@@ -664,6 +715,8 @@ export async function forwardToConsultant(
     subLine: claimed.sentTo ?? "The subcontractor",
     fixNote: claimed.subNote,
     hasPhoto: !!claimed.fixPhoto,
+    builderNote: fwdNote,
+    attachmentsLine: files.length ? filesLine(packed, "the page below") : null,
     signoffUrl: `${APP_URL}/signoff/${token}`,
     refLabel: `QA close-out · ${claimed.title}`.slice(0, 80),
     portalUrl: PORTAL_URL,
@@ -681,6 +734,7 @@ export async function forwardToConsultant(
     subject: `Sign-off needed · ${project} · ${claimed.title}`,
     html: rendered.html,
     text: rendered.text,
+    attachments: packed.attachments,
     sentBy: scope.userId || null,
     sentByName: input.byName ?? null,
   });
@@ -693,9 +747,10 @@ export async function reject(
   scope: Scope,
   kind: CloseoutKind,
   id: string,
-  input: { note?: string | null; byName?: string | null }
+  input: { note?: string | null; byName?: string | null; files?: Attachment[] }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const note = input.note?.trim().slice(0, 4000) || null;
+  const files = input.files ?? [];
   if (kind === "flag") {
     const [row] = await db
       .update(qaFlags)
@@ -703,8 +758,8 @@ export async function reject(
       .where(and(eq(qaFlags.id, id), eq(qaFlags.projectId, scope.projectId), eq(qaFlags.closeoutStatus, "ready")))
       .returning();
     if (!row) return { ok: false, error: "not-ready" };
-    await logDefect(row, "flag", { type: "bounced", authorSide: "contractor", authorName: input.byName ?? null, body: note ?? "Bounced back" });
-    await notifySubBounced({ kind: "flag", row }, input.byName ?? null, note);
+    await logDefect(row, "flag", { type: "bounced", authorSide: "contractor", authorName: input.byName ?? null, body: note ?? "Bounced back", attachments: files });
+    await notifySubBounced({ kind: "flag", row }, input.byName ?? null, note, files);
     return { ok: true };
   }
   const [row] = await db
@@ -713,8 +768,8 @@ export async function reject(
     .where(and(eq(inspectionItems.id, id), eq(inspectionItems.projectId, scope.projectId), eq(inspectionItems.closeoutStatus, "ready")))
     .returning();
   if (!row) return { ok: false, error: "not-ready" };
-  await logDefect(row, "item", { type: "bounced", authorSide: "contractor", authorName: input.byName ?? null, body: note ?? "Bounced back" });
-  await notifySubBounced({ kind: "item", row }, input.byName ?? null, note);
+  await logDefect(row, "item", { type: "bounced", authorSide: "contractor", authorName: input.byName ?? null, body: note ?? "Bounced back", attachments: files });
+  await notifySubBounced({ kind: "item", row }, input.byName ?? null, note, files);
   return { ok: true };
 }
 
@@ -769,6 +824,15 @@ async function notifyMc(
     recordType: kind === "flag" ? "qa_flag" : kind === "item" ? "inspection_item" : "checklist_item",
     recordIds: [row.id],
     to: { email: to },
+    // A reply goes back INTO Soterra (to whoever holds the ball) when inbound
+    // is on; otherwise to that person's own address.
+    replyTo:
+      (await replyAddress(
+        kind === "item" && row.closeoutStatus === "submitted" ? "so" : "fix",
+        kind === "item" && row.closeoutStatus === "submitted" ? (row as ItemRow).consultantToken : (row as { subToken?: string | null }).subToken
+      )) ??
+      (kind === "item" && row.closeoutStatus === "submitted" ? (row as ItemRow).consultantEmail : subEmailsOf({ kind, row } as FoundDefect)[0]) ??
+      null,
     fromName: "Soterra",
     fromEmail: projectSenderAddress(project, scope.projectId),
     subject: `${title} · ${n.kind === "ready" ? "marked fixed" : n.kind === "signed_off" ? "signed off" : "bounced back"} · ${project}`,
@@ -949,7 +1013,12 @@ async function notifyMcOfNote(found: FoundDefect & { side: "sub" | "consultant" 
       recordType: found.kind === "flag" ? "qa_flag" : found.kind === "item" ? "inspection_item" : "checklist_item",
       recordIds: [row.id],
       to: { email: senderLower },
-      replyTo: from.email || null,
+      // Reply INTO Soterra when inbound is on (the other side's link token),
+      // else straight to the person.
+      replyTo:
+        (await replyAddress(found.side === "sub" ? "fix" : "so", found.side === "sub" ? (row as { subToken?: string | null }).subToken : (row as ItemRow).consultantToken)) ??
+        from.email ??
+        null,
       fromName: "Soterra",
       fromEmail: projectSenderAddress(project, scope.projectId),
       subject: `${title} · ${via === "email" ? "reply by email" : "note"} · ${project}`,
@@ -1055,7 +1124,7 @@ export async function fixGateEmails(token: string): Promise<{ companyId: string;
 export async function signoffGateEmails(token: string): Promise<{ companyId: string; emails: string[] } | null> {
   const item = await byConsultantToken(token);
   if (!item) return null;
-  return { companyId: item.companyId, emails: item.consultantEmail ? [item.consultantEmail.toLowerCase()] : [] };
+  return { companyId: item.companyId, emails: item.consultantEmail ? [normalizeEmail(item.consultantEmail)] : [] };
 }
 /** Either side's emails for the photo route (sub's or consultant's token). */
 export async function photoGateEmails(token: string): Promise<{ companyId: string; emails: string[] } | null> {

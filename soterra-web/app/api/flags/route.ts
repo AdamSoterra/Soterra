@@ -234,7 +234,7 @@ export async function PATCH(req: Request) {
   // Failure-isolated: an arming error must not block the send.
   let fix: { token: string; url: string } | null = null;
   try {
-    fix = await armFlagFix(scope, id);
+    fix = await armFlagFix(scope, id, subEmail);
   } catch (e) {
     console.error("qa arm (flag) failed:", e);
   }

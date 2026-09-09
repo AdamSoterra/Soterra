@@ -80,6 +80,7 @@ export async function POST(request: Request) {
             tokenPayload: JSON.stringify({ rfiId: rfi.id, uploadedBy: userId }),
           };
         }
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(corrId)) throw new Error("Not found");
         const row = await corrForEmail(corrId, emails);
         if (!row) throw new Error("Not found");
         if (row.status !== "sent" && row.status !== "responded") throw new Error("This item is closed");

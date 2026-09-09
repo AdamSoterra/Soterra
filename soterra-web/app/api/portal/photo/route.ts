@@ -70,7 +70,7 @@ export async function GET(req: Request) {
         "Content-Type": got.blob?.contentType || "image/jpeg",
         "X-Content-Type-Options": "nosniff",
         "Content-Disposition": 'inline; filename="fix.jpg"',
-        "Cache-Control": "private, max-age=31536000, immutable",
+        "Cache-Control": "private, no-store",
       },
     });
   } catch (e) {

@@ -94,7 +94,10 @@ export async function DELETE(req: Request) {
 
   // Best-effort blob cleanup (never block the delete on it).
   for (const p of paths) {
-    if (p.file) {
+    // A transmittal's PDF is indexed straight from the correspondence (or an
+    // email reply's) folder: that blob is the sent record's evidence and
+    // stays; only the documents' own blobs are removed.
+    if (p.file && !/\/(correspondence|inbound|rfis|defects)\//.test(p.file)) {
       try {
         await del(p.file);
       } catch {

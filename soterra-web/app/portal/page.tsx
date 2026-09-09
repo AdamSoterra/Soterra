@@ -217,8 +217,8 @@ export default function PortalPage() {
               const j = (await r.json().catch(() => ({}))) as { path?: string; error?: string };
               return r.ok && j.path ? { path: j.path } : { error: j.error ?? "That photo didn't upload. Try again." };
             }}
-            act={async (note, photoPath) => {
-              const r = await post({ kind: "fix", id: open.id, table: open.table ?? "item", body: note, photoPath });
+            act={async (note, photoPath, files) => {
+              const r = await post({ kind: "fix", id: open.id, table: open.table ?? "item", body: note, photoPath, files });
               return r.ok ? { ok: true, data: r.data as FixData } : r;
             }}
           />

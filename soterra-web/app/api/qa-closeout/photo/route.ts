@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     const got = await get(path, { access: "private" });
     if (!got || got.statusCode !== 200 || !got.stream) return new Response("Not found", { status: 404 });
     return new Response(got.stream as unknown as ReadableStream, {
-      headers: { "Content-Type": got.blob?.contentType || "image/jpeg", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=31536000, immutable" },
+      headers: { "Content-Type": got.blob?.contentType || "image/jpeg", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store" },
     });
   } catch {
     return new Response("Not found", { status: 404 });

@@ -452,6 +452,8 @@ export function renderQaSignoffEmail(opts: {
   subLine: string; // "Fire Protection Ltd" - who marked it fixed
   fixNote?: string | null; // the sub's note on the fix
   hasPhoto: boolean; // a photo of the fix is on the page
+  builderNote?: string | null; // the site team's note when forwarding
+  attachmentsLine?: string | null; // "2 attachments: …" - the builder's files
   signoffUrl: string; // APP_URL/signoff/<token>
   refLabel: string;
   portalUrl?: string | null;
@@ -477,11 +479,17 @@ ${header(opts.companyName, opts.contextLine)}`;
     </tr></table>`
     : "";
 
+  const builderHtml = opts.builderNote
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0;"><tr>
+      <td style="background:#EFF7FE;border:1px solid #C9E4FA;border-radius:9px;padding:12px 14px;font-family:${FONT};font-size:13px;color:${INK};line-height:1.5;"><b>${esc(opts.companyName)} says:</b> ${esc(opts.builderNote)}</td>
+    </tr></table>`
+    : "";
   const bodyHtml = `<div style="font-family:${FONT};font-size:14px;color:${INK};line-height:1.55;margin-bottom:4px;"><b>${esc(opts.subLine)}</b> has marked this item fixed and it needs your sign-off.</div>
 ${meta ? `<div style="font-family:${FONT};font-size:12px;color:#7A8CA3;margin-bottom:6px;">${esc(meta)}</div>` : ""}
 ${detailHtml}
 ${fixHtml}
-<div style="font-family:${FONT};font-size:12.5px;color:${SLATE};margin:6px 0 2px;">${opts.hasPhoto ? "A photo of the fix is on the page below." : "Open the page to review and sign off."}</div>
+${builderHtml}
+<div style="font-family:${FONT};font-size:12.5px;color:${SLATE};margin:6px 0 2px;">${opts.hasPhoto ? "The photo of the fix is attached and on the page below." : "Open the page to review and sign off."}${opts.attachmentsLine ? ` ${esc(opts.attachmentsLine)}.` : ""}</div>
 ${ctaButton("Sign it off", opts.signoffUrl)}
 <div style="font-family:${FONT};font-size:12px;color:${MUT};margin:0 0 14px;">${opts.loginRequired ? "Opens for your Soterra account (free, one minute to set up)." : "No account needed."} Approve to close it out, or bounce it back to ${esc(opts.subLine)} with a note.</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;"><tr>
@@ -504,8 +512,10 @@ ${portalLine(opts.portalUrl, opts.loginRequired)}`;
     ...(meta ? ["", meta] : []),
     ...(opts.detail ? ["", opts.detail] : []),
     ...(opts.fixNote ? ["", `${opts.subLine} says: ${opts.fixNote}`] : []),
+    ...(opts.builderNote ? ["", `${opts.companyName} says: ${opts.builderNote}`] : []),
+    ...(opts.attachmentsLine ? ["", opts.attachmentsLine] : []),
     "",
-    `SIGN IT OFF (no account needed): ${opts.signoffUrl}`,
+    `SIGN IT OFF${opts.loginRequired ? "" : " (no account needed)"}: ${opts.signoffUrl}`,
     "",
     `Or simply reply to this email - ${opts.companyName} logs your decision.`,
     "",

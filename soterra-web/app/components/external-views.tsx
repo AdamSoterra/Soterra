@@ -229,7 +229,9 @@ export function RfiThreadView({
   defaultName?: string;
   hideFoot?: boolean;
 }) {
-  const [name, setName] = useState(defaultName || thread.rfi.consultantName || "");
+  // With several assignees the accountable person's name is not a safe
+  // prefill: the engineer would send the answer under the architect's name.
+  const [name, setName] = useState(defaultName || ((thread.rfi.assignees?.length ?? 1) <= 1 ? thread.rfi.consultantName || "" : ""));
   const [text, setText] = useState("");
   const [files, setFiles] = useState<CorrFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -474,7 +476,8 @@ export function FixView({
 }: {
   d: FixData;
   uploadPhoto: (blob: Blob) => Promise<{ path?: string; error?: string }>;
-  act: (note: string, photoPath: string | null) => Act<FixData>;
+  /** Mark it fixed: the photo, a note, and any extra files (a cert, a data sheet). */
+  act: (note: string, photoPath: string | null, files: CorrFile[]) => Act<FixData>;
   /** A note on the thread (a question, an update) without marking it fixed - words, files, or both. */
   onNote?: (text: string, files: CorrFile[]) => Act<FixData>;
   /** Where the sub's own fix photo streams from on this door. */
@@ -499,6 +502,20 @@ export function FixView({
   const [done, setDone] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const msgFileRef = useRef<HTMLInputElement>(null);
+  const [fixFiles, setFixFiles] = useState<CorrFile[]>([]);
+  const [fixUploading, setFixUploading] = useState(false);
+  const fixFileRef = useRef<HTMLInputElement>(null);
+  const pickFixFiles = async (list: FileList | null) => {
+    if (!list || !uploadFile) return;
+    setErr(null);
+    setFixUploading(true);
+    try {
+      await uploadPicked(list, uploadFile, (file) => setFixFiles((xs) => [...xs, file]), (m) => setErr(m));
+    } finally {
+      setFixUploading(false);
+      if (fixFileRef.current) fixFileRef.current.value = "";
+    }
+  };
 
   // A photo on the note is shrunk on the phone first (a raw camera JPEG is
   // 5-8 MB; nobody on site has the bandwidth, and it should still fit in the
@@ -534,10 +551,10 @@ export function FixView({
     }
   };
   const submit = async () => {
-    if (busy || uploading) return;
+    if (busy || uploading || fixUploading) return;
     setBusy(true);
     setErr(null);
-    const res = await act(note, photoPath);
+    const res = await act(note, photoPath, fixFiles);
     if (!res.ok) setErr(res.error ?? "That didn't go through. Try again.");
     else {
       if (res.data) setData(res.data);
@@ -614,13 +631,22 @@ export function FixView({
           </button>
           <div className="ans-klabel">Anything to add (optional)</div>
           <textarea className="ans-ta" placeholder="e.g. Redone to the detail, penetration fully sealed." value={note} maxLength={4000} onChange={(e) => setNote(e.target.value)} />
+          {uploadFile && (
+            <>
+              <input ref={fixFileRef} type="file" multiple accept="image/*,.pdf,.docx,.xlsx,.zip,.dwg" style={{ display: "none" }} onChange={(e) => void pickFixFiles(e.target.files)} />
+              {fixFiles.length > 0 && <AttachmentList files={fixFiles} href={fileHref ?? (() => "#")} />}
+              <button className="qa-photo" style={{ marginTop: 9 }} disabled={fixUploading || busy} onClick={() => fixFileRef.current?.click()}>
+                {fixUploading ? "Uploading…" : "📎 Add more files (another photo, a cert, a data sheet)"}
+              </button>
+            </>
+          )}
           {err && <div className="ans-err">{err}</div>}
           <div className="ans-actions">
-            <button className="ans-btn primary" disabled={busy || uploading} onClick={() => void submit()}>
+            <button className="ans-btn primary" disabled={busy || uploading || fixUploading} onClick={() => void submit()}>
               {busy ? "Sending…" : "Mark it fixed"}
             </button>
           </div>
-          <p className="ans-fine">This tells {data.company} the fix is done and sends them your photo. They sign it off from their end.</p>
+          <p className="ans-fine">This tells {data.company} the fix is done and sends them your photo{fixFiles.length ? " and files" : ""}. They sign it off from their end.</p>
         </div>
       )}
 

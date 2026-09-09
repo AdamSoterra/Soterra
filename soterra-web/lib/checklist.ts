@@ -743,7 +743,9 @@ export async function getChecklist(scope: Scope, checklistId: string) {
 
   return {
     checklist: head,
-    items: items.map((it) => ({ ...it, photos: byItem.get(it.id) ?? [], pins: pinsByItem.get(it.id) ?? [] })),
+    // The sub's link token and the sender's address stay on the server (the
+    // token IS the sub's authorisation on /fix); everything else is the item.
+    items: items.map(({ subToken: _t, senderEmail: _e, ...it }) => ({ ...it, photos: byItem.get(it.id) ?? [], pins: pinsByItem.get(it.id) ?? [] })),
   };
 }
 

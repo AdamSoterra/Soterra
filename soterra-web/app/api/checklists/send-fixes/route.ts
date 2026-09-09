@@ -72,7 +72,9 @@ export async function POST(req: Request) {
   const onlyIds = Array.isArray(body.itemIds) ? new Set(body.itemIds.map((x) => String(x))) : null;
   const sendItems = items
     .map((it, idx) => ({ ...it, n: idx + 1 }))
-    .filter((it) => it.status === "issue" && it.closeoutStatus !== "closed" && (!onlyIds || onlyIds.has(it.id)));
+    // "Send all" = the ones still to be sent or sitting with the sub; a named
+    // item (a deliberate resend) can be any stage short of closed.
+    .filter((it) => it.status === "issue" && it.closeoutStatus !== "closed" && (onlyIds ? onlyIds.has(it.id) : (it.closeoutStatus ?? "open") === "open" || it.closeoutStatus === "sent"));
   if (!sendItems.length) return Response.json({ error: onlyIds ? "That item isn't marked Needs fixing, or it is already closed" : "Nothing marked Needs fixing to send" }, { status: 400 });
 
   const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
@@ -153,7 +155,7 @@ export async function POST(req: Request) {
   // Failure-isolated: if arming trips, the send still goes out without links.
   let fixUrls = new Map<string, { url: string; token: string }>();
   try {
-    fixUrls = await armChecksFix(scope, sendItems.map((i) => i.id));
+    fixUrls = await armChecksFix(scope, sendItems.map((i) => i.id), recipients.map((r) => r.email));
   } catch (e) {
     console.error("qa arm (checks) failed:", e);
   }

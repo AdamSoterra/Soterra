@@ -61,7 +61,10 @@ export async function POST(req: Request) {
   const onlyIds = Array.isArray(body.itemIds) ? new Set(body.itemIds.map((x) => String(x))) : null;
   const sendItems = items
     .map((it, idx) => ({ ...it, n: idx + 1 }))
-    .filter((it) => (it.workStatus ?? "not_done") !== "done" && (!onlyIds || onlyIds.has(it.id)));
+    // "Send all" = the ones still to be sent or sitting with the sub; a named
+    // item (a deliberate resend) can be any stage short of closed. An item the
+    // sub marked fixed, or one with the consultant, is not re-sent as "put it right".
+    .filter((it) => (it.workStatus ?? "not_done") !== "done" && it.closeoutStatus !== "closed" && (onlyIds ? onlyIds.has(it.id) : (it.closeoutStatus ?? "open") === "open" || it.closeoutStatus === "sent"));
   if (!sendItems.length) return Response.json({ error: onlyIds ? "That item is already done" : "Every item on this report is already done" }, { status: 400 });
 
   const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
@@ -78,7 +81,7 @@ export async function POST(req: Request) {
   // isolated: if arming trips, the send still goes out (just without the links).
   let fixUrls = new Map<string, { url: string; token: string }>();
   try {
-    fixUrls = await armItemsFix(scope, sendItems.map((i) => i.id));
+    fixUrls = await armItemsFix(scope, sendItems.map((i) => i.id), recipients.map((r) => r.email));
   } catch (e) {
     console.error("qa arm (items) failed:", e);
   }

@@ -84,7 +84,7 @@ export async function GET(req: Request) {
         "Content-Disposition": 'inline; filename="fix.jpg"',
         // Private + immutable: the path carries a random suffix, so the bytes
         // at a path never change.
-        "Cache-Control": "private, max-age=31536000, immutable",
+        "Cache-Control": "private, no-store",
       },
     });
   } catch (e) {

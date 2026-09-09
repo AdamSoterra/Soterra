@@ -82,9 +82,9 @@ export default function FixPage({ params }: { params: { token: string } }) {
           const j = (await r.json().catch(() => ({}))) as { path?: string; error?: string };
           return r.ok && j.path ? { path: j.path } : { error: j.error ?? "That photo didn't upload. Try again." };
         }}
-        act={async (note, photoPath) => {
+        act={async (note, photoPath, files) => {
           try {
-            const r = await fetch("/api/qa-fix", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, note, photoPath }) });
+            const r = await fetch("/api/qa-fix", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, note, photoPath, files }) });
             const j = (await r.json()) as { ok?: boolean; defect?: FixData; error?: string };
             if (!r.ok || !j.ok) return { ok: false, error: j.error };
             return { ok: true, data: j.defect };

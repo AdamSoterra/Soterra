@@ -61,17 +61,19 @@ export async function POST(req: Request) {
   const note = String(body.note ?? "").trim().slice(0, 4000) || null;
   const user = await currentUser();
   const byName = displayName(user);
+  // Files the site team attached to this action (signed by /api/upload/token
+  // under this site's defects/<id>/ folder): a note, a bounce-back, a
+  // forward for sign-off, a close-out photo.
+  const files = sanitizeFiles(body.files, [defectBlobPrefix(scope.projectId, id)]);
 
   try {
     if (action === "close") {
-      const r = await closeDirect(scope, kind as CloseoutKind, id, { note, byName });
+      const r = await closeDirect(scope, kind as CloseoutKind, id, { note, byName, files });
       if (!r.ok) return Response.json({ error: r.error === "already-closed" ? "Already closed." : "Not found." }, { status: 409 });
       return Response.json({ ok: true });
     }
     if (action === "note") {
-      // Files the site team attached (signed by /api/upload/token under this
-      // site's defects/<id>/ folder); a note can be files alone.
-      const files = sanitizeFiles(body.files, [defectBlobPrefix(scope.projectId, id)]);
+      // A note can be files alone.
       const r = await noteFromBuilder(scope, kind as CloseoutKind, id, note ?? "", { name: byName, email: user?.primaryEmailAddress?.emailAddress ?? null }, files);
       if (!r.ok) return Response.json({ error: r.error === "empty" ? "Write the note first, or attach a file." : "Not found." }, { status: r.error === "empty" ? 400 : 404 });
       return Response.json({ ok: true, emailed: r.emailed });
@@ -82,7 +84,7 @@ export async function POST(req: Request) {
       return Response.json({ ok: true });
     }
     if (action === "reject") {
-      const r = kind === "check" ? await rejectCheck(scope, id, note, byName) : await reject(scope, kind as "flag" | "item", id, { note, byName });
+      const r = kind === "check" ? await rejectCheck(scope, id, note, byName, files) : await reject(scope, kind as "flag" | "item", id, { note, byName, files });
       if (!r.ok) return Response.json({ error: "Only an item the sub has marked fixed can be bounced back." }, { status: 409 });
       return Response.json({ ok: true });
     }
@@ -90,7 +92,7 @@ export async function POST(req: Request) {
       if (kind !== "item") return Response.json({ error: "Only an item off a consultant's report goes for sign-off." }, { status: 400 });
       const email = String(body.email ?? "").trim();
       if (!email) return Response.json({ error: "Who signs it off? Add their email." }, { status: 400 });
-      const r = await forwardToConsultant(scope, id, { name: String(body.name ?? "").trim() || null, email, byName });
+      const r = await forwardToConsultant(scope, id, { name: String(body.name ?? "").trim() || null, email, byName, note, files });
       if (!r.ok) {
         const msg = r.error === "not-consultant" ? "This item didn't come off a consultant's report - close it out directly." : r.error === "bad-email" ? "That email doesn't look right." : "Only an item the sub has marked fixed can be forwarded.";
         return Response.json({ error: msg }, { status: 409 });

@@ -2554,7 +2554,7 @@ export default function Page() {
       if (Array.isArray(d?.subs)) list = d.subs;
     } catch { /* manual add still works */ }
     setSubsList(list);
-    const pool = openInspection.items.filter((i) => (i.workStatus ?? "not_done") !== "done" && (!itemIds || itemIds.includes(i.id)));
+    const pool = openInspection.items.filter((i) => (i.workStatus ?? "not_done") !== "done" && i.closeoutStatus !== "closed" && (itemIds ? itemIds.includes(i.id) : (i.closeoutStatus ?? "open") === "open" || i.closeoutStatus === "sent"));
     preTickRecipients(list, pool.map((i) => i.category));
     setInsSendOpen(true);
   };
@@ -2605,7 +2605,7 @@ export default function Page() {
       if (Array.isArray(d?.subs)) list = d.subs;
     } catch { /* manual add still works */ }
     setSubsList(list);
-    const pool = openChecklist.items.filter((i) => i.status === "issue" && (!itemIds || itemIds.includes(i.id)));
+    const pool = openChecklist.items.filter((i) => i.status === "issue" && i.closeoutStatus !== "closed" && (itemIds ? itemIds.includes(i.id) : (i.closeoutStatus ?? "open") === "open" || i.closeoutStatus === "sent"));
     preTickRecipients(list, pool.map((i) => i.category));
     setSendOpen(true);
   };
@@ -2651,8 +2651,12 @@ export default function Page() {
   const [coFiles, setCoFiles] = useState<RfiAtt[]>([]);
   const [coUploading, setCoUploading] = useState(false);
   const coFileRef = useRef<HTMLInputElement>(null);
+  // Files on the close / bounce / forward mini-form (a photo of what still
+  // needs doing, a photo of the closed defect, a document for the consultant).
+  const [miniFiles, setMiniFiles] = useState<RfiAtt[]>([]);
+  const miniFileRef = useRef<HTMLInputElement>(null);
   const coFileHref = (kind: CoKind, id: string, path: string) => `/api/defect-file?kind=${kind}&id=${encodeURIComponent(id)}&path=${encodeURIComponent(path)}&project=${encodeURIComponent(projRef.current ?? "")}`;
-  const uploadCoFiles = async (id: string, list: File[]) => {
+  const uploadCoFiles = async (id: string, list: File[], add: (f: RfiAtt) => void = (f) => setCoFiles((xs) => [...xs, f])) => {
     const pid = projRef.current;
     if (!pid) throw new Error("No site selected");
     setCoUploading(true);
@@ -2670,7 +2674,7 @@ export default function Page() {
           clientPayload: JSON.stringify({ projectId: pid }),
           contentType: type,
         });
-        setCoFiles((xs) => [...xs, { filename: name, path: res.pathname, bytes: body.size, contentType: type }]);
+        add({ filename: name, path: res.pathname, bytes: body.size, contentType: type });
       }
     } finally {
       setCoUploading(false);
@@ -2708,7 +2712,7 @@ export default function Page() {
       const r = await apiFetch("/api/qa-closeout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, id, action, ...extra }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "That didn't work just now.");
-      setCoFor(null); setCoNote(""); setCoEmail(""); setCoName("");
+      setCoFor(null); setCoNote(""); setCoEmail(""); setCoName(""); setMiniFiles([]);
       if (coThread && coThread.kind === kind && coThread.id === id) void loadCoThread(kind, id);
       if (kind === "check" && openChecklist) await openChecklistById(openChecklist.checklist.id);
       if (kind === "item" && openInspection) {
@@ -2794,11 +2798,20 @@ export default function Page() {
               </div>
             )}
             <textarea className="ev-in" rows={2} autoFocus value={coNote} placeholder={mini === "close" ? "Note (optional) - e.g. checked on site, collar in and sealed" : mini === "reject" ? "What still needs doing (the sub sees this)" : "A note for the consultant (optional)"} onChange={(e) => setCoNote(e.target.value)} />
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button className="go" disabled={coBusy || (mini === "reject" && !coNote.trim()) || (mini === "forward" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(coEmail.trim()))} onClick={() => void closeoutAction(kind, id, mini, mini === "forward" ? { note: coNote, name: coName, email: coEmail } : { note: coNote })}>
+            {miniFiles.length > 0 && rfiFileRows(miniFiles, null, (path) => setMiniFiles((xs) => xs.filter((x) => x.path !== path)))}
+            <input ref={miniFileRef} type="file" multiple accept="image/*,.pdf,.docx,.xlsx,.zip,.dwg" style={{ display: "none" }} onChange={async (e) => {
+              const list = e.target.files ? Array.from(e.target.files) : [];
+              e.target.value = "";
+              if (!list.length) return;
+              try { await uploadCoFiles(id, list, (f) => setMiniFiles((xs) => [...xs, f])); }
+              catch (err) { const m = err instanceof Error ? err.message : "Couldn't attach that."; if (kind === "check") setClErr(m); else if (kind === "flag") setFlagErr(m); else setInsErr(m); }
+            }} />
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <button className="go" disabled={coBusy || coUploading || (mini === "reject" && !coNote.trim()) || (mini === "forward" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(coEmail.trim()))} onClick={() => void closeoutAction(kind, id, mini, mini === "forward" ? { note: coNote, name: coName, email: coEmail, files: miniFiles } : { note: coNote, files: miniFiles })}>
                 {coBusy ? "Saving…" : mini === "close" ? "Close it out" : mini === "reject" ? "Bounce it back" : "Send for sign-off"}
               </button>
-              <button disabled={coBusy} onClick={() => setCoFor(null)}>Cancel</button>
+              <button type="button" disabled={coBusy || coUploading} onClick={() => miniFileRef.current?.click()}>{coUploading ? "Uploading…" : "📎 Attach a photo or file"}</button>
+              <button disabled={coBusy} onClick={() => { setCoFor(null); setMiniFiles([]); }}>Cancel</button>
             </div>
           </div>
         )}    </>
@@ -3057,6 +3070,8 @@ export default function Page() {
       if (!r.ok) throw new Error(d.error || "That didn't work just now.");
       await openRfiById(id);
       loadRfis(); loadRfiAna();
+      // The RFI is numbered and open either way; a failed email must be said out loud.
+      if (action === "send" && d.emailStatus === "failed") setRfiErr("The RFI is saved and numbered, but the email did NOT go out - nobody has it yet. Check the addresses in the Directory, then void this one and raise it again.");
       return true;
     } catch (e) {
       setRfiErr(e instanceof Error ? e.message : "That didn't work just now.");
@@ -5377,7 +5392,7 @@ export default function Page() {
               {!insBusy && <button className="sh-x" onClick={() => setInsSendOpen(false)}>✕</button>}
             </div>
             <div className="form-body">
-              {openInspection.items.map((it, i) => (it.workStatus ?? "not_done") !== "done" && (!insSendItemIds || insSendItemIds.includes(it.id)) ? (
+              {openInspection.items.map((it, i) => (it.workStatus ?? "not_done") !== "done" && it.closeoutStatus !== "closed" && (insSendItemIds ? insSendItemIds.includes(it.id) : (it.closeoutStatus ?? "open") === "open" || it.closeoutStatus === "sent") ? (
                 <div key={it.id} className="sf-row">
                   <div className="sf-txt">
                     <b>{i + 1}. {it.title}</b>
@@ -5497,7 +5512,7 @@ export default function Page() {
                             const em = c.email.toLowerCase();
                             const on = nrAssignees.some((a) => a.email === em);
                             return (
-                              <button key={c.id} type="button" className={"rf-f" + (on ? " act" : "")} title={c.email} onClick={() => setNrAssignees((xs) => (on ? xs.filter((a) => a.email !== em) : [...xs, { name: c.name, company: c.company, email: em }]))}>
+                              <button key={c.id} type="button" className={"rf-f" + (on ? " act" : "")} title={c.email} onClick={() => { setNrAssignees((xs) => (on ? xs.filter((a) => a.email !== em) : [...xs, { name: c.name, company: c.company, email: em }])); if (!on && c.discipline) setNr((v) => ({ ...v, discipline: v.discipline || c.discipline || "" })); }}>
                                 {on ? "✓ " : ""}{c.name || c.email}{c.discipline ? ` · ${c.discipline}` : ""}
                               </button>
                             );
@@ -5577,7 +5592,7 @@ export default function Page() {
               </p>
               {rfiErr && <div className="ev-err">{rfiErr}</div>}
               <div className="form-actions">
-                <button className="lg-btn" style={{ height: 46, margin: 0, width: "auto", padding: "0 18px" }} disabled={rfiBusy || nrUploading || !nr.subject.trim() || !nr.question.trim()} onClick={() => void createRfi(false)}>Save draft</button>
+                <button className="lg-btn" style={{ height: 46, margin: 0, width: "auto", padding: "0 18px" }} disabled={rfiBusy || nrUploading || !nr.subject.trim() || !nr.question.trim() || (!nrAssignees.length && !EMAIL_OK.test(nr.consultantEmail.trim()))} onClick={() => void createRfi(false)}>Save draft</button>
                 <button className="lg-btn primary" style={{ height: 46, margin: 0, flex: 1 }} disabled={rfiBusy || nrUploading || !nr.subject.trim() || !nr.question.trim() || !(nrAssignees.length || EMAIL_OK.test(nr.consultantEmail.trim()))} onClick={() => void createRfi(true)}>
                   {rfiBusy ? "Sending…" : "Send RFI"}
                 </button>
@@ -5766,7 +5781,7 @@ export default function Page() {
               {!sendBusy && <button className="sh-x" onClick={() => setSendOpen(false)}>✕</button>}
             </div>
             <div className="form-body">
-              {openChecklist.items.map((it, i) => it.status === "issue" && it.closeoutStatus !== "closed" && (!sendItemIds || sendItemIds.includes(it.id)) ? (
+              {openChecklist.items.map((it, i) => it.status === "issue" && it.closeoutStatus !== "closed" && (sendItemIds ? sendItemIds.includes(it.id) : (it.closeoutStatus ?? "open") === "open" || it.closeoutStatus === "sent") ? (
                 <div key={it.id} className="sf-row">
                   <div className="sf-txt">
                     <b>{i + 1}. {it.title}</b>
@@ -6375,6 +6390,7 @@ export default function Page() {
             </div>
             <div className="dm-body">
               {insNotice && <div className="ck-notice" onClick={() => setInsNotice(null)}>{insNotice}</div>}
+              {insErr && <div className="ev-err" onClick={() => setInsErr(null)}>{insErr}</div>}
               {openInspection.items.length === 0 ? (
                 <div className="page-sub" style={{ marginBottom: 0 }}>Nothing was picked up on this one.</div>
               ) : (
@@ -7432,7 +7448,7 @@ function PinStage(p: {
   npages: number;
   onClose: () => void;
   fetchApi: (path: string, init?: RequestInit) => Promise<Response>;
-  onDrop?: (at: { x: number; y: number; page: number }) => void;
+  onDrop?: (at: { x: number; y: number; page: number }) => void | Promise<unknown>;
   onPinClick?: (pin: PinRow) => void;
   /** The number the NEW pin will carry, shown on it while it is being placed
    *  (a check item's number, so "which item is which" holds from the first
@@ -7524,11 +7540,13 @@ function PinStage(p: {
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
   };
-  const confirmPending = () => {
+  const confirmPending = async () => {
     if (!pending || !p.onDrop || saving) return;
     setSaving(true);
     try {
-      p.onDrop(pending);
+      // Wait for the parent's save: on a slow connection a second tap must
+      // not drop a second pin for the same item.
+      await Promise.resolve(p.onDrop(pending));
     } finally {
       // The parent closes the stage (check) or opens its form (flag); either
       // way this marker's job is done.
@@ -7717,7 +7735,7 @@ function PinStage(p: {
       {p.onDrop && pending && pending.page === page && (
         <div className="ps-confirm">
           <span>Hold and drag the pin to the exact spot, or tap somewhere else to move it.</span>
-          <button className="ok" disabled={saving} onClick={confirmPending}>{saving ? "Saving…" : "✓ That's the spot"}</button>
+          <button className="ok" disabled={saving} onClick={() => void confirmPending()}>{saving ? "Saving…" : "✓ That's the spot"}</button>
           <button disabled={saving} onClick={() => setPending(null)}>Remove</button>
         </div>
       )}
