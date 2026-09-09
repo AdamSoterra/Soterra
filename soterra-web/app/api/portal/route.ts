@@ -213,10 +213,18 @@ export async function POST(req: Request) {
     if (kind === "signoff") {
       const found = await defectForEmail("item", id, who.emails, "consultant");
       if (!found || found.kind !== "item") return Response.json({ error: "Not found" }, { status: 404 });
+      // Files uploaded through /api/portal/upload {defectId, table:"item", side:"consultant"}.
+      const files = sanitizeFiles(body.files, [defectBlobPrefix(found.row.projectId, found.row.id)]);
+      if (String(body.action ?? "") === "note") {
+        const r = await noteFromExternal({ ...found, side: "consultant" }, { name: name ?? who.emails[0], email: who.emails[0] ?? null }, text, "portal", files);
+        if (!r.ok) return Response.json({ error: r.error === "empty" ? "Write the note first, or attach a file." : "This item is closed." }, { status: r.error === "empty" ? 400 : 409 });
+        const again = await defectForEmail("item", id, who.emails, "consultant");
+        return Response.json({ ok: true, view: again && again.kind === "item" ? await signoffView(again.row) : null });
+      }
       const decision = String(body.decision ?? "");
       if (decision !== "approve" && decision !== "reject") return Response.json({ error: "Unknown decision" }, { status: 400 });
       if (decision === "reject" && !text) return Response.json({ error: "Add a note so the sub knows what to put right." }, { status: 400 });
-      const res = await signoffRow(found.row, { approve: decision === "approve", note: text, via: "portal" });
+      const res = await signoffRow(found.row, { approve: decision === "approve", note: text, via: "portal", files });
       if (!res.ok) return Response.json({ error: "This item has already been actioned." }, { status: 409 });
       const again = await defectForEmail("item", id, who.emails, "consultant");
       return Response.json({ ok: true, approved: res.approved, view: again && again.kind === "item" ? await signoffView(again.row) : null });

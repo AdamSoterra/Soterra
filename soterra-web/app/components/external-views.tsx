@@ -52,6 +52,29 @@ export async function compress(file: File): Promise<Blob> {
 
 export type Act<T> = Promise<{ ok: boolean; data?: T; error?: string }>;
 
+/** Upload what a file picker returned through a door's uploadFile, at most
+ *  ten at a time. A photo is shrunk on the phone first (a raw camera JPEG is
+ *  5-8 MB; nobody on site has the bandwidth, and it should still fit in the
+ *  email to the other side). Anything else goes up as it is. */
+async function uploadPicked(
+  list: FileList | null,
+  uploadFile: (file: File) => Promise<{ file?: CorrFile; error?: string }>,
+  onFile: (f: CorrFile) => void,
+  onErr: (m: string) => void
+) {
+  if (!list) return;
+  for (const f of Array.from(list).slice(0, 10)) {
+    let file = f;
+    if (/^image\/(jpeg|png|webp)$/.test(f.type)) {
+      const small = await compress(f);
+      if (small !== f) file = new File([small], f.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+    }
+    const r = await uploadFile(file);
+    if (r.file) onFile(r.file);
+    else onErr(r.error ?? `${f.name} didn't upload.`);
+  }
+}
+
 // ─── chrome ────────────────────────────────────────────────────────────────
 
 export function Shell({ company, project, children, foot, top }: { company?: string; project?: string; children: ReactNode; foot?: ReactNode; top?: ReactNode }) {
@@ -485,16 +508,7 @@ export function FixView({
     setErr(null);
     setMsgUploading(true);
     try {
-      for (const f of Array.from(list).slice(0, 10)) {
-        let file = f;
-        if (/^image\/(jpeg|png|webp)$/.test(f.type)) {
-          const small = await compress(f);
-          if (small !== f) file = new File([small], f.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
-        }
-        const r = await uploadFile(file);
-        if (r.file) setMsgFiles((xs) => [...xs, r.file!]);
-        else setErr(r.error ?? `${f.name} didn't upload.`);
-      }
+      await uploadPicked(list, uploadFile, (file) => setMsgFiles((xs) => [...xs, file]), (m) => setErr(m));
     } finally {
       setMsgUploading(false);
       if (msgFileRef.current) msgFileRef.current.value = "";
@@ -649,8 +663,11 @@ export type SignoffData = {
   hasFixPhoto: boolean;
   status: string;
   canSignoff: boolean;
-  /** The conversation on the defect so far (read-only on this page). */
+  /** The conversation on the defect so far. */
   messages?: FixMsg[];
+  /** A note can be added short of closed; files go under this prefix (null once closed). */
+  canNote?: boolean;
+  uploadPrefix?: string | null;
 };
 
 export function SignoffView({
@@ -658,34 +675,84 @@ export function SignoffView({
   photoSrc,
   act,
   fileHref,
+  uploadFile,
+  onNote,
 }: {
   d: SignoffData;
   photoSrc: string;
-  act: (decision: "approve" | "reject", note: string) => Act<SignoffData & { approved?: boolean }>;
+  /** The decision, with the consultant's files (a marked-up photo of what to redo). */
+  act: (decision: "approve" | "reject", note: string, files: CorrFile[]) => Act<SignoffData & { approved?: boolean }>;
   /** Link for a file on the thread (the door decides: token or portal). */
   fileHref?: (path: string) => string;
+  /** Direct-to-Blob upload for the consultant's files; absent = words only. */
+  uploadFile?: ((file: File) => Promise<{ file?: CorrFile; error?: string }>) | null;
+  /** A note back to the builder without deciding (a question, "send me the north face"). */
+  onNote?: (text: string, files: CorrFile[]) => Act<SignoffData>;
 }) {
   const [data, setData] = useState(d);
   const [note, setNote] = useState("");
+  const [files, setFiles] = useState<CorrFile[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<"approved" | "rejected" | null>(null);
+  const [msgText, setMsgText] = useState("");
+  const [msgFiles, setMsgFiles] = useState<CorrFile[]>([]);
+  const [msgUploading, setMsgUploading] = useState(false);
+  const [msgBusy, setMsgBusy] = useState(false);
+  const [msgSent, setMsgSent] = useState(false);
+  const [msgErr, setMsgErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const msgFileRef = useRef<HTMLInputElement>(null);
+  const href = fileHref ?? (() => "#");
+
+  const pick = async (list: FileList | null, which: "decision" | "note") => {
+    if (!list || !uploadFile) return;
+    const setU = which === "decision" ? setUploading : setMsgUploading;
+    const setE = which === "decision" ? setErr : setMsgErr;
+    const add = which === "decision" ? setFiles : setMsgFiles;
+    setE(null);
+    setU(true);
+    try {
+      await uploadPicked(list, uploadFile, (file) => add((xs) => [...xs, file]), (m) => setE(m));
+    } finally {
+      setU(false);
+      const ref = which === "decision" ? fileRef : msgFileRef;
+      if (ref.current) ref.current.value = "";
+    }
+  };
 
   const decide = async (decision: "approve" | "reject") => {
-    if (busy) return;
+    if (busy || uploading) return;
     if (decision === "reject" && !note.trim()) {
       setErr("Add a note so the sub knows what to put right.");
       return;
     }
     setBusy(true);
     setErr(null);
-    const res = await act(decision, note);
+    const res = await act(decision, note, files);
     if (!res.ok) setErr(res.error ?? "That didn't go through. Try again.");
     else {
       if (res.data) setData(res.data);
+      setFiles([]);
       setOutcome(decision === "approve" ? "approved" : "rejected");
     }
     setBusy(false);
+  };
+
+  const sendNote = async () => {
+    if (!onNote || (!msgText.trim() && !msgFiles.length) || msgBusy || msgUploading) return;
+    setMsgBusy(true);
+    setMsgErr(null);
+    const res = await onNote(msgText, msgFiles);
+    if (!res.ok) setMsgErr(res.error ?? "That didn't go through. Try again.");
+    else {
+      if (res.data) setData(res.data);
+      setMsgText("");
+      setMsgFiles([]);
+      setMsgSent(true);
+    }
+    setMsgBusy(false);
   };
 
   return (
@@ -730,18 +797,51 @@ export function SignoffView({
         <div className="ans-card">
           <div className="ans-klabel">Your note (required to bounce back)</div>
           <textarea className="ans-ta" placeholder="Optional if you're signing off. If bouncing back, say what still needs doing." value={note} maxLength={4000} onChange={(e) => setNote(e.target.value)} />
+          {uploadFile && (
+            <>
+              <input ref={fileRef} type="file" multiple accept="image/*,.pdf,.docx,.xlsx,.zip,.dwg" style={{ display: "none" }} onChange={(e) => void pick(e.target.files, "decision")} />
+              {files.length > 0 && <AttachmentList files={files} href={href} />}
+              <button className="qa-photo" style={{ marginTop: 9 }} disabled={uploading || busy} onClick={() => fileRef.current?.click()}>
+                {uploading ? "Uploading…" : "📎 Attach a photo or a file (a marked-up shot of what to redo)"}
+              </button>
+            </>
+          )}
           {err && <div className="ans-err">{err}</div>}
           <div className="ans-actions">
-            <button className="ans-btn primary" disabled={busy} onClick={() => void decide("approve")}>{busy ? "Sending…" : "Sign it off"}</button>
-            <button className="ans-btn" disabled={busy} onClick={() => void decide("reject")}>Bounce back</button>
+            <button className="ans-btn primary" disabled={busy || uploading} onClick={() => void decide("approve")}>{busy ? "Sending…" : "Sign it off"}</button>
+            <button className="ans-btn" disabled={busy || uploading} onClick={() => void decide("reject")}>Bounce back</button>
           </div>
-          <p className="ans-fine">Signing off closes the item. Bouncing it back sends it to the sub to redo, with your note.</p>
+          <p className="ans-fine">Signing off closes the item. Bouncing it back sends it to the sub to redo, with your note and files.</p>
         </div>
       )}
 
       {!data.canSignoff && !outcome && (
         <div className="ans-card ans-center">
           <p>This item has already been actioned. Nothing further is needed from you.</p>
+        </div>
+      )}
+
+      {onNote && data.canNote !== false && data.status !== "closed" && (
+        <div className="ans-card">
+          <div className="ans-klabel">Write back</div>
+          <p className="ans-note">A question for {data.company}, or something you need before you can sign off. It goes on this item and they are told by email.</p>
+          {msgSent && <div className="ans-done" style={{ margin: "0 0 10px" }}>✓ Sent. {data.company} has been notified.</div>}
+          <textarea className="ans-ta" style={{ minHeight: 80 }} placeholder="e.g. Send me a photo of the north face before I sign this off." value={msgText} maxLength={4000} onChange={(e) => { setMsgText(e.target.value); setMsgSent(false); }} />
+          {uploadFile && (
+            <>
+              <input ref={msgFileRef} type="file" multiple accept="image/*,.pdf,.docx,.xlsx,.zip,.dwg" style={{ display: "none" }} onChange={(e) => void pick(e.target.files, "note")} />
+              {msgFiles.length > 0 && <AttachmentList files={msgFiles} href={href} />}
+              <button className="qa-photo" style={{ marginTop: 9 }} disabled={msgUploading || msgBusy} onClick={() => msgFileRef.current?.click()}>
+                {msgUploading ? "Uploading…" : "📎 Attach a photo or a file"}
+              </button>
+            </>
+          )}
+          {msgErr && <div className="ans-err">{msgErr}</div>}
+          <div className="ans-actions">
+            <button className="ans-btn" disabled={msgBusy || msgUploading || (!msgText.trim() && !msgFiles.length)} onClick={() => void sendNote()}>
+              {msgBusy ? "Sending…" : msgFiles.length && !msgText.trim() ? "Send the files" : "Send the note"}
+            </button>
+          </div>
         </div>
       )}
     </>

@@ -228,8 +228,31 @@ export default function PortalPage() {
             d={detail.data as SignoffData}
             photoSrc={`/api/portal/photo?table=item&id=${encodeURIComponent(open.id)}&side=consultant`}
             fileHref={(path) => `/api/defect-file?portal=${encodeURIComponent(open.id)}&table=item&side=consultant&path=${encodeURIComponent(path)}`}
-            act={async (decision, note) => {
-              const r = await post({ kind: "signoff", id: open.id, decision, body: note });
+            uploadFile={
+              (detail.data as SignoffData).uploadPrefix
+                ? async (file) => {
+                    const v = detail.data as SignoffData;
+                    try {
+                      const res = await upload(`${v.uploadPrefix}${file.name}`, file, {
+                        access: "private",
+                        handleUploadUrl: "/api/portal/upload",
+                        clientPayload: JSON.stringify({ defectId: open.id, table: "item", side: "consultant" }),
+                        contentType: file.type || "application/octet-stream",
+                      });
+                      const f: CorrFile = { filename: file.name, path: res.pathname, bytes: file.size, contentType: file.type || "application/octet-stream" };
+                      return { file: f };
+                    } catch (e) {
+                      return { error: e instanceof Error ? e.message : `${file.name} didn't upload.` };
+                    }
+                  }
+                : null
+            }
+            onNote={async (text, files) => {
+              const r = await post({ kind: "signoff", id: open.id, action: "note", body: text, files });
+              return r.ok ? { ok: true, data: r.data as SignoffData } : r;
+            }}
+            act={async (decision, note, files) => {
+              const r = await post({ kind: "signoff", id: open.id, decision, body: note, files });
               return r.ok ? { ok: true, data: r.data as SignoffData } : r;
             }}
           />

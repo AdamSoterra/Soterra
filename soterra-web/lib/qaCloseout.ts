@@ -228,25 +228,35 @@ async function checkContext(row: CheckRow): Promise<{ title: string; location: s
 export async function defectsForEmails(emails: string[]): Promise<{ fixes: FoundDefect[]; signoffs: ItemRow[] }> {
   if (!emails.length) return { fixes: [], signoffs: [] };
   const lower = emails.map((e) => e.toLowerCase());
-  const inList = sql.join(lower.map((e) => sql`${e}`), sql`, `);
+  // A defect sent to "local+tag@domain" belongs to the account on
+  // "local@domain" (normalizeEmail, same rule as rfisForEmails): the SQL
+  // pre-filter must let the tagged rows through, the exact match below
+  // (subEmailsOf) then decides.
+  const variants = lower.map((e) => {
+    const clean = e.replace(/[%_]/g, "");
+    const at = clean.lastIndexOf("@");
+    return { e, clean, tagged: at > 0 ? `${clean.slice(0, at)}+%${clean.slice(at)}` : null };
+  });
+  const oneOf = (col: typeof qaFlags.subEmail | typeof inspectionItems.consultantEmail) =>
+    sql.join(variants.flatMap((v) => [sql`lower(${col}) = ${v.e}`, ...(v.tagged ? [sql`lower(${col}) LIKE ${v.tagged}`] : [])]), sql` OR `);
+  const inJson = (col: typeof inspectionItems.subEmails | typeof checklistItems.subEmails) =>
+    sql.join(variants.flatMap((v) => [sql`${col} ILIKE ${"%" + v.clean + "%"}`, ...(v.tagged ? [sql`${col} ILIKE ${"%" + v.tagged + "%"}`] : [])]), sql` OR `);
   const flags = await db
     .select()
     .from(qaFlags)
-    .where(and(isNotNull(qaFlags.subToken), sql`lower(${qaFlags.subEmail}) IN (${inList})`));
-  const likeAny = sql.join(lower.map((e) => sql`${inspectionItems.subEmails} ILIKE ${"%" + e.replace(/[%_]/g, "") + "%"}`), sql` OR `);
+    .where(and(isNotNull(qaFlags.subToken), sql`(${oneOf(qaFlags.subEmail)})`));
   const items = await db
     .select()
     .from(inspectionItems)
-    .where(and(isNotNull(inspectionItems.subToken), sql`(${likeAny})`));
-  const likeAnyCheck = sql.join(lower.map((e) => sql`${checklistItems.subEmails} ILIKE ${"%" + e.replace(/[%_]/g, "") + "%"}`), sql` OR `);
+    .where(and(isNotNull(inspectionItems.subToken), sql`(${inJson(inspectionItems.subEmails)})`));
   const checks = await db
     .select()
     .from(checklistItems)
-    .where(and(isNotNull(checklistItems.subToken), sql`(${likeAnyCheck})`));
+    .where(and(isNotNull(checklistItems.subToken), sql`(${inJson(checklistItems.subEmails)})`));
   const signoffs = await db
     .select()
     .from(inspectionItems)
-    .where(and(isNotNull(inspectionItems.consultantToken), sql`lower(${inspectionItems.consultantEmail}) IN (${inList})`));
+    .where(and(isNotNull(inspectionItems.consultantToken), sql`(${oneOf(inspectionItems.consultantEmail)})`));
   const fixes: FoundDefect[] = [
     ...flags.map((row) => ({ kind: "flag" as const, row })),
     ...items.filter((i) => subEmailsOf({ kind: "item", row: i }).some((e) => lower.includes(e))).map((row) => ({ kind: "item" as const, row })),
@@ -502,6 +512,10 @@ export async function signoffView(item: ItemRow) {
     // The whole back-and-forth (sent, the sub's questions, bounces, the
     // photo), so the consultant signs off on the history, not just the last note.
     messages: await defectMessagesFor("item", item.id),
+    // A note (a question back to the builder) can be added short of closed;
+    // files on it and on the decision go under the defect's own folder.
+    canNote: item.closeoutStatus !== "closed",
+    uploadPrefix: item.closeoutStatus !== "closed" ? defectBlobPrefix(item.projectId, item.id) : null,
   };
 }
 
@@ -511,7 +525,7 @@ export async function signoffView(item: ItemRow) {
  *  status flip is what re-arms it). Then the MC is notified. */
 export async function signoffByToken(
   token: string,
-  input: { approve: boolean; note?: string | null }
+  input: { approve: boolean; note?: string | null; files?: Attachment[] }
 ): Promise<{ ok: true; approved: boolean } | { ok: false; error: string }> {
   const item = await byConsultantToken(token);
   if (!item) return { ok: false, error: "not-found" };
@@ -520,10 +534,11 @@ export async function signoffByToken(
 
 export async function signoffRow(
   item: ItemRow,
-  input: { approve: boolean; note?: string | null; via?: "link" | "portal" }
+  input: { approve: boolean; note?: string | null; via?: "link" | "portal"; files?: Attachment[] }
 ): Promise<{ ok: true; approved: boolean } | { ok: false; error: string }> {
   const now = new Date();
   const note = input.note?.trim().slice(0, 4000) || null;
+  const files = input.files ?? [];
 
   const set = input.approve
     ? { closeoutStatus: "closed", closedAt: now, reviewNote: note, workStatus: "done" }
@@ -540,8 +555,11 @@ export async function signoffRow(
     authorName: item.consultantName || item.consultantEmail || "The consultant",
     via: input.via ?? "link",
     body: note ?? (input.approve ? "Signed off" : "Bounced back"),
+    attachments: files,
   });
-  if (!input.approve) await notifySubBounced({ kind: "item", row: claimed }, item.consultantName || item.consultantEmail || "The consultant", note);
+  // The sub gets the consultant's files with the bounce (a marked-up photo of
+  // what to redo); the builder gets them either way.
+  if (!input.approve) await notifySubBounced({ kind: "item", row: claimed }, item.consultantName || item.consultantEmail || "The consultant", note, files);
 
   try {
     await notifyMc("item", claimed, {
@@ -551,7 +569,7 @@ export async function signoffRow(
       nextLine: input.approve
         ? "signed this off. It is closed - nothing further needed."
         : "bounced this back. It is back with the sub to redo, and the sub's fix link is live again.",
-    });
+    }, files);
   } catch (e) {
     console.error("qa signoff notice failed:", e);
   }
@@ -702,9 +720,9 @@ export async function reject(
 
 /** A bounce-back is a message to the sub: they hear about it by email, with
  *  their link back in, instead of finding out next time they open it. */
-async function notifySubBounced(found: FoundDefect, byName: string | null, note: string | null): Promise<void> {
+async function notifySubBounced(found: FoundDefect, byName: string | null, note: string | null, files: Attachment[] = []): Promise<void> {
   try {
-    await passNoteToExternal({ ...found, side: "sub" }, { name: byName ?? "The site team", email: (found.row as { senderEmail?: string | null }).senderEmail ?? "" }, note ? `Bounced back: ${note}` : "Bounced back - please redo and mark it fixed again.", null, "bounced");
+    await passNoteToExternal({ ...found, side: "sub" }, { name: byName ?? "The site team", email: (found.row as { senderEmail?: string | null }).senderEmail ?? "" }, note ? `Bounced back: ${note}` : "Bounced back - please redo and mark it fixed again.", attachmentsLine(files), "bounced", files);
   } catch (e) {
     console.error("bounce notice to sub failed:", e);
   }
@@ -722,20 +740,25 @@ function subLine(kind: CloseoutKind, row: FlagRow | ItemRow | CheckRow): string 
 async function notifyMc(
   kind: CloseoutKind,
   row: FlagRow | ItemRow | CheckRow,
-  n: { kind: "ready" | "signed_off" | "bounced"; actorLine: string; note: string | null; nextLine: string }
+  n: { kind: "ready" | "signed_off" | "bounced"; actorLine: string; note: string | null; nextLine: string },
+  files: Attachment[] = []
 ): Promise<void> {
   const to = (row as { senderEmail?: string | null }).senderEmail?.trim();
   if (!to) return;
   const scope = tokenScope(row);
   const { project, company } = await projectAndCompany(scope);
   const title = row.title;
+  // The other side's files ride along while the budget lasts; the rest are
+  // named so the reader knows to open the item in Soterra.
+  const packed = files.length ? await packForEmail(files) : { attachments: [], listed: [] };
+  const line = files.length ? filesLine(packed, "the item in Soterra") : null;
   const rendered = renderQaCloseoutNotice({
     companyName: company,
     projectName: project,
     title,
     kind: n.kind,
     actorLine: n.actorLine,
-    note: n.note,
+    note: [n.note, line].filter(Boolean).join("\n\n") || null,
     nextLine: n.nextLine,
     appUrl: APP_URL,
     refLabel: `QA close-out · ${title}`.slice(0, 80),
@@ -751,6 +774,7 @@ async function notifyMc(
     subject: `${title} · ${n.kind === "ready" ? "marked fixed" : n.kind === "signed_off" ? "signed off" : "bounced back"} · ${project}`,
     html: rendered.html,
     text: rendered.text,
+    attachments: packed.attachments,
     sentByName: n.actorLine,
   });
 }
@@ -852,12 +876,24 @@ export async function noteFromBuilder(
   return { ok: true, emailed };
 }
 
-/** The defect behind a sub's link, for the thread-file upload door: the ids
- *  build the blob path; a closed item takes no more files. */
-export async function threadUploadTarget(token: string): Promise<{ projectId: string; recordId: string; companyId: string; emails: string[]; canNote: boolean } | null> {
+/** The defect behind an emailed link - the sub's OR the consultant's - for the
+ *  thread-file upload door: the ids build the blob path, the emails feed the
+ *  sign-in gate; a closed item takes no more files. */
+export async function threadUploadTarget(token: string): Promise<{ side: "sub" | "consultant"; projectId: string; recordId: string; companyId: string; emails: string[]; canNote: boolean } | null> {
   const found = await bySubToken(token);
-  if (!found) return null;
-  return { projectId: found.row.projectId, recordId: found.row.id, companyId: found.row.companyId, emails: subEmailsOf(found), canNote: found.row.closeoutStatus !== "closed" };
+  if (found) return { side: "sub", projectId: found.row.projectId, recordId: found.row.id, companyId: found.row.companyId, emails: subEmailsOf(found), canNote: found.row.closeoutStatus !== "closed" };
+  const item = await byConsultantToken(token);
+  if (!item) return null;
+  return { side: "consultant", projectId: item.projectId, recordId: item.id, companyId: item.companyId, emails: item.consultantEmail ? [normalizeEmail(item.consultantEmail)] : [], canNote: item.closeoutStatus !== "closed" };
+}
+
+/** The consultant writes back from the sign-off page without deciding (a
+ *  question, "send me the north face"): on the thread, emailed to whoever
+ *  pressed Send, with their files. */
+export async function noteByConsultantToken(token: string, text: string, files: Attachment[] = []): Promise<{ ok: true } | { ok: false; error: string }> {
+  const item = await byConsultantToken(token);
+  if (!item) return { ok: false, error: "not-found" };
+  return noteFromExternal({ kind: "item", row: item, side: "consultant" }, { name: item.consultantName || item.consultantEmail || "The consultant", email: item.consultantEmail ?? null }, text, "link", files);
 }
 
 /** Either side's token → the defect, for the thread-file streaming route (both

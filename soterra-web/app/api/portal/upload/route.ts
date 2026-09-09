@@ -40,21 +40,24 @@ export async function POST(request: Request) {
         let rfiId = "";
         let defectId = "";
         let table = "";
+        let side = "";
         try {
           const payload = JSON.parse(clientPayload || "{}");
           corrId = String(payload.corrId ?? "");
           rfiId = String(payload.rfiId ?? "");
           defectId = String(payload.defectId ?? "");
           table = String(payload.table ?? "");
+          side = String(payload.side ?? "");
         } catch {
           throw new Error("Bad request");
         }
         const user = await currentUser();
         const emails = verifiedEmails(user as never);
         if (defectId) {
-          // The sub writing back on a defect with a photo or a file.
+          // The sub writing back on a defect with a photo or a file, or the
+          // consultant attaching on a sign-off.
           const kind = table === "flag" ? "flag" : table === "check" ? "check" : "item";
-          const found = await defectForEmail(kind, defectId, emails, "sub");
+          const found = await defectForEmail(kind, defectId, emails, side === "consultant" ? "consultant" : "sub");
           if (!found) throw new Error("Not found");
           if (found.row.closeoutStatus === "closed") throw new Error("This item is closed");
           if (!pathname.startsWith(defectBlobPrefix(found.row.projectId, found.row.id))) throw new Error("Bad upload path");

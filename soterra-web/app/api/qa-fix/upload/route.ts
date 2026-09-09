@@ -6,9 +6,10 @@ import { FILE_TYPES, MAX_FILE_BYTES } from "@/lib/attachments";
 
 // Direct-to-Blob upload token for the SUB writing back on a defect with a
 // photo or a file (a shot of the wall, the product data sheet, a marked-up
-// sketch). Mirrors /api/rfi-answer/upload: the authorisation is the sub_token
-// from the "Mark it fixed" link (in clientPayload) plus the company's sign-in
-// gate, not project membership. The pathname must live under the defect's
+// sketch), and for the CONSULTANT attaching on the sign-off page. Mirrors
+// /api/rfi-answer/upload: the authorisation is the token from the emailed
+// link (sub_token or consultant_token, in clientPayload) plus the company's
+// sign-in gate, not project membership. The pathname must live under the defect's
 // own folder. The "Mark it fixed" photo itself still goes through
 // /api/qa-fix/photo - that one is the record of the fix; these are the
 // conversation.

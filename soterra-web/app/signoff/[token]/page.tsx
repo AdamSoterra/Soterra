@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
-import { ErrorCard, InvalidCard, Loading, LoginGate, Shell, SignoffView, type SignoffData } from "@/app/components/external-views";
+import { upload } from "@vercel/blob/client";
+import { ErrorCard, InvalidCard, Loading, LoginGate, Shell, SignoffView, type CorrFile, type SignoffData } from "@/app/components/external-views";
 
 // The consultant's side of a QA defect - soterra.co.nz/signoff/<token>.
 //
@@ -48,9 +49,37 @@ export default function SignoffPage({ params }: { params: { token: string } }) {
         d={d}
         photoSrc={`/api/qa-fix/photo?token=${encodeURIComponent(token)}`}
         fileHref={(path) => `/api/defect-file?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`}
-        act={async (decision, note) => {
+        uploadFile={
+          d.uploadPrefix
+            ? async (file) => {
+                try {
+                  const res = await upload(`${d.uploadPrefix}${file.name}`, file, {
+                    access: "private",
+                    handleUploadUrl: "/api/qa-fix/upload",
+                    clientPayload: JSON.stringify({ token }),
+                    contentType: file.type || "application/octet-stream",
+                  });
+                  const f: CorrFile = { filename: file.name, path: res.pathname, bytes: file.size, contentType: file.type || "application/octet-stream" };
+                  return { file: f };
+                } catch (e) {
+                  return { error: e instanceof Error ? e.message : `${file.name} didn't upload.` };
+                }
+              }
+            : null
+        }
+        onNote={async (text, files) => {
           try {
-            const r = await fetch("/api/qa-signoff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, decision, note }) });
+            const r = await fetch("/api/qa-signoff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, action: "note", note: text, files }) });
+            const j = (await r.json()) as { ok?: boolean; defect?: SignoffData; error?: string };
+            if (!r.ok || !j.ok) return { ok: false, error: j.error };
+            return { ok: true, data: j.defect };
+          } catch {
+            return { ok: false, error: "That didn't go through. Check your connection and try again." };
+          }
+        }}
+        act={async (decision, note, files) => {
+          try {
+            const r = await fetch("/api/qa-signoff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, decision, note, files }) });
             const j = (await r.json()) as { ok?: boolean; approved?: boolean; defect?: SignoffData; error?: string };
             if (!r.ok || !j.ok) return { ok: false, error: j.error };
             return { ok: true, data: j.defect ? { ...j.defect, approved: j.approved } : undefined };
