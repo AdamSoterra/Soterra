@@ -111,7 +111,7 @@ type Sub = { id: string; name: string; email: string; trade: string | null };
 // A consultant contact (the Directory): company-scoped, discipline = an RFI discipline.
 type Consultant = { id: string; name: string | null; company: string | null; discipline: string | null; email: string };
 // A QA flag (Feature 7): a pinned mistake on a drawing.
-type FlagRow = { id: string; n: number; doc: string; page: number; title: string; trade: string | null; note: string | null; status: string; subName: string | null; sentAt: string | null; sentStatus: string | null; fixedAt: string | null };
+type FlagRow = { id: string; n: number; doc: string; page: number; title: string; trade: string | null; note: string | null; status: string; subName: string | null; sentAt: string | null; sentStatus: string | null; fixedAt: string | null; closeoutStatus?: string; readyAt?: string | null; closedAt?: string | null; closedByName?: string | null; subNote?: string | null; reviewNote?: string | null; fixPhoto?: string | null };
 // ─── RFI types (Feature 5) ───
 // One consultant an RFI is assigned to; the first in the list is the accountable one.
 type RfiAssignee = { name: string | null; company: string | null; email: string };
@@ -375,6 +375,9 @@ const SRC_LABEL: Record<string, string> = { ci: "Instruction", plans: "Plans", c
 const CO_LABEL: Record<string, string> = { open: "not sent", sent: "with the sub", ready: "marked fixed", submitted: "with the consultant", closed: "closed out" };
 // One line of a defect's thread (lib/defectThread.ts) and how each type reads.
 type CoMsg = { id: string; type: string; authorSide: string; authorName: string | null; via: string | null; body: string; attachments?: RfiAtt[]; createdAt: string };
+// The three kinds of defect that run the close-out loop (lib/qaCloseout.ts):
+// a QA check item, an inspection-report item, a flag pinned on a drawing.
+type CoKind = "check" | "item" | "flag";
 const CO_MSG_LABEL: Record<string, string> = { sent: "✉ Sent", ready: "✓ Marked fixed", bounced: "↩ Bounced back", closed: "✓ Closed out", forwarded: "→ For sign-off", signed_off: "✓ Signed off", reopened: "Reopened" };
 // Programme-critique finding types → the section heading each groups under.
 const FINDING_GROUPS: { key: string; label: string }[] = [
@@ -957,7 +960,7 @@ export default function Page() {
   const [sendItemIds, setSendItemIds] = useState<string[] | null>(null);
   const [insSendItemIds, setInsSendItemIds] = useState<string[] | null>(null);
   // Per-item close-out: the item whose close / bounce / forward mini-form is open.
-  const [coFor, setCoFor] = useState<{ kind: "check" | "item"; id: string; mode: "close" | "reject" | "forward" } | null>(null);
+  const [coFor, setCoFor] = useState<{ kind: CoKind; id: string; mode: "close" | "reject" | "forward" } | null>(null);
   const [coNote, setCoNote] = useState("");
   const [coEmail, setCoEmail] = useState("");
   const [coName, setCoName] = useState("");
@@ -2640,7 +2643,7 @@ export default function Page() {
   };
   // ─── per-item close-out (checks + report items): close / reopen / bounce / forward ───
   // The thread under an item: opened on demand, reloaded after every action on that item.
-  const [coThread, setCoThread] = useState<{ kind: "check" | "item"; id: string } | null>(null);
+  const [coThread, setCoThread] = useState<{ kind: CoKind; id: string } | null>(null);
   const [coMsgs, setCoMsgs] = useState<CoMsg[] | null>(null);
   const [coText, setCoText] = useState("");
   // Files on the note to the sub: direct-to-Blob under this site's
@@ -2648,7 +2651,7 @@ export default function Page() {
   const [coFiles, setCoFiles] = useState<RfiAtt[]>([]);
   const [coUploading, setCoUploading] = useState(false);
   const coFileRef = useRef<HTMLInputElement>(null);
-  const coFileHref = (kind: "check" | "item", id: string, path: string) => `/api/defect-file?kind=${kind}&id=${encodeURIComponent(id)}&path=${encodeURIComponent(path)}&project=${encodeURIComponent(projRef.current ?? "")}`;
+  const coFileHref = (kind: CoKind, id: string, path: string) => `/api/defect-file?kind=${kind}&id=${encodeURIComponent(id)}&path=${encodeURIComponent(path)}&project=${encodeURIComponent(projRef.current ?? "")}`;
   const uploadCoFiles = async (id: string, list: File[]) => {
     const pid = projRef.current;
     if (!pid) throw new Error("No site selected");
@@ -2673,7 +2676,7 @@ export default function Page() {
       setCoUploading(false);
     }
   };
-  const loadCoThread = async (kind: "check" | "item", id: string) => {
+  const loadCoThread = async (kind: CoKind, id: string) => {
     try {
       const r = await apiFetch(`/api/qa-closeout?kind=${kind}&id=${encodeURIComponent(id)}`);
       const d = await r.json();
@@ -2682,7 +2685,7 @@ export default function Page() {
       setCoMsgs([]);
     }
   };
-  const toggleThread = (kind: "check" | "item", id: string) => {
+  const toggleThread = (kind: CoKind, id: string) => {
     if (coThread && coThread.kind === kind && coThread.id === id) { setCoThread(null); setCoMsgs(null); return; }
     setCoThread({ kind, id }); setCoMsgs(null); setCoText(""); setCoFiles([]);
     void loadCoThread(kind, id);
@@ -2699,7 +2702,7 @@ export default function Page() {
     if (!parts.length) return null;
     return <div className="ck-cosum">{parts.join(" · ")}</div>;
   };
-  const closeoutAction = async (kind: "check" | "item", id: string, action: "close" | "reopen" | "reject" | "forward" | "note", extra: Record<string, unknown> = {}) => {
+  const closeoutAction = async (kind: CoKind, id: string, action: "close" | "reopen" | "reject" | "forward" | "note", extra: Record<string, unknown> = {}) => {
     setCoBusy(true);
     try {
       const r = await apiFetch("/api/qa-closeout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, id, action, ...extra }) });
@@ -2713,14 +2716,93 @@ export default function Page() {
         const dd = await rr.json();
         if (dd?.inspection) setOpenInspection(dd);
       }
+      if (kind === "flag") {
+        // The open flag card and the pins on the sheet pick up the new status.
+        const rr = await apiFetch(`/api/flags?id=${encodeURIComponent(id)}`);
+        const dd = await rr.json();
+        if (dd?.flag) setFlagView(dd.flag);
+        setPinRefresh((n) => n + 1);
+      }
       setCoLoaded(false); // the scorecard picks the change up next time it opens
       return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "That didn't work just now.";
-      if (kind === "check") setClErr(msg); else setInsErr(msg);
+      if (kind === "check") setClErr(msg); else if (kind === "flag") setFlagErr(msg); else setInsErr(msg);
       return false;
     } finally { setCoBusy(false); }
   };
+  /** The conversation under a defect (any kind) + the write-to-them box with
+   *  attachments. Shared by the item lists on a check / report and the flag
+   *  card on a drawing. `st` = the close-out status; `sentTo` = the sub's name. */
+  const renderCoThread = (kind: CoKind, id: string, sentTo: string | null, st: string) => (
+    <>
+        {coThread?.kind === kind && coThread.id === id && (
+          <div className="note ck-thread">
+            {coMsgs === null ? (
+              <div className="page-sub" style={{ margin: 0 }}>Loading…</div>
+            ) : coMsgs.length === 0 ? (
+              <div className="page-sub" style={{ margin: 0 }}>Nothing on the thread yet.</div>
+            ) : (
+              coMsgs.map((m) => (
+                <div className={"co-msg" + (m.authorSide !== "contractor" ? " them" : "")} key={m.id}>
+                  <div className="who">
+                    {CO_MSG_LABEL[m.type] ? `${CO_MSG_LABEL[m.type]} · ` : ""}
+                    {m.authorName ?? (m.authorSide === "contractor" ? "Us" : m.authorSide === "sub" ? sentTo || "Sub" : "Consultant")} · {new Date(m.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}
+                    {m.via === "email" ? " · by email" : m.via === "portal" ? " · from the portal" : m.via === "link" ? " · from the link" : ""}
+                  </div>
+                  <div className="body">{m.body}</div>
+                  {(m.attachments?.length ?? 0) > 0 && m.attachments!.map((a) => (
+                    <div className="co-att" key={a.path}>
+                      <span>{rfiFileIcon(a.filename)}</span>
+                      <a href={coFileHref(kind, id, a.path)} target="_blank" rel="noopener noreferrer">{a.filename}</a>
+                      <small>{rfiFmtBytes(a.bytes)}</small>
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
+            {st !== "closed" && st !== "open" && (
+              <div style={{ marginTop: 8 }}>
+                <textarea className="ev-in" rows={2} value={coText} placeholder={st === "submitted" ? "Write to the consultant - goes on this item and to their inbox" : `Write to ${sentTo || "the sub"} - goes on this item and to their inbox, with their link`} onChange={(e) => setCoText(e.target.value)} />
+                {coFiles.length > 0 && rfiFileRows(coFiles, null, (path) => setCoFiles((xs) => xs.filter((x) => x.path !== path)))}
+                <input ref={coFileRef} type="file" multiple accept="image/*,.pdf,.docx,.xlsx,.zip,.dwg" style={{ display: "none" }} onChange={async (e) => {
+                  const list = e.target.files ? Array.from(e.target.files) : [];
+                  e.target.value = "";
+                  if (!list.length) return;
+                  try { await uploadCoFiles(id, list); }
+                  catch (err) { const m = err instanceof Error ? err.message : "Couldn't attach that."; if (kind === "check") setClErr(m); else if (kind === "flag") setFlagErr(m); else setInsErr(m); }
+                }} />
+                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                  <button className="go" disabled={coBusy || coUploading || (!coText.trim() && !coFiles.length)} onClick={async () => { if (await closeoutAction(kind, id, "note", { note: coText, files: coFiles })) { setCoText(""); setCoFiles([]); } }}>{coBusy ? "Sending…" : coFiles.length && !coText.trim() ? "Send the files" : "Send"}</button>
+                  <button type="button" disabled={coBusy || coUploading} onClick={() => coFileRef.current?.click()}>{coUploading ? "Uploading…" : "📎 Attach a photo or file"}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+    </>
+  );
+  /** The one-line note form behind Close out / Bounce back / Forward, any kind. */
+  const renderCoMini = (kind: CoKind, id: string, mini: "close" | "reject" | "forward" | null) => (
+    <>
+        {mini && (
+          <div className="note" style={{ background: "#fff" }}>
+            {mini === "forward" && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                <input className="ev-in" style={{ flex: 1, minWidth: 140 }} value={coName} placeholder="Consultant's name" onChange={(e) => setCoName(e.target.value)} />
+                <input className="ev-in" style={{ flex: 1.4, minWidth: 180 }} type="email" value={coEmail} placeholder="their@email.co.nz" onChange={(e) => setCoEmail(e.target.value)} />
+              </div>
+            )}
+            <textarea className="ev-in" rows={2} autoFocus value={coNote} placeholder={mini === "close" ? "Note (optional) - e.g. checked on site, collar in and sealed" : mini === "reject" ? "What still needs doing (the sub sees this)" : "A note for the consultant (optional)"} onChange={(e) => setCoNote(e.target.value)} />
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button className="go" disabled={coBusy || (mini === "reject" && !coNote.trim()) || (mini === "forward" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(coEmail.trim()))} onClick={() => void closeoutAction(kind, id, mini, mini === "forward" ? { note: coNote, name: coName, email: coEmail } : { note: coNote })}>
+                {coBusy ? "Saving…" : mini === "close" ? "Close it out" : mini === "reject" ? "Bounce it back" : "Send for sign-off"}
+              </button>
+              <button disabled={coBusy} onClick={() => setCoFor(null)}>Cancel</button>
+            </div>
+          </div>
+        )}    </>
+  );
   /** The close-out line under a check item or a report item: status + the actions that make sense now. */
   const renderCloseout = (kind: "check" | "item", it: { id: string; closeoutStatus?: string; readyAt?: string | null; closedAt?: string | null; closedByName?: string | null; subNote?: string | null; reviewNote?: string | null; sentTo?: string | null; consultantName?: string | null; consultantEmail?: string | null; hasPhoto: boolean; canSend: boolean; consultantReport?: boolean }) => {
     const st = it.closeoutStatus ?? "open";
@@ -2742,69 +2824,10 @@ export default function Page() {
         {it.reviewNote && <div className="note"><b>Note:</b> {it.reviewNote}</div>}
         {it.hasPhoto && (st === "ready" || st === "submitted" || st === "closed") && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img className="fixpic" alt="The sub's photo of the fix" src={`/api/qa-closeout/photo?kind=${kind}&id=${encodeURIComponent(it.id)}`} />
+          <img className="fixpic" alt="The sub's photo of the fix" src={`/api/qa-closeout/photo?kind=${kind}&id=${encodeURIComponent(it.id)}&project=${encodeURIComponent(projRef.current ?? "")}`} />
         )}
-        {coThread?.kind === kind && coThread.id === it.id && (
-          <div className="note ck-thread">
-            {coMsgs === null ? (
-              <div className="page-sub" style={{ margin: 0 }}>Loading…</div>
-            ) : coMsgs.length === 0 ? (
-              <div className="page-sub" style={{ margin: 0 }}>Nothing on the thread yet.</div>
-            ) : (
-              coMsgs.map((m) => (
-                <div className={"co-msg" + (m.authorSide !== "contractor" ? " them" : "")} key={m.id}>
-                  <div className="who">
-                    {CO_MSG_LABEL[m.type] ? `${CO_MSG_LABEL[m.type]} · ` : ""}
-                    {m.authorName ?? (m.authorSide === "contractor" ? "Us" : m.authorSide === "sub" ? it.sentTo || "Sub" : "Consultant")} · {new Date(m.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}
-                    {m.via === "email" ? " · by email" : m.via === "portal" ? " · from the portal" : m.via === "link" ? " · from the link" : ""}
-                  </div>
-                  <div className="body">{m.body}</div>
-                  {(m.attachments?.length ?? 0) > 0 && m.attachments!.map((a) => (
-                    <div className="co-att" key={a.path}>
-                      <span>{rfiFileIcon(a.filename)}</span>
-                      <a href={coFileHref(kind, it.id, a.path)} target="_blank" rel="noopener noreferrer">{a.filename}</a>
-                      <small>{rfiFmtBytes(a.bytes)}</small>
-                    </div>
-                  ))}
-                </div>
-              ))
-            )}
-            {st !== "closed" && st !== "open" && (
-              <div style={{ marginTop: 8 }}>
-                <textarea className="ev-in" rows={2} value={coText} placeholder={st === "submitted" ? "Write to the consultant - goes on this item and to their inbox" : `Write to ${it.sentTo || "the sub"} - goes on this item and to their inbox, with their link`} onChange={(e) => setCoText(e.target.value)} />
-                {coFiles.length > 0 && rfiFileRows(coFiles, null, (path) => setCoFiles((xs) => xs.filter((x) => x.path !== path)))}
-                <input ref={coFileRef} type="file" multiple accept="image/*,.pdf,.docx,.xlsx,.zip,.dwg" style={{ display: "none" }} onChange={async (e) => {
-                  const list = e.target.files ? Array.from(e.target.files) : [];
-                  e.target.value = "";
-                  if (!list.length) return;
-                  try { await uploadCoFiles(it.id, list); }
-                  catch (err) { if (kind === "check") setClErr(err instanceof Error ? err.message : "Couldn't attach that."); else setInsErr(err instanceof Error ? err.message : "Couldn't attach that."); }
-                }} />
-                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                  <button className="go" disabled={coBusy || coUploading || (!coText.trim() && !coFiles.length)} onClick={async () => { if (await closeoutAction(kind, it.id, "note", { note: coText, files: coFiles })) { setCoText(""); setCoFiles([]); } }}>{coBusy ? "Sending…" : coFiles.length && !coText.trim() ? "Send the files" : "Send"}</button>
-                  <button type="button" disabled={coBusy || coUploading} onClick={() => coFileRef.current?.click()}>{coUploading ? "Uploading…" : "📎 Attach a photo or file"}</button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        {mini && (
-          <div className="note" style={{ background: "#fff" }}>
-            {mini === "forward" && (
-              <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-                <input className="ev-in" style={{ flex: 1, minWidth: 140 }} value={coName} placeholder="Consultant's name" onChange={(e) => setCoName(e.target.value)} />
-                <input className="ev-in" style={{ flex: 1.4, minWidth: 180 }} type="email" value={coEmail} placeholder="their@email.co.nz" onChange={(e) => setCoEmail(e.target.value)} />
-              </div>
-            )}
-            <textarea className="ev-in" rows={2} autoFocus value={coNote} placeholder={mini === "close" ? "Note (optional) - e.g. checked on site, collar in and sealed" : mini === "reject" ? "What still needs doing (the sub sees this)" : "A note for the consultant (optional)"} onChange={(e) => setCoNote(e.target.value)} />
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button className="go" disabled={coBusy || (mini === "reject" && !coNote.trim()) || (mini === "forward" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(coEmail.trim()))} onClick={() => void closeoutAction(kind, it.id, mini, mini === "forward" ? { note: coNote, name: coName, email: coEmail } : { note: coNote })}>
-                {coBusy ? "Saving…" : mini === "close" ? "Close it out" : mini === "reject" ? "Bounce it back" : "Send for sign-off"}
-              </button>
-              <button disabled={coBusy} onClick={() => setCoFor(null)}>Cancel</button>
-            </div>
-          </div>
-        )}
+        {renderCoThread(kind, it.id, it.sentTo ?? null, st)}
+        {renderCoMini(kind, it.id, mini)}
       </div>
     );
   };
@@ -5254,10 +5277,37 @@ export default function Page() {
             <div className="form-body">
               {flagNotice && <div className="ck-notice" onClick={() => setFlagNotice(null)}>{flagNotice}</div>}
               {flagView.note && <p className="page-sub" style={{ margin: "0 0 12px" }}>{flagView.note}</p>}
-              <div className="rf-kv"><span className="k2">Status</span><span className="v">{flagView.status === "done" ? `Fixed${flagView.fixedAt ? ` · ${new Date(flagView.fixedAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : ""}` : flagView.status === "sent" ? "Sent · awaiting fix" : "Not sent"}</span></div>
+              <div className="rf-kv"><span className="k2">Status</span><span className="v">{flagView.status === "done" ? `Fixed${flagView.fixedAt ? ` · ${new Date(flagView.fixedAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : ""}` : flagView.status === "sent" ? (flagView.closeoutStatus === "ready" ? "Marked fixed by the sub · to review" : "Sent · awaiting fix") : "Not sent"}</span></div>
               {flagView.subName && (
                 <div className="rf-kv"><span className="k2">{flagView.sentAt ? (flagView.sentStatus === "sent" ? "Emailed to" : "Recorded for") : "Assigned to"}</span><span className="v">{flagView.subName}{flagView.sentAt ? ` · ${new Date(flagView.sentAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}` : ""}</span></div>
               )}
+              {/* The close-out loop on the flag: what the sub sent back, and the
+                  same conversation + write box the check and report items have. */}
+              {(() => {
+                const cst = flagView.closeoutStatus ?? "open";
+                const d = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString("en-NZ", { day: "numeric", month: "short" }) : "");
+                const showFix = cst === "ready" || cst === "closed";
+                return (
+                  <>
+                    {cst === "ready" && <div className="rf-kv"><span className="k2">Marked fixed</span><span className="v">by {flagView.subName || "the sub"}{flagView.readyAt ? ` · ${d(flagView.readyAt)}` : ""}</span></div>}
+                    {cst === "closed" && flagView.closedByName && <div className="rf-kv"><span className="k2">Closed out</span><span className="v">by {flagView.closedByName}{flagView.closedAt ? ` · ${d(flagView.closedAt)}` : ""}</span></div>}
+                    {showFix && flagView.subNote && <div className="note"><b>{flagView.subName || "Sub"}:</b> {flagView.subNote}</div>}
+                    {flagView.reviewNote && <div className="note"><b>Note:</b> {flagView.reviewNote}</div>}
+                    {showFix && flagView.fixPhoto && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img className="fixpic" alt="The sub's photo of the fix" src={`/api/qa-closeout/photo?kind=flag&id=${encodeURIComponent(flagView.id)}&project=${encodeURIComponent(projRef.current ?? "")}`} />
+                    )}
+                    {(cst !== "open" || flagView.subName) && (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                        {cst === "ready" && <button type="button" className="dir-act" disabled={coBusy} onClick={() => { setCoFor({ kind: "flag", id: flagView.id, mode: "reject" }); setCoNote(""); }}>↩ Bounce back</button>}
+                        <button type="button" className="dir-act" onClick={() => toggleThread("flag", flagView.id)}>{coThread?.kind === "flag" && coThread.id === flagView.id ? "Hide conversation" : "💬 Conversation"}</button>
+                      </div>
+                    )}
+                    {renderCoThread("flag", flagView.id, flagView.subName ?? null, cst)}
+                    {renderCoMini("flag", flagView.id, coFor?.kind === "flag" && coFor.id === flagView.id ? coFor.mode : null)}
+                  </>
+                );
+              })()}
               {!flagView.subName && flagView.status !== "done" && (
                 <div style={{ marginTop: 10 }}>
                   <label className="ev-lbl">Send to</label>
@@ -5297,9 +5347,10 @@ export default function Page() {
                   </button>
                 )}
                 {flagView.status !== "done" ? (
-                  <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 16px" }} disabled={flagBusy} onClick={() => void flagAction(flagView.id, "done")}>Mark fixed</button>
+                  // Through the close-out engine, so the thread gets its "Closed out" line.
+                  <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 16px" }} disabled={flagBusy || coBusy} onClick={() => void closeoutAction("flag", flagView.id, "close")}>{flagView.closeoutStatus === "ready" ? "✓ Close out" : "Mark fixed"}</button>
                 ) : (
-                  <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 16px" }} disabled={flagBusy} onClick={() => void flagAction(flagView.id, "reopen")}>Reopen</button>
+                  <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 16px" }} disabled={flagBusy || coBusy} onClick={() => void closeoutAction("flag", flagView.id, "reopen")}>Reopen</button>
                 )}
                 <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 14px", color: "var(--red)" }} disabled={flagBusy}
                   onClick={async () => {
