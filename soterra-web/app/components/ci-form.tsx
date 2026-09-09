@@ -248,6 +248,8 @@ export function CiCard({
   categories,
   onChanged,
   standalone,
+  flush,
+  terse,
 }: {
   ci: Ci;
   apiFetch: ApiFetch;
@@ -257,6 +259,10 @@ export function CiCard({
   onChanged: (ci: Ci) => void;
   /** In the register (not under an RFI): label it by its kind, not "raised from this". */
   standalone?: boolean;
+  /** Blend into the box it sits in (no card border) - used inside the RFI's response box. */
+  flush?: boolean;
+  /** Drop the wording block - the answer text above already says it. */
+  terse?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -303,7 +309,7 @@ export function CiCard({
   const btn = { height: 36, margin: 0, width: "auto", padding: "0 13px", fontSize: 12.5 } as const;
 
   return (
-    <div className="rf-card" style={{ borderColor: "rgba(139,92,246,.45)" }}>
+    <div className={flush ? "rf-ci-flush" : "rf-card"} style={flush ? { marginTop: 14, paddingTop: 13, borderTop: "1px solid var(--line)" } : { borderColor: "rgba(139,92,246,.45)" }}>
       <div className="k" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <span>{!standalone ? "Instruction raised from this" : ci.issuedBy === "client" ? "Client instruction" : ci.issuedBy === "architect" ? "Architect's instruction" : ci.issuedBy === "engineer" ? "Engineer's instruction" : "Contract instruction"}</span>
         <span className={"rf-pill " + (ci.status === "open" ? "open" : ci.status === "done" ? "answered" : "void")}>{ci.status}</span>
@@ -313,7 +319,7 @@ export function CiCard({
         <b style={{ fontSize: 15, color: "var(--navy)" }}>{ci.label}</b>
         <span style={{ fontSize: 14.5, fontWeight: 600, color: "var(--navy)" }}>{ci.title}</span>
       </div>
-      <div className="rf-q">{ci.directs ?? "No wording on record - edit the instruction to add it."}</div>
+      {!terse && <div className="rf-q">{ci.directs ?? "No wording on record - edit the instruction to add it."}</div>}
       {ci.file && (
         <div className="co-att" style={{ marginTop: 10 }}>
           <span>📄</span>

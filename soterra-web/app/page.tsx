@@ -1063,6 +1063,9 @@ export default function Page() {
   const [ansText, setAnsText] = useState("");
   const [fuText, setFuText] = useState("");
   const [ciFormOpen, setCiFormOpen] = useState(false); // raise the CI from the answer, inside the RFI
+  const [costEst, setCostEst] = useState(""); // cost-impact estimate, edited from the response box
+  const rfiOpenId = rfiOpen?.rfi.id;
+  useEffect(() => { setCostEst(rfiOpen?.rfi.costEstimate ?? ""); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [rfiOpenId]);
   const [newRfiOpen, setNewRfiOpen] = useState(false);
   const [nr, setNr] = useState({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "", criticalPath: false, costImpact: "unknown", costEstimate: "", programmeImpact: "unknown", programmeDays: "" });
   // Everyone the new RFI is assigned to (the PM decides: architect + electrical
@@ -4908,8 +4911,39 @@ export default function Page() {
                                 <div className="rf-ansmeta">{m.authorName ?? "Consultant"} · {new Date(m.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</div>
                               </div>
                             ))}
+
+                            {/* The CI raised from this answer, folded into the same box - it carries the instruction document, so the attachment sits right on the answer. */}
+                            {rfiOpen.ci && projectId && (
+                              <CiCard ci={rfiOpen.ci} apiFetch={apiFetch} projectId={projectId} projName={projName} categories={TRADES} flush terse onChanged={(c) => { setRfiOpen((o) => (o ? { ...o, ci: c } : o)); loadRfis(); }} />
+                            )}
+
+                            {/* Cost impact - marked right here on the answer. */}
                             {rfiOpen.rfi.status === "answered" && (
-                              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                              <div style={{ marginTop: 14, paddingTop: 13, borderTop: "1px solid var(--line)" }}>
+                                <div className="k" style={{ marginBottom: 7 }}>Cost impact</div>
+                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                                  {(["none", "unknown", "yes"] as const).map((v) => (
+                                    <button
+                                      key={v}
+                                      className={"rf-cptoggle" + (rfiOpen.rfi.costImpact === v ? " on" : "")}
+                                      disabled={rfiBusy}
+                                      onClick={() => void rfiAction(rfiOpen.rfi.id, "update_impact", v === "yes" ? { costImpact: "yes", costEstimate: costEst } : { costImpact: v, costEstimate: "" })}
+                                    >
+                                      {v === "none" ? "No cost" : v === "unknown" ? "Not sure yet" : "Yes - it'll cost"}
+                                    </button>
+                                  ))}
+                                  {rfiOpen.rfi.costImpact === "yes" && (
+                                    <>
+                                      <input className="ev-in" style={{ width: 150, height: 34 }} value={costEst} placeholder="e.g. ~$8,500" onChange={(e) => setCostEst(e.target.value)} />
+                                      <button className="lg-btn" style={{ height: 34, margin: 0, width: "auto", padding: "0 12px", fontSize: 12.5 }} disabled={rfiBusy} onClick={() => void rfiAction(rfiOpen.rfi.id, "update_impact", { costImpact: "yes", costEstimate: costEst })}>Save</button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {rfiOpen.rfi.status === "answered" && (
+                              <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
                                 {!rfiOpen.ci && (
                                   <button className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13, color: "#0E7A55", borderColor: "rgba(16,185,129,.4)" }} disabled={rfiBusy} onClick={() => setCiFormOpen(true)}>This changes the works - raise the CI</button>
                                 )}
@@ -4919,10 +4953,6 @@ export default function Page() {
                           </>
                         )}
                       </div>
-                    )}
-
-                    {rfiOpen.ci && projectId && (
-                      <CiCard ci={rfiOpen.ci} apiFetch={apiFetch} projectId={projectId} projName={projName} categories={TRADES} onChanged={(c) => { setRfiOpen((o) => (o ? { ...o, ci: c } : o)); loadRfis(); }} />
                     )}
                     {ciFormOpen && projectId && (() => {
                       // Prefilled from the answer: the wording is the official answer, the document a PDF already on the thread.
