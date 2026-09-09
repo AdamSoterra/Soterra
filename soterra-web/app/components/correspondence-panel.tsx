@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
+import { CiCard, CiForm, ciPayload, guessIssuer, type Ci, type CiDocOption } from "./ci-form";
 
 // ─── Correspondence — the register next to RFIs ───────────────────────────
 //
@@ -48,12 +49,14 @@ type Full = {
     toKind: string | null;
   };
   messages: Msg[];
+  /** A client instruction raised from this item (shown inside it). */
+  ci?: Ci | null;
 };
 
 const TYPES = [
-  { id: "notice", label: "Notice", hint: "formal notice to the other side" },
+  { id: "notice", label: "Notice", hint: "putting something on record: a delay, a variation, a problem" },
   { id: "instruction", label: "Site instruction", hint: "a direction to a sub or consultant" },
-  { id: "transmittal", label: "Transmittal", hint: "plans, shop drawings, documents" },
+  { id: "transmittal", label: "Transmittal", hint: "sending drawings, shop drawings or documents" },
   { id: "general", label: "General", hint: "anything else worth having on record" },
 ];
 const DOC_TYPES: [string, string][] = [
@@ -93,7 +96,7 @@ export function CorrespondencePanel({
   consultants,
   subs,
   openDirectory,
-  onRaiseCi,
+  categories,
 }: {
   apiFetch: ApiFetch;
   projectId: string;
@@ -101,9 +104,12 @@ export function CorrespondencePanel({
   consultants: Consultant[];
   subs: Sub[];
   openDirectory: (tab: "consultants" | "subs") => void;
-  /** A client instruction often arrives as correspondence: raise the CI from it, prefilled. */
-  onRaiseCi?: (prefill: { title: string; body: string; issuedByName?: string }) => void;
+  /** The trade list a CI raised from an item can be tagged with. */
+  categories: string[];
 }) {
+  const [ciFormOpen, setCiFormOpen] = useState(false);
+  // Files picked before the draft exists are staged under a per-form key.
+  const pendingKey = useRef(Math.random().toString(36).slice(2, 10));
   const [list, setList] = useState<Row[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [filter, setFilter] = useState<"all" | "awaiting" | "overdue" | "responded" | "closed" | "draft">("all");
@@ -179,7 +185,7 @@ export function CorrespondencePanel({
     cc: form.cc,
     responseRequired: form.responseRequired,
     dateDue: form.responseRequired && form.dateDue ? new Date(form.dateDue + "T17:00:00").toISOString() : "",
-    fileAsDocs: form.type === "transmittal" && form.fileAsDocs,
+    fileAsDocs: form.type === "transmittal", // a transmittal's PDFs always file into Documents
     docType: form.docType,
   });
   /** The draft row exists once anything needs an id (a file, a save, a send). */
@@ -190,16 +196,18 @@ export function CorrespondencePanel({
       if (!r.ok) throw new Error(d.error || "Couldn't save the draft.");
       return draftId;
     }
-    const r = await apiFetch("/api/correspondence", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(formPayload()) });
+    // The staged files go on the row as it is created.
+    const r = await apiFetch("/api/correspondence", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...formPayload(), attachments: draftAtts }) });
     const d = await r.json();
     if (!r.ok || !d.item) throw new Error(d.error || "Couldn't save the draft.");
     setDraftId(d.item.id);
     return d.item.id as string;
   };
-  const uploadFiles = async (targetId: string, files: FileList): Promise<Att[]> => {
+  /** `sub` = the item id, or "pending/<key>" for a form that has no draft yet. */
+  const uploadFiles = async (sub: string, files: FileList): Promise<Att[]> => {
     const out: Att[] = [];
     for (const f of Array.from(files).slice(0, 15)) {
-      const res = await upload(`${projectId}/correspondence/${targetId}/${f.name}`, f, {
+      const res = await upload(`${projectId}/correspondence/${sub}/${f.name}`, f, {
         access: "private",
         handleUploadUrl: "/api/upload/token",
         clientPayload: JSON.stringify({ projectId }),
@@ -211,19 +219,21 @@ export function CorrespondencePanel({
   };
   const pickNewFiles = async (files: FileList | null) => {
     if (!files?.length) return;
-    if (!form.subject.trim()) {
-      setErr("Give it a subject first, then attach the files.");
-      return;
-    }
     setUploading(true);
     setErr(null);
     try {
-      const id = await ensureDraft();
-      const atts = await uploadFiles(id, files);
-      const r = await apiFetch("/api/correspondence", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, action: "attach", files: atts }) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Couldn't attach those.");
-      setDraftAtts(JSON.parse(d.item.attachments ?? "[]"));
+      if (draftId) {
+        // The draft exists: files go under its folder and onto the row.
+        const atts = await uploadFiles(draftId, files);
+        const r = await apiFetch("/api/correspondence", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: draftId, action: "attach", files: atts }) });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Couldn't attach those.");
+        setDraftAtts(JSON.parse(d.item.attachments ?? "[]"));
+      } else {
+        // No draft yet: stage them, they ride along when the draft is created.
+        const atts = await uploadFiles(`pending/${pendingKey.current}`, files);
+        setDraftAtts((xs) => [...xs, ...atts]);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Couldn't attach those.");
     } finally {
@@ -232,7 +242,10 @@ export function CorrespondencePanel({
     }
   };
   const detach = async (path: string) => {
-    if (!draftId) return;
+    if (!draftId) {
+      setDraftAtts((xs) => xs.filter((a) => a.path !== path));
+      return;
+    }
     const r = await apiFetch("/api/correspondence", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: draftId, action: "detach", path }) });
     const d = await r.json();
     if (r.ok) setDraftAtts(JSON.parse(d.item.attachments ?? "[]"));
@@ -241,6 +254,7 @@ export function CorrespondencePanel({
     setForm(EMPTY);
     setDraftId(null);
     setDraftAtts([]);
+    pendingKey.current = Math.random().toString(36).slice(2, 10);
     setNewOpen(false);
   };
   const saveOrSend = async (send: boolean) => {
@@ -373,6 +387,10 @@ export function CorrespondencePanel({
               </div>
             )}
 
+            {open.ci && (
+              <CiCard ci={open.ci} apiFetch={apiFetch} projectId={projectId} projName={projName} categories={categories} onChanged={(c) => setOpen((o) => (o ? { ...o, ci: c } : o))} />
+            )}
+
             {open.messages.map((m) =>
               m.type === "system" ? (
                 <div className="rf-sys" key={m.id}>{m.body} · {fmt(m.createdAt)}</div>
@@ -424,23 +442,42 @@ export function CorrespondencePanel({
               {it.dateResponded && <div className="rf-kv"><span className="k2">Responded</span><span className="v">{fmt(it.dateResponded)}</span></div>}
               {it.type === "transmittal" && <div className="rf-kv"><span className="k2">Filed in Documents</span><span className="v">{it.attachments.filter((a) => a.filedAs).length} of {it.attachments.length}</span></div>}
             </div>
-            {onRaiseCi && it.status !== "draft" && (
+            {!open.ci && it.status !== "draft" && (
               <div className="rf-card">
                 <div className="k">Is this an instruction?</div>
-                <p className="page-sub" style={{ margin: "0 0 10px" }}>If the client, architect or engineer is instructing a change here, raise it as a CI so the assistant treats it as amending the drawings and it goes first on the related QA checks.</p>
-                <button
-                  className="lg-btn"
-                  style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }}
-                  onClick={() => {
-                    const theirs = open.messages.filter((m) => m.type === "message" && m.authorSide === "external");
-                    const last = theirs[theirs.length - 1];
-                    onRaiseCi({ title: it.subject, body: last ? last.body : it.body, issuedByName: [it.toName, it.toCompany].filter(Boolean).join(" · ") });
-                  }}
-                >
-                  Raise a CI from this
-                </button>
+                <p className="page-sub" style={{ margin: "0 0 10px" }}>If the client, architect or engineer is instructing a change here, raise it as a CI. It stays inside this item, the assistant treats it as amending the drawings, and it goes first on the related QA checks.</p>
+                <button className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => setCiFormOpen(true)}>Raise a CI from this</button>
               </div>
             )}
+            {ciFormOpen && (() => {
+              const theirs = open.messages.filter((m) => m.type === "message" && m.authorSide === "external");
+              const last = theirs[theirs.length - 1];
+              const pdfs: CiDocOption[] = [...it.attachments, ...open.messages.flatMap((m) => m.attachments)].filter((a) => /\.pdf$/i.test(a.filename)).map((a) => ({ path: a.path, filename: a.filename }));
+              return (
+                <CiForm
+                  projName={projName}
+                  categories={categories}
+                  apiFetch={apiFetch}
+                  projectId={projectId}
+                  docOptions={pdfs}
+                  initial={{ title: it.subject, body: last ? last.body : it.body, issuedBy: guessIssuer(it.toCompany), issuedByName: toLine }}
+                  onSave={async (values, doc) => {
+                    const r = await apiFetch("/api/instructions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...ciPayload(values), sourceCorrId: it.id }) });
+                    const d = await r.json();
+                    if (!r.ok || !d.item) throw new Error(d.error || "Couldn't raise the instruction.");
+                    let item = d.item as Ci;
+                    if (doc) {
+                      const a = await apiFetch("/api/instructions", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id, action: "attach", path: doc.path, filename: doc.filename, fromRecord: true }) });
+                      const j = await a.json();
+                      if (a.ok && j.item) item = j.item as Ci;
+                    }
+                    return item;
+                  }}
+                  onSaved={() => { setCiFormOpen(false); void openById(it.id); }}
+                  onCancel={() => setCiFormOpen(false)}
+                />
+              );
+            })()}
             <div className="rf-card">
               <div className="k">How they reply</div>
               <p className="page-sub" style={{ margin: 0 }}>
@@ -593,16 +630,13 @@ export function CorrespondencePanel({
                 {uploading ? "Uploading…" : "📎 Attach files"}
               </button>
               {form.type === "transmittal" && (
-                <label className="rf-cpbox" style={{ marginTop: 10 }}>
-                  <input type="checkbox" checked={form.fileAsDocs} onChange={(e) => setForm((f) => ({ ...f, fileAsDocs: e.target.checked }))} />
-                  <span>
-                    <b>Also file the PDFs into this site&apos;s Documents</b> as{" "}
-                    <select className="co-attbtn" value={form.docType} onClick={(e) => e.stopPropagation()} onChange={(e) => setForm((f) => ({ ...f, docType: e.target.value }))}>
-                      {DOC_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>{" "}
-                    - so the assistant and the QA checks see them. A revised sheet uploads as its own document.
-                  </span>
-                </label>
+                <p className="page-sub" style={{ margin: "10px 0 0" }}>
+                  The PDFs file into this site&apos;s Documents on send, as{" "}
+                  <select className="co-attbtn" value={form.docType} onChange={(e) => setForm((f) => ({ ...f, docType: e.target.value }))}>
+                    {DOC_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  , so the assistant and the QA checks see them. A revised sheet uploads as its own document.
+                </p>
               )}
 
               <label className="rf-cpbox" style={{ marginTop: 14 }}>

@@ -6,7 +6,7 @@ import { DOC_TYPES, DOC_TYPE_LABEL, docTypeOf, type DocType } from "@/lib/docTyp
 import Landing from "./landing";
 import { InstallHint } from "./components/install-hint";
 import { CorrespondencePanel } from "./components/correspondence-panel";
-import { InstructionsPanel, type CiPrefill } from "./components/instructions-panel";
+import { CiCard, CiForm, ciPayload, guessIssuer, type Ci, type CiDocOption } from "./components/ci-form";
 
 type Tab = "assistant" | "calendar" | "tasks" | "inspections" | "plans" | "upload" | "rfis" | "insights" | "programme";
 type Cite = {
@@ -113,10 +113,13 @@ type Consultant = { id: string; name: string | null; company: string | null; dis
 // A QA flag (Feature 7): a pinned mistake on a drawing.
 type FlagRow = { id: string; n: number; doc: string; page: number; title: string; trade: string | null; note: string | null; status: string; subName: string | null; sentAt: string | null; sentStatus: string | null; fixedAt: string | null };
 // ─── RFI types (Feature 5) ───
+// One consultant an RFI is assigned to; the first in the list is the accountable one.
+type RfiAssignee = { name: string | null; company: string | null; email: string };
 type RfiRow = {
   id: string; number: number | null; label: string; subject: string; discipline: string | null;
   status: string; ballParty: string; priority: string; criticalPath: boolean;
   consultantCompany: string | null; consultantName: string | null;
+  assignees?: RfiAssignee[]; ciLabel?: string | null;
   dateRequiredBy: string | null; daysOpen: number; overdue: boolean; lateWd: number;
 };
 // A file on an RFI or on a line of its thread (private Blob; served by /api/rfi-file).
@@ -132,7 +135,7 @@ type RfiFull = {
   messages: RfiMsg[];
   transitions: { id: string; fromStatus: string | null; toStatus: string; ballTo: string | null; byName: string | null; comment: string | null; at: string }[];
   pins: { id: string; doc: string; page: number; x: number; y: number }[];
-  ci: { id: string; number: number; title: string } | null;
+  ci: Ci | null;
 };
 type RfiAna = {
   slaWd: number;
@@ -148,11 +151,11 @@ type QaAna = {
   tiles: { open: number; readyForReview: number; withConsultant: number; closed: number; avgCloseoutWd: number };
   scorecard: { sub: string; open: number; overdue: number; avgFixWd: number; fixed: number; total: number }[];
 };
-const RFI_BALL_PILL = (r: { ballParty: string; consultantCompany: string | null; status: string }) =>
+const RFI_BALL_PILL = (r: { ballParty: string; consultantCompany: string | null; status: string; assignees?: RfiAssignee[] }) =>
   r.status === "closed" || r.status === "void"
     ? { cls: "none", label: "-" }
     : r.ballParty === "consultant"
-      ? { cls: "consult", label: r.consultantCompany || "Consultant" }
+      ? { cls: "consult", label: (r.consultantCompany || r.assignees?.[0]?.name || "Consultant") + ((r.assignees?.length ?? 0) > 1 ? ` +${(r.assignees?.length ?? 1) - 1}` : "") }
       : r.ballParty === "us"
         ? { cls: "us", label: r.status === "answered" ? "Us · to close" : "Us" }
         : { cls: "none", label: "-" };
@@ -1036,9 +1039,8 @@ export default function Page() {
   const [rfiLoaded, setRfiLoaded] = useState(false);
   const [rfiView, setRfiView] = useState<"reg" | "ana">("reg");
   // The RFIs tab has three areas, like Inspections: RFIs | Correspondence | Instructions.
-  const [rfiArea, setRfiArea] = useState<"rfis" | "corr" | "ci">("rfis");
+  const [rfiArea, setRfiArea] = useState<"rfis" | "corr">("rfis");
   // A CI raised from a piece of correspondence arrives in the register prefilled.
-  const [ciPrefill, setCiPrefill] = useState<CiPrefill | null>(null);
   // Company settings shown in the Directory: the sign-in gate on external links.
   const [coSettings, setCoSettings] = useState<{ externalLoginRequired: boolean; inboundEnabled: boolean; role: string } | null>(null);
   const [rfiFilter, setRfiFilter] = useState<"all" | "open" | "overdue" | "answered" | "closed">("all");
@@ -1049,11 +1051,12 @@ export default function Page() {
   const [ansOpen, setAnsOpen] = useState(false);
   const [ansText, setAnsText] = useState("");
   const [fuText, setFuText] = useState("");
-  const [ciOpen, setCiOpen] = useState(false);
-  const [ciTitle, setCiTitle] = useState("");
+  const [ciFormOpen, setCiFormOpen] = useState(false); // raise the CI from the answer, inside the RFI
   const [newRfiOpen, setNewRfiOpen] = useState(false);
   const [nr, setNr] = useState({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "", criticalPath: false, costImpact: "unknown", costEstimate: "", programmeImpact: "unknown", programmeDays: "" });
-  const [nrCon, setNrCon] = useState(""); // saved-consultant pick on the New RFI form (cosmetic; the fields hold the truth)
+  // Everyone the new RFI is assigned to (the PM decides: architect + electrical
+  // engineer, say). The first is the accountable one; the typed fields add one more.
+  const [nrAssignees, setNrAssignees] = useState<RfiAssignee[]>([]);
   // Files on the New RFI form upload straight to the private store (under a
   // per-form staging key) and are recorded on the draft when it is created.
   // Follow-ups and drafts carry their own files under the RFI's folder.
@@ -2795,7 +2798,7 @@ export default function Page() {
     finally { setCoLoading(false); }
   };
   const openRfiById = async (id: string) => {
-    setRfiErr(null); setAnsOpen(false); setAnsText(""); setFuText(""); setCiOpen(false); setCiTitle("");
+    setRfiErr(null); setAnsOpen(false); setAnsText(""); setFuText(""); setCiFormOpen(false);
     try {
       const r = await apiFetch(`/api/rfis?id=${encodeURIComponent(id)}`);
       const d = await r.json();
@@ -2907,13 +2910,29 @@ export default function Page() {
       return false;
     } finally { setRfiBusy(false); }
   };
+  const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  /** The typed name/company/email become one more assignee (and the fields clear). */
+  const addTypedAssignee = () => {
+    const email = nr.consultantEmail.trim().toLowerCase();
+    if (!EMAIL_OK.test(email)) return;
+    setNrAssignees((xs) => (xs.some((a) => a.email === email) ? xs : [...xs, { name: nr.consultantName.trim() || null, company: nr.consultantCompany.trim() || null, email }]));
+    setNr((v) => ({ ...v, consultantName: "", consultantCompany: "", consultantEmail: "" }));
+  };
   const createRfi = async (sendNow: boolean) => {
     setRfiBusy(true); setRfiErr(null);
     try {
+      // Whoever is still sitting in the typed fields counts too - people forget to press Add.
+      const list = [...nrAssignees];
+      const typed = nr.consultantEmail.trim().toLowerCase();
+      if (EMAIL_OK.test(typed) && !list.some((a) => a.email === typed)) list.push({ name: nr.consultantName.trim() || null, company: nr.consultantCompany.trim() || null, email: typed });
       const res = await apiFetch("/api/rfis", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...nr,
+          consultantName: list[0]?.name ?? "",
+          consultantCompany: list[0]?.company ?? "",
+          consultantEmail: list[0]?.email ?? "",
+          assignees: list,
           cc: nr.cc.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean),
           codeRefs: nr.codeRefs.split(/[,;]+/).map((s) => s.trim()).filter(Boolean),
           attachments: nrFiles,
@@ -2930,9 +2949,9 @@ export default function Page() {
       }
       setNewRfiOpen(false);
       setNrFiles([]);
+      setNrAssignees([]);
       nrKeyRef.current = Math.random().toString(36).slice(2, 10);
       setNr({ subject: "", discipline: "", priority: "normal", location: "", question: "", proposedSolution: "", consultantName: "", consultantCompany: "", consultantEmail: "", cc: "", codeRefs: "", criticalPath: false, costImpact: "unknown", costEstimate: "", programmeImpact: "unknown", programmeDays: "" });
-      setNrCon("");
     } catch (e) {
       setRfiErr(e instanceof Error ? e.message : "Couldn't save the RFI.");
     } finally { setRfiBusy(false); }
@@ -4390,7 +4409,6 @@ export default function Page() {
               <div className="rf-area">
                 <button className={"rf-areab" + (rfiArea === "rfis" ? " act" : "")} onClick={() => setRfiArea("rfis")}>RFIs</button>
                 <button className={"rf-areab" + (rfiArea === "corr" ? " act" : "")} onClick={() => { setRfiArea("corr"); void loadConsultants(); void loadSubs(); }}>Correspondence</button>
-                <button className={"rf-areab" + (rfiArea === "ci" ? " act" : "")} onClick={() => setRfiArea("ci")}>Instructions</button>
               </div>
             )}
             {rfiArea === "corr" && !rfiOpen && projectId && (
@@ -4401,17 +4419,7 @@ export default function Page() {
                 consultants={conList}
                 subs={subsList}
                 openDirectory={openDirectory}
-                onRaiseCi={(p) => { setCiPrefill(p); setRfiArea("ci"); }}
-              />
-            )}
-            {rfiArea === "ci" && !rfiOpen && projectId && (
-              <InstructionsPanel
-                apiFetch={apiFetch}
-                projectId={projectId}
-                projName={projName}
                 categories={TRADES}
-                prefill={ciPrefill}
-                onPrefillUsed={() => setCiPrefill(null)}
               />
             )}
             {rfiArea === "rfis" && !rfiOpen && (
@@ -4466,7 +4474,7 @@ export default function Page() {
                             return (
                               <tr key={r.id} className={r.overdue ? "late" : ""} onClick={() => void openRfiById(r.id)}>
                                 <td className="num">{r.label}</td>
-                                <td className="subj">{r.subject}</td>
+                                <td className="subj">{r.subject}{r.ciLabel && <span className="rf-pill us" style={{ marginLeft: 8, verticalAlign: "middle" }} title="This RFI raised a client instruction">{r.ciLabel}</span>}</td>
                                 <td><span className={"rf-pill " + ball.cls}>{ball.label}</span></td>
                                 <td><span className={"rf-pill " + r.status}>{r.status}</span></td>
                                 <td className={"due" + (r.overdue ? " red" : "")}>
@@ -4681,17 +4689,9 @@ export default function Page() {
                             ))}
                             {rfiOpen.rfi.status === "answered" && (
                               <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                                {!rfiOpen.ci && (ciOpen ? (
-                                  <div style={{ width: "100%" }}>
-                                    <input className="ev-in" value={ciTitle} placeholder="CI title, e.g. Revise A-201 wall thickness to 190" onChange={(e) => setCiTitle(e.target.value)} />
-                                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                                      <button className="lg-btn primary" style={{ height: 38, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} disabled={rfiBusy || !ciTitle.trim()} onClick={async () => { if (await rfiAction(rfiOpen.rfi.id, "create_ci", { title: ciTitle })) { setCiOpen(false); setCiTitle(""); } }}>Create the CI</button>
-                                      <button className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} onClick={() => setCiOpen(false)}>Cancel</button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <button className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13, color: "#0E7A55", borderColor: "rgba(16,185,129,.4)" }} onClick={() => setCiOpen(true)}>This changes the works - create CI</button>
-                                ))}
+                                {!rfiOpen.ci && (
+                                  <button className="lg-btn" style={{ height: 38, margin: 0, width: "auto", padding: "0 14px", fontSize: 13, color: "#0E7A55", borderColor: "rgba(16,185,129,.4)" }} disabled={rfiBusy} onClick={() => setCiFormOpen(true)}>This changes the works - raise the CI</button>
+                                )}
                                 <button className="lg-btn primary" style={{ height: 38, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} disabled={rfiBusy} onClick={() => void rfiAction(rfiOpen.rfi.id, "close")}>Accept + close</button>
                               </div>
                             )}
@@ -4700,9 +4700,41 @@ export default function Page() {
                       </div>
                     )}
 
-                    {rfiOpen.ci && (
-                      <div className="rf-ciband">✅ Answer spawned CI-{String(rfiOpen.ci.number).padStart(3, "0")} · {rfiOpen.ci.title}. The assistant treats the CI as governing the drawing it amends.</div>
+                    {rfiOpen.ci && projectId && (
+                      <CiCard ci={rfiOpen.ci} apiFetch={apiFetch} projectId={projectId} projName={projName} categories={TRADES} onChanged={(c) => { setRfiOpen((o) => (o ? { ...o, ci: c } : o)); loadRfis(); }} />
                     )}
+                    {ciFormOpen && projectId && (() => {
+                      // Prefilled from the answer: the wording is the official answer, the document a PDF already on the thread.
+                      const answer = rfiOpen.messages.filter((m) => m.type === "official_answer").pop();
+                      const pdfs: CiDocOption[] = [...(rfiOpen.rfi.files ?? []), ...rfiOpen.messages.flatMap((m) => m.attachments ?? [])]
+                        .filter((a) => /\.pdf$/i.test(a.filename))
+                        .map((a) => ({ path: a.path, filename: a.filename }));
+                      const who = rfiOpen.rfi.assignees?.length ? rfiOpen.rfi.assignees : [{ name: rfiOpen.rfi.consultantName, company: rfiOpen.rfi.consultantCompany, email: "" }];
+                      return (
+                        <CiForm
+                          projName={projName}
+                          categories={TRADES}
+                          apiFetch={apiFetch}
+                          projectId={projectId}
+                          docOptions={pdfs}
+                          initial={{
+                            title: rfiOpen.rfi.subject,
+                            body: answer?.body ?? "",
+                            location: rfiOpen.rfi.location ?? "",
+                            issuedBy: guessIssuer(who[0]?.company),
+                            issuedByName: who.map((a) => [a.name, a.company].filter(Boolean).join(" · ")).filter(Boolean).join(", "),
+                          }}
+                          onSave={async (values, doc) => {
+                            const r = await apiFetch("/api/rfis", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: rfiOpen.rfi.id, action: "create_ci", ...ciPayload(values), filePath: doc?.path ?? null, fileName: doc?.filename ?? null }) });
+                            const d = await r.json();
+                            if (!r.ok || !d.ci) throw new Error(d.error || "Couldn't raise the instruction.");
+                            return d.ci as Ci;
+                          }}
+                          onSaved={() => { setCiFormOpen(false); void openRfiById(rfiOpen.rfi.id); loadRfis(); }}
+                          onCancel={() => setCiFormOpen(false)}
+                        />
+                      );
+                    })()}
 
                     {rfiOpen.messages.filter((m) => m.type === "followup").map((m) => (
                       <div className="rf-fu" key={m.id}>
@@ -4723,7 +4755,7 @@ export default function Page() {
 
                     {rfiOpen.rfi.status !== "draft" && rfiOpen.rfi.status !== "void" && (
                       <div className="rf-card">
-                        <div className="k">Follow-up</div>
+                        <div className="k">Respond</div>
                         <div style={{ display: "flex", gap: 8 }}>
                           <input className="ev-in" style={{ flex: 1 }} value={fuText} placeholder={rfiOpen.rfi.status === "answered" ? "Ask a follow-up - it reopens the RFI and the consultant clock" : "Add context to the thread"} onChange={(e) => setFuText(e.target.value)} />
                           <input ref={fuFileRef} type="file" multiple style={{ display: "none" }} onChange={async (e) => {
@@ -4750,7 +4782,7 @@ export default function Page() {
                   <div className="rf-rail">
                     <div className="rf-card">
                       <div className="k">Details</div>
-                      <div className="rf-kv"><span className="k2">Assigned to</span><span className="v">{[rfiOpen.rfi.consultantName, rfiOpen.rfi.consultantCompany].filter(Boolean).join(" · ") || "-"}</span></div>
+                      <div className="rf-kv"><span className="k2">Assigned to</span><span className="v">{(rfiOpen.rfi.assignees?.length ? rfiOpen.rfi.assignees : [{ name: rfiOpen.rfi.consultantName, company: rfiOpen.rfi.consultantCompany, email: "" }]).map((a, i) => <span key={a.email || i} style={{ display: "block" }}>{[a.name, a.company].filter(Boolean).join(" · ") || a.email || "-"}{i === 0 && (rfiOpen.rfi.assignees?.length ?? 0) > 1 ? <small style={{ color: "var(--mut)" }}> · accountable</small> : null}</span>)}</span></div>
                       <div className="rf-kv"><span className="k2">Raised by</span><span className="v">{rfiOpen.rfi.raisedByName ?? "-"}</span></div>
                       <div className="rf-kv"><span className="k2">Priority</span><span className="v">{rfiOpen.rfi.priority}</span></div>
                       <div className="rf-kv"><span className="k2">Location</span><span className="v">{rfiOpen.rfi.location ?? "-"}</span></div>
@@ -5211,13 +5243,6 @@ export default function Page() {
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <div style={{ flex: 1 }}>
-                  <label className="ev-lbl">Discipline</label>
-                  <select className="ev-in" value={nr.discipline} onChange={(e) => setNr((v) => ({ ...v, discipline: e.target.value }))}>
-                    <option value="">Pick one…</option>
-                    {DISCIPLINES.map((d) => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </div>
-                <div style={{ flex: 1 }}>
                   <label className="ev-lbl">Priority</label>
                   <select className="ev-in" value={nr.priority} onChange={(e) => setNr((v) => ({ ...v, priority: e.target.value }))}>
                     <option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option>
@@ -5247,42 +5272,60 @@ export default function Page() {
               <button type="button" className="co-drop" disabled={nrUploading || rfiBusy} onClick={() => nrFileRef.current?.click()}>
                 {nrUploading ? "Uploading…" : "📎 Attach files (drawings, photos, documents)"}
               </button>
-              {/* Saved-consultant picker (the Directory). Picking fills the free-text
-                  fields below; typing fresh details still works, and whoever the RFI
-                  is sent to is saved back into the Directory automatically. */}
+              {/* Assigned to: as many consultants as the job needs (the architect AND the
+                  electrical engineer, say) - the PM decides. Tap saved consultants to add
+                  them; anyone new is typed once and saved to the Directory on send. The
+                  first one listed is the accountable party the clock counts against. */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
-                <label className="ev-lbl" style={{ margin: 0 }}>Consultant</label>
+                <label className="ev-lbl" style={{ margin: 0 }}>Assigned to <span className="opt">· pick as many as it needs</span></label>
                 <button type="button" className="dir-link" style={{ marginLeft: "auto" }} onClick={() => openDirectory("consultants")}>Manage directory</button>
               </div>
               {conList.length > 0 && (
-                <select className="ev-in" style={{ marginTop: 6 }} value={nrCon} onChange={(e) => {
-                  setNrCon(e.target.value);
-                  const c = conList.find((x) => x.id === e.target.value);
-                  if (c) setNr((v) => ({ ...v, consultantName: c.name ?? "", consultantCompany: c.company ?? "", consultantEmail: c.email, discipline: c.discipline ?? v.discipline }));
-                }}>
-                  <option value="">Pick a saved consultant - fills the fields below…</option>
-                  {conList.map((c) => <option key={c.id} value={c.id}>{[c.name, c.company, c.discipline].filter(Boolean).join(" - ") || c.email}</option>)}
-                </select>
+                <div className="rf-filters" style={{ marginBottom: 0, marginTop: 6 }}>
+                  {conList.map((c) => {
+                    const em = c.email.toLowerCase();
+                    const on = nrAssignees.some((a) => a.email === em);
+                    return (
+                      <button key={c.id} type="button" className={"rf-f" + (on ? " act" : "")} title={c.email} onClick={() => setNrAssignees((xs) => (on ? xs.filter((a) => a.email !== em) : [...xs, { name: c.name, company: c.company, email: em }]))}>
+                        {[c.name, c.company].filter(Boolean).join(" · ") || c.email}{c.discipline ? ` · ${c.discipline}` : ""}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
-              <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+              {nrAssignees.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  {nrAssignees.map((a, i) => (
+                    <div className="co-att" key={a.email}>
+                      <span>{i === 0 ? "★" : "👤"}</span>
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>
+                        {[a.name, a.company].filter(Boolean).join(" · ") || a.email}
+                        <small style={{ color: "var(--mut)", fontWeight: 500 }}> · {a.email}</small>
+                      </span>
+                      {i === 0 && nrAssignees.length > 1 && <small title="The response clock and the scorecard count against this one">accountable</small>}
+                      <button type="button" className="co-attbtn" onClick={() => setNrAssignees((xs) => xs.filter((x) => x.email !== a.email))}>Remove</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "flex-end" }}>
                 <div style={{ flex: 1 }}>
-                  <label className="ev-lbl">Assign to</label>
+                  <label className="ev-lbl">{nrAssignees.length ? "Add someone else" : "Or type who it goes to"}</label>
                   <input className="ev-in" value={nr.consultantName} placeholder="Jane Smith" onChange={(e) => setNr((v) => ({ ...v, consultantName: e.target.value }))} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className="ev-lbl">Their company</label>
                   <input className="ev-in" value={nr.consultantCompany} placeholder="Holmes Structural" onChange={(e) => setNr((v) => ({ ...v, consultantCompany: e.target.value }))} />
                 </div>
-              </div>
-              <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1.2 }}>
                   <label className="ev-lbl">Their email</label>
                   <input className="ev-in" type="email" value={nr.consultantEmail} placeholder="jane@holmes.co.nz" onChange={(e) => setNr((v) => ({ ...v, consultantEmail: e.target.value }))} />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label className="ev-lbl">Cc</label>
-                  <input className="ev-in" value={nr.cc} placeholder="everyone else who should know" onChange={(e) => setNr((v) => ({ ...v, cc: e.target.value }))} />
-                </div>
+                <button type="button" className="lg-btn" style={{ height: 42, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} disabled={!EMAIL_OK.test(nr.consultantEmail.trim())} onClick={addTypedAssignee}>Add</button>
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <label className="ev-lbl">Cc</label>
+                <input className="ev-in" value={nr.cc} placeholder="everyone else who should know" onChange={(e) => setNr((v) => ({ ...v, cc: e.target.value }))} />
               </div>
 
               <label className="ev-lbl" style={{ marginTop: 14 }}>Impact <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, color: "var(--mut)" }}>· drives the tracking and the EOT pack</span></label>
@@ -5310,12 +5353,12 @@ export default function Page() {
               </label>
 
               <p className="page-sub" style={{ margin: "12px 0 0" }}>
-                The person you assign is who the response clock and the consultant scorecard count against. Cc is just kept in the loop. Send burns the next RFI number, emails the assignee from this site&apos;s Soterra address (replies land in your inbox), starts the 7 working-day clock, and writes the audit line. A draft burns nothing. Pin a drawing from the RFI once it&apos;s created.
+                Everyone assigned gets the RFI and the link, and any of them can answer. The first one listed is the accountable party the response clock and the scorecard count against; Cc is just kept in the loop. Send burns the next RFI number, emails it from this site&apos;s Soterra address (replies land in your inbox), starts the 7 working-day clock, and writes the audit line. A draft burns nothing. Pin a drawing from the RFI once it&apos;s created.
               </p>
               {rfiErr && <div className="ev-err">{rfiErr}</div>}
               <div className="form-actions">
                 <button className="lg-btn" style={{ height: 46, margin: 0, width: "auto", padding: "0 18px" }} disabled={rfiBusy || nrUploading || !nr.subject.trim() || !nr.question.trim()} onClick={() => void createRfi(false)}>Save draft</button>
-                <button className="lg-btn primary" style={{ height: 46, margin: 0, flex: 1 }} disabled={rfiBusy || nrUploading || !nr.subject.trim() || !nr.question.trim() || !nr.consultantEmail.trim()} onClick={() => void createRfi(true)}>
+                <button className="lg-btn primary" style={{ height: 46, margin: 0, flex: 1 }} disabled={rfiBusy || nrUploading || !nr.subject.trim() || !nr.question.trim() || !(nrAssignees.length || EMAIL_OK.test(nr.consultantEmail.trim()))} onClick={() => void createRfi(true)}>
                   {rfiBusy ? "Sending…" : "Send RFI"}
                 </button>
               </div>

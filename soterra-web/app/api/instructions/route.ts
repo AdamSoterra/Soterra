@@ -50,6 +50,7 @@ function readInput(body: Record<string, unknown>, partial: boolean): Partial<CiI
       : String(body.amendsDrawings ?? "").split(/[,;\n]+/).map((s) => ({ doc: s.trim() })).filter((d) => d.doc);
   }
   if (has("cost")) out.cost = String(body.cost ?? "");
+  if (!partial && typeof body.sourceCorrId === "string" && UUID_RE.test(body.sourceCorrId)) out.sourceCorrId = body.sourceCorrId;
   return out;
 }
 
@@ -111,7 +112,8 @@ export async function PATCH(req: Request) {
       const path = String(body.path ?? "");
       const filename = String(body.filename ?? "").trim() || "document";
       if (!path) return Response.json({ error: "No file" }, { status: 400 });
-      await attachInstructionFile(scope, id, path, filename);
+      // fromRecord: a PDF already on this site (an RFI's or a correspondence item's file) becomes the document.
+      await attachInstructionFile(scope, id, path, filename, { anyProjectPath: body.fromRecord === true });
     } else {
       return Response.json({ error: "Unknown action" }, { status: 400 });
     }

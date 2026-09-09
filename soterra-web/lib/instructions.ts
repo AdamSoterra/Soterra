@@ -66,6 +66,7 @@ export type CiInput = {
   amendsDrawings?: { doc: string; fromRev?: string; toRev?: string }[];
   cost?: string | null;
   sourceRfiId?: string | null;
+  sourceCorrId?: string | null;
 };
 
 function clean(input: Partial<CiInput>) {
@@ -114,6 +115,7 @@ export async function createInstruction(scope: Scope, input: CiInput, by: { user
       amendsDrawings: set.amendsDrawings ?? null,
       cost: set.cost ?? null,
       sourceRfiId: input.sourceRfiId ?? null,
+      sourceCorrId: input.sourceCorrId ?? null,
       createdBy: by.userId ?? null,
       createdByName: by.name ?? null,
     })
@@ -156,10 +158,18 @@ export function ciBlobPrefix(projectId: string, ciId: string): string {
 /** Attach the client's document (already uploaded direct-to-Blob under the
  *  CI's own prefix). A PDF gets its text pulled out (unpdf, $0 AI) so the
  *  register is searchable and the generator can quote it. */
-export async function attachInstructionFile(scope: Scope, id: string, path: string, filename: string): Promise<ContractInstruction> {
+export async function attachInstructionFile(
+  scope: Scope,
+  id: string,
+  path: string,
+  filename: string,
+  /** Server-side callers may point at a file already on this site (the RFI answer's PDF). */
+  opts?: { anyProjectPath?: boolean }
+): Promise<ContractInstruction> {
   const row = await ours(scope, id);
   if (!row) throw new Error("Not found");
-  if (!path.startsWith(ciBlobPrefix(scope.projectId, id))) throw new Error("Bad file path");
+  const okPath = opts?.anyProjectPath ? path.startsWith(`${scope.projectId}/`) : path.startsWith(ciBlobPrefix(scope.projectId, id));
+  if (!okPath) throw new Error("Bad file path");
   let fileText: string | null = null;
   if (/\.pdf$/i.test(filename)) {
     try {
@@ -231,6 +241,17 @@ export async function getInstruction(scope: Scope, id: string): Promise<CiView |
   const row = await ours(scope, id);
   if (!row) return null;
   return (await toViews([row]))[0];
+}
+
+/** The CI raised from a piece of correspondence, if any (shown inside that item). */
+export async function instructionForCorr(scope: Scope, corrId: string): Promise<CiView | null> {
+  const [row] = await db
+    .select()
+    .from(contractInstructions)
+    .where(and(eq(contractInstructions.projectId, scope.projectId), eq(contractInstructions.sourceCorrId, corrId)))
+    .orderBy(desc(contractInstructions.number))
+    .limit(1);
+  return row ? (await toViews([row]))[0] : null;
 }
 
 // ─── for the QA generator ─────────────────────────────────────────────────

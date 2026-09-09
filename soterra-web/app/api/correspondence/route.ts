@@ -1,4 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { sanitizeFiles } from "@/lib/attachments";
 import { resolveScope } from "@/lib/company";
 import {
   CORR_TYPES,
@@ -88,7 +89,10 @@ export async function POST(req: Request) {
   if (!input.body?.trim()) return Response.json({ error: "Write the message" }, { status: 400 });
   if (input.toEmail && !EMAIL_RE.test(input.toEmail.trim())) return Response.json({ error: "That email doesn't look right" }, { status: 400 });
   const user = await currentUser();
-  const row = await createDraft(scope, input, { userId, name: displayName(user) });
+  // Files picked on the form before Save went to Blob under this site's
+  // correspondence/ folder (the upload token signs only that).
+  const staged = sanitizeFiles(body.attachments, [`${scope.projectId}/correspondence/`], 30);
+  const row = await createDraft(scope, input, { userId, name: displayName(user) }, staged);
   return Response.json({ item: publicCorr(row) }, { status: 201 });
 }
 

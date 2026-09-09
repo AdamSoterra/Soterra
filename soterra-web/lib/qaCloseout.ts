@@ -33,6 +33,7 @@
 // current closeout_status is the lock, and exactly one writer wins.
 
 import { randomBytes } from "node:crypto";
+import { normalizeEmail } from "./externalAuth";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "./db";
 import { checklistItems, checklists, inspectionItems, inspections, projects, qaFlags } from "./schema";
@@ -206,10 +207,10 @@ export async function defectByReplyToken(kind: "fix" | "so", token: string): Pro
 /** The addresses a defect's fix link went to (lowercased) - what the sign-in
  *  gate and the portal match a sub against. */
 export function subEmailsOf(found: FoundDefect): string[] {
-  if (found.kind === "flag") return found.row.subEmail ? [found.row.subEmail.toLowerCase()] : [];
+  if (found.kind === "flag") return found.row.subEmail ? [normalizeEmail(found.row.subEmail)] : [];
   try {
     const arr = found.row.subEmails ? (JSON.parse(found.row.subEmails) as string[]) : [];
-    return arr.map((e) => String(e).toLowerCase());
+    return arr.map((e) => normalizeEmail(String(e)));
   } catch {
     return [];
   }

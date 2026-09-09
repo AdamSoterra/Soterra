@@ -731,6 +731,10 @@ export const rfis = pgTable(
     consultantCompany: text("consultant_company"), // the accountability key: "Holmes Structural"
     consultantEmail: text("consultant_email"),
     cc: text("cc"), // JSON array of emails
+    // Every consultant the RFI is assigned to: JSON [{name, company, email}].
+    // The PM decides who is on it (architect + electrical engineer, say); any of
+    // them can answer. consultant_* above keep the FIRST one for the scorecard.
+    assignees: text("assignees"),
     dateRaised: timestamp("date_raised", { withTimezone: true }), // set on send
     dateRequiredBy: timestamp("date_required_by", { withTimezone: true }),
     dateAnswered: timestamp("date_answered", { withTimezone: true }),
@@ -819,6 +823,7 @@ export const contractInstructions = pgTable(
     number: integer("number").notNull(), // CI-001, its own sequence per project
     title: text("title").notNull(),
     sourceRfiId: uuid("source_rfi_id"),
+    sourceCorrId: uuid("source_corr_id"), // raised from a piece of correspondence
     amendsDrawings: text("amends_drawings"), // JSON array of {doc, fromRev, toRev}
     cost: text("cost"),
     // ── the register fields (dev/migrate-item-closeout) ──

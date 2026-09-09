@@ -27,9 +27,10 @@ import { companyName } from "./company";
 import { emailEnabled, projectSenderAddress, sendEmail, type EmailAttachment } from "./email";
 import { renderRfiAnswerNotice, renderRfiEmail, renderThreadNotice } from "./emailTemplates";
 import { renderSheetWithPins } from "./pinSnapshot";
-import { companyRequiresLogin } from "./externalAuth";
+import { companyRequiresLogin, normalizeEmail } from "./externalAuth";
 import { replyAddress } from "./inboundAddress";
 import { attachmentsLine, packForEmail, parseAttachments, type Attachment } from "./attachments";
+import { attachInstructionFile, createInstruction, getInstruction, type CiInput } from "./instructions";
 
 /** Where the consultant answer link points. One env override for previews. */
 const APP_URL = (process.env.APP_BASE_URL ?? "https://soterra.co.nz").replace(/\/+$/, "");
@@ -48,6 +49,39 @@ export function rfiBlobPrefix(projectId: string, rfiId: string): string {
   return `${projectId}/rfis/${rfiId}/`;
 }
 const MAX_FILES_ON_RFI = 30;
+
+// ─── assignees ────────────────────────────────────────────────────────────
+// An RFI goes to as many consultants as the PM decides (the architect AND the
+// electrical engineer, say). Any of them can answer; the first one listed is
+// the accountable party the scorecard counts against (consultant_* columns).
+export type Assignee = { name: string | null; company: string | null; email: string };
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export function cleanAssignees(input: Assignee[] | undefined | null): Assignee[] {
+  const seen = new Set<string>();
+  const out: Assignee[] = [];
+  for (const a of input ?? []) {
+    const email = String(a?.email ?? "").trim().toLowerCase();
+    if (!EMAIL_OK.test(email) || seen.has(email)) continue;
+    seen.add(email);
+    out.push({ name: String(a.name ?? "").trim().slice(0, 120) || null, company: String(a.company ?? "").trim().slice(0, 120) || null, email });
+  }
+  return out.slice(0, 10);
+}
+/** Everyone the RFI is assigned to; falls back to the single consultant on older rows. */
+export function rfiAssignees(rfi: { assignees: string | null; consultantName: string | null; consultantCompany: string | null; consultantEmail: string | null }): Assignee[] {
+  if (rfi.assignees) {
+    try {
+      const arr = JSON.parse(rfi.assignees);
+      if (Array.isArray(arr) && arr.length) return cleanAssignees(arr as Assignee[]);
+    } catch {
+      /* fall through */
+    }
+  }
+  return rfi.consultantEmail ? [{ name: rfi.consultantName, company: rfi.consultantCompany, email: rfi.consultantEmail.toLowerCase() }] : [];
+}
+export function assigneeLine(list: Assignee[]): string {
+  return list.map((a) => a.company || a.name || a.email).join(" · ");
+}
 function cleanFiles(files: Attachment[] | undefined, prefixes: string[], max = 10): Attachment[] {
   return (files ?? [])
     .filter((f) => f && typeof f.path === "string" && prefixes.some((p) => f.path.startsWith(p)))
@@ -200,16 +234,29 @@ export type NewRfiInput = {
   raisedByName?: string | null;
   /** Files picked on the New RFI form (already in Blob under the project's rfis/ folder). */
   attachments?: Attachment[];
+  /** Everyone it is assigned to; the first is the accountable one. */
+  assignees?: Assignee[];
 };
 
 export async function createDraft(scope: Scope, input: NewRfiInput): Promise<Rfi> {
   const files = cleanFiles(input.attachments, [rfiBlobRoot(scope.projectId)], MAX_FILES_ON_RFI);
+  // The assignee list; an older caller that only sends consultant_* fields
+  // becomes a one-person list. The first one is the accountable party.
+  const assignees = cleanAssignees(
+    input.assignees?.length
+      ? input.assignees
+      : input.consultantEmail
+        ? [{ name: input.consultantName ?? null, company: input.consultantCompany ?? null, email: input.consultantEmail }]
+        : []
+  );
+  const primary = assignees[0];
   const [row] = await db
     .insert(rfis)
     .values({
       companyId: scope.companyId,
       projectId: scope.projectId,
       attachments: files.length ? JSON.stringify(files) : null,
+      assignees: assignees.length ? JSON.stringify(assignees) : null,
       subject: input.subject.trim().slice(0, 200),
       discipline: input.discipline ?? null,
       priority: input.priority ?? "normal",
@@ -217,9 +264,9 @@ export async function createDraft(scope: Scope, input: NewRfiInput): Promise<Rfi
       question: input.question.trim(),
       proposedSolution: input.proposedSolution?.trim() || null,
       codeRefs: input.codeRefs?.length ? JSON.stringify(input.codeRefs) : null,
-      consultantName: input.consultantName?.trim() || null,
-      consultantCompany: input.consultantCompany?.trim() || null,
-      consultantEmail: input.consultantEmail?.trim() || null,
+      consultantName: primary?.name ?? null,
+      consultantCompany: primary?.company ?? null,
+      consultantEmail: primary?.email ?? null,
       cc: input.cc?.length ? JSON.stringify(input.cc) : null,
       costImpact: input.costImpact ?? "unknown",
       costEstimate: input.costEstimate?.trim() || null,
@@ -375,8 +422,9 @@ export async function sendRfi(
   // per-RFI reply address; otherwise it goes to the sender's inbox as before.
   const loginRequired = await companyRequiresLogin(scope.companyId);
   const inboundReplyTo = await replyAddress("rfi", answerToken);
+  const assignees = rfiAssignees(rfi);
   const meta = [
-    { label: "Discipline", value: rfi.discipline ?? "General" },
+    { label: assignees.length > 1 ? "Assigned to" : "Discipline", value: assignees.length > 1 ? assigneeLine(assignees) : rfi.discipline ?? "General" },
     { label: "Priority", value: rfi.priority[0].toUpperCase() + rfi.priority.slice(1) },
     { label: "Location", value: rfi.location ?? "-" },
     { label: "Cost impact", value: rfi.costImpact === "yes" ? `Yes${rfi.costEstimate ? ` · ${rfi.costEstimate}` : ""}` : rfi.costImpact[0].toUpperCase() + rfi.costImpact.slice(1) },
@@ -408,7 +456,7 @@ export async function sendRfi(
     kind: "rfi",
     recordType: "rfi",
     recordIds: [rfi.id],
-    to: { name: rfi.consultantName || rfi.consultantCompany, email: rfi.consultantEmail },
+    to: assignees.length ? assignees.map((a) => ({ name: a.name || a.company, email: a.email })) : { name: rfi.consultantName || rfi.consultantCompany, email: rfi.consultantEmail },
     cc,
     fromName: `${company} (via Soterra)`,
     fromEmail: projectSenderAddress(projectName, scope.projectId),
@@ -429,7 +477,7 @@ export async function sendRfi(
     authorSide: "contractor",
     authorName: by.name ?? null,
     body: emailEnabled()
-      ? `Sent to ${rfi.consultantName ?? ""} ${rfi.consultantCompany ?? ""}`.trim() + (cc.length ? ` · cc ${cc.join(", ")}` : "")
+      ? `Sent to ${assignees.length ? assignees.map((a) => [a.name, a.company].filter(Boolean).join(" ") || a.email).join(", ") : `${rfi.consultantName ?? ""} ${rfi.consultantCompany ?? ""}`.trim()}` + (cc.length ? ` · cc ${cc.join(", ")}` : "")
       : `Recorded for ${rfi.consultantName ?? ""} ${rfi.consultantCompany ?? ""}`.trim() + " (email sending not yet live)",
   });
   // Remember the consultant in the Directory (upsert on company + email, so
@@ -437,25 +485,27 @@ export async function sendRfi(
   // Emails are stored LOWERCASED here - that is what lets the unique index on
   // (company_id, email) make this a true atomic upsert instead of a racy
   // check-then-insert, and it matches the directory API which does the same.
-  try {
-    const email = rfi.consultantEmail.trim().toLowerCase();
-    // A garbage address must not become a directory row the edit screen then
-    // refuses to touch (its API validates shape) - same regex as the API.
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("unsaveable email: " + email);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const details: Record<string, any> = {};
-    if (rfi.consultantName) details.name = rfi.consultantName;
-    if (rfi.consultantCompany) details.company = rfi.consultantCompany;
-    if (rfi.discipline && (DISCIPLINES as readonly string[]).includes(rfi.discipline)) details.discipline = rfi.discipline;
-    await db
-      .insert(consultants)
-      .values({ companyId: scope.companyId, email, ...details, createdBy: by.userId ?? null })
-      .onConflictDoUpdate({
-        target: [consultants.companyId, consultants.email],
-        set: Object.keys(details).length ? details : { email },
-      });
-  } catch (e) {
-    console.error("consultant directory upsert failed:", e);
+  for (const a of assignees.length ? assignees : [{ name: rfi.consultantName, company: rfi.consultantCompany, email: rfi.consultantEmail }]) {
+    try {
+      const email = a.email.trim().toLowerCase();
+      // A garbage address must not become a directory row the edit screen then
+      // refuses to touch (its API validates shape) - same regex as the API.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("unsaveable email: " + email);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const details: Record<string, any> = {};
+      if (a.name) details.name = a.name;
+      if (a.company) details.company = a.company;
+      if (rfi.discipline && (DISCIPLINES as readonly string[]).includes(rfi.discipline)) details.discipline = rfi.discipline;
+      await db
+        .insert(consultants)
+        .values({ companyId: scope.companyId, email, ...details, createdBy: by.userId ?? null })
+        .onConflictDoUpdate({
+          target: [consultants.companyId, consultants.email],
+          set: Object.keys(details).length ? details : { email },
+        });
+    } catch (e) {
+      console.error("consultant directory upsert failed:", e);
+    }
   }
   const fresh = await ourRfi(scope, rfi.id);
   return { rfi: fresh ?? opened, emailStatus: result.status };
@@ -673,35 +723,43 @@ export async function updateRfiImpact(
   return row;
 }
 
-export async function createCi(
-  scope: Scope,
-  rfiId: string,
-  input: { title: string; amendsDrawings?: { doc: string; fromRev?: string; toRev?: string }[]; cost?: string | null },
-  by: { userId?: string | null; name?: string | null }
-) {
+/** The answer changed the works: raise the client / contract instruction from
+ *  it, INSIDE the RFI (Adam 2026-09-10: the CI is how an RFI ends, so it lives
+ *  on the closed RFI rather than on a register of its own). The wording
+ *  defaults to the official answer, the location to the RFI's, the document
+ *  to a PDF already on the thread; the trades tagged decide which generated
+ *  QA checks put it at item one (lib/checklist.ts). */
+export type CiFromRfiInput = Omit<CiInput, "sourceRfiId" | "sourceCorrId"> & {
+  /** A PDF already on this RFI (its own files or a thread line) to use as the document. */
+  filePath?: string | null;
+  fileName?: string | null;
+};
+export async function createCi(scope: Scope, rfiId: string, input: CiFromRfiInput, by: { userId?: string | null; name?: string | null }) {
   const rfi = await ourRfi(scope, rfiId);
   if (!rfi) throw new Error("RFI not found");
-  const [maxRow] = await db
-    .select({ number: contractInstructions.number })
-    .from(contractInstructions)
-    .where(eq(contractInstructions.projectId, scope.projectId))
-    .orderBy(desc(contractInstructions.number))
-    .limit(1);
-  const number = (maxRow?.number ?? 0) + 1;
-  const [ci] = await db
-    .insert(contractInstructions)
-    .values({
-      companyId: scope.companyId,
-      projectId: scope.projectId,
-      number,
-      title: input.title.trim().slice(0, 200),
+  if (rfi.resultingCiId) throw new Error("This RFI already raised an instruction");
+  const answer = (await db.select({ body: rfiMessages.body }).from(rfiMessages).where(and(eq(rfiMessages.rfiId, rfiId), eq(rfiMessages.type, "official_answer"))).orderBy(desc(rfiMessages.createdAt)).limit(1))[0];
+  let ci = await createInstruction(
+    scope,
+    {
+      ...input,
+      title: input.title?.trim() || rfi.subject,
+      body: input.body?.trim() || answer?.body || null,
+      location: input.location === undefined ? rfi.location : input.location,
+      issuedByName: input.issuedByName === undefined ? [rfi.consultantName, rfi.consultantCompany].filter(Boolean).join(" · ") || null : input.issuedByName,
       sourceRfiId: rfi.id,
-      amendsDrawings: input.amendsDrawings?.length ? JSON.stringify(input.amendsDrawings) : null,
-      cost: input.cost ?? null,
-      createdBy: by.userId ?? null,
-    })
-    .returning();
+    },
+    by
+  );
+  if (input.filePath && (await rfiPathBelongsTo(rfi, input.filePath))) {
+    try {
+      ci = await attachInstructionFile(scope, ci.id, input.filePath, input.fileName || input.filePath.split("/").pop() || "document.pdf", { anyProjectPath: true });
+    } catch (e) {
+      console.error("ci document from rfi failed:", e);
+    }
+  }
   await db.update(rfis).set({ resultingCiId: ci.id, updatedAt: new Date() }).where(eq(rfis.id, rfi.id));
+  const amends = input.amendsDrawings ?? [];
   await db.insert(rfiMessages).values({
     companyId: scope.companyId,
     projectId: scope.projectId,
@@ -709,7 +767,7 @@ export async function createCi(
     type: "system",
     authorSide: "contractor",
     authorName: by.name ?? null,
-    body: `Answer spawned CI-${String(number).padStart(3, "0")}${input.amendsDrawings?.length ? ` · amends ${input.amendsDrawings.map((d) => d.doc).join(", ")}` : ""}`,
+    body: `Answer raised CI-${String(ci.number).padStart(3, "0")}${amends.length ? ` · amends ${amends.map((d) => d.doc).join(", ")}` : ""}`,
   });
   return ci;
 }
@@ -731,12 +789,19 @@ export async function listRfis(scope: Scope) {
     .from(rfis)
     .where(eq(rfis.projectId, scope.projectId))
     .orderBy(desc(rfis.number), desc(rfis.createdAt));
+  // The CI each answered RFI raised, for the row marker.
+  const cis = await db
+    .select({ id: contractInstructions.id, number: contractInstructions.number, status: contractInstructions.status })
+    .from(contractInstructions)
+    .where(eq(contractInstructions.projectId, scope.projectId));
+  const ciById = new Map(cis.map((c) => [c.id, c]));
   const now = new Date();
   return rows.map((r) => {
     const daysOpen = r.dateRaised ? workingDaysBetween(r.dateRaised, r.status === "closed" && r.dateClosed ? r.dateClosed : now) : 0;
     const overdue = r.status === "open" && !!r.dateRequiredBy && now > r.dateRequiredBy;
     const lateWd = overdue && r.dateRequiredBy ? workingDaysBetween(r.dateRequiredBy, now) : 0;
-    return { ...publicRfi(r), label: rfiLabel(r), daysOpen, overdue, lateWd };
+    const ci = r.resultingCiId ? ciById.get(r.resultingCiId) : null;
+    return { ...publicRfi(r), assignees: rfiAssignees(r), ciLabel: ci ? `CI-${String(ci.number).padStart(3, "0")}` : null, label: rfiLabel(r), daysOpen, overdue, lateWd };
   });
 }
 
@@ -749,13 +814,12 @@ export async function getRfi(scope: Scope, rfiId: string) {
     .select({ id: planPins.id, doc: planPins.doc, page: planPins.page, x: planPins.x, y: planPins.y })
     .from(planPins)
     .where(and(eq(planPins.projectId, scope.projectId), eq(planPins.recordType, "rfi"), eq(planPins.recordId, rfiId)));
-  const ci = rfi.resultingCiId
-    ? (await db.select().from(contractInstructions).where(eq(contractInstructions.id, rfi.resultingCiId)).limit(1))[0] ?? null
-    : null;
+  const ci = rfi.resultingCiId ? await getInstruction(scope, rfi.resultingCiId) : null;
   const now = new Date();
   return {
     rfi: {
       ...publicRfi(rfi),
+      assignees: rfiAssignees(rfi),
       label: rfiLabel(rfi),
       daysOpen: rfi.dateRaised ? workingDaysBetween(rfi.dateRaised, now) : 0,
       overdue: rfi.status === "open" && !!rfi.dateRequiredBy && now > rfi.dateRequiredBy,
@@ -796,25 +860,30 @@ export async function sentRfiById(id: string): Promise<Rfi | null> {
 /** The addresses an RFI went to (consultant + cc), lowercased. */
 export function rfiRecipients(rfi: Rfi): string[] {
   const cc: string[] = rfi.cc ? (JSON.parse(rfi.cc) as string[]) : [];
-  return [rfi.consultantEmail, ...cc].filter((e): e is string => !!e).map((e) => e.trim().toLowerCase());
+  return [...rfiAssignees(rfi).map((a) => a.email), rfi.consultantEmail, ...cc].filter((e): e is string => !!e).map(normalizeEmail);
 }
 
 /** The sent RFIs addressed to any of these emails - the portal's list. */
 export async function rfisForEmails(emails: string[]): Promise<Rfi[]> {
   if (!emails.length) return [];
   const lower = emails.map((e) => e.toLowerCase());
+  // Matches the accountable consultant, any assignee (JSON text) or a cc;
+  // "local+tag@domain" rows count as "local@domain" (normalizeEmail).
+  const clauses = lower.flatMap((e) => {
+    const clean = e.replace(/[%_]/g, "");
+    const at = clean.lastIndexOf("@");
+    const tagged = at > 0 ? `${clean.slice(0, at)}+%${clean.slice(at)}` : null;
+    return [
+      sql`lower(${rfis.consultantEmail}) = ${e}`,
+      sql`${rfis.assignees} ILIKE ${"%" + clean + "%"}`,
+      sql`${rfis.cc} ILIKE ${"%" + clean + "%"}`,
+      ...(tagged ? [sql`lower(${rfis.consultantEmail}) LIKE ${tagged}`, sql`${rfis.assignees} ILIKE ${"%" + tagged + "%"}`] : []),
+    ];
+  });
   const rows = await db
     .select()
     .from(rfis)
-    .where(
-      and(
-        inArray(rfis.status, ["open", "answered", "closed"]),
-        sql`(lower(${rfis.consultantEmail}) IN (${sql.join(lower.map((e) => sql`${e}`), sql`, `)}) OR ${sql.join(
-          lower.map((e) => sql`${rfis.cc} ILIKE ${"%" + e.replace(/[%_]/g, "") + "%"}`),
-          sql` OR `
-        )})`
-      )
-    )
+    .where(and(inArray(rfis.status, ["open", "answered", "closed"]), sql`(${sql.join(clauses, sql` OR `)})`))
     .orderBy(desc(rfis.updatedAt));
   return rows.filter((r) => r.number != null);
 }
@@ -888,6 +957,7 @@ export async function rfiThreadView(rfi: Rfi) {
       programmeDays: rfi.programmeDays,
       consultantName: rfi.consultantName,
       consultantCompany: rfi.consultantCompany,
+      assignees: rfiAssignees(rfi).map((a) => ({ name: a.name, company: a.company })),
       dateRaised: rfi.dateRaised,
       dateRequiredBy: rfi.dateRequiredBy,
       dateAnswered: rfi.dateAnswered,
@@ -969,6 +1039,7 @@ export async function commentAsConsultant(
   if (rfi.status !== "open" && rfi.status !== "answered") return { ok: false, error: "closed" };
   const name = authorName?.trim().slice(0, 120) || rfi.consultantName || rfi.consultantCompany || "The consultant";
   const atts = cleanFiles(files, [rfiBlobPrefix(rfi.projectId, rfi.id), `${rfi.projectId}/inbound/${rfi.id}/`]);
+  const text = body.trim() || "(see attachments)";
   await db.insert(rfiMessages).values({
     companyId: rfi.companyId,
     projectId: rfi.projectId,
@@ -976,11 +1047,58 @@ export async function commentAsConsultant(
     type: "followup",
     authorSide: "consultant",
     authorName: name,
-    body: body.trim() || "(see attachments)",
+    body: text,
     via,
     attachments: atts.length ? JSON.stringify(atts) : null,
   });
+  // The app has no notifications, so every message from the other side lands
+  // in the sender's inbox too (Adam 2026-09-10) - same notice an email reply gets.
+  if (via !== "email") {
+    try {
+      await notifyConsultantNote(rfi, name, text, attachmentsLine(atts), via);
+    } catch (e) {
+      console.error("rfi comment notice failed:", e);
+    }
+  }
   return { ok: true };
+}
+
+async function notifyConsultantNote(rfi: Rfi, actor: string, text: string, attLine: string | null, via: string) {
+  const scope = tokenScope(rfi);
+  const to = await senderEmailOf(rfi);
+  if (!to) return;
+  const [proj] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).limit(1);
+  const projectName = proj?.name ?? "The project";
+  const company = (await companyName(scope.companyId)) ?? "The builder";
+  const label = rfiLabel(rfi);
+  const rendered = renderThreadNotice({
+    companyName: company,
+    projectName,
+    heading: `${label} · note from the consultant`,
+    subject: rfi.subject,
+    actorLine: actor,
+    lead: `added a note on ${label}${via === "portal" ? " from the portal" : ""}. It is in the thread${rfi.status === "open" ? " - open the RFI to log it as the official answer if it is one" : ""}.`,
+    body: text,
+    attachmentsLine: attLine,
+    linkLabel: "Open the RFI in Soterra",
+    linkUrl: APP_URL,
+    refLabel: `${label} · ${projectName}`.slice(0, 80),
+    tone: "green",
+  });
+  await sendEmail({
+    scope,
+    kind: "rfi",
+    recordType: "rfi",
+    recordIds: [rfi.id],
+    to: { email: to },
+    replyTo: rfi.consultantEmail ?? null,
+    fromName: "Soterra",
+    fromEmail: projectSenderAddress(projectName, scope.projectId),
+    subject: `${label} note · ${projectName} · ${rfi.subject}`,
+    html: rendered.html,
+    text: rendered.text,
+    sentByName: actor,
+  });
 }
 
 /** An email reply that arrived on the RFI's reply address (lib/inbound.ts).

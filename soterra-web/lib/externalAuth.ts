@@ -31,12 +31,24 @@ type ClerkUserLike = {
   primaryEmailAddress?: { emailAddress?: string } | null;
 } | null;
 
-/** The signed-in user's VERIFIED email addresses, lowercased. */
+/** One mailbox, one string: lowercased, and a "+tag" in the local part dropped
+ *  (jane+kauri@firm.co.nz is jane@firm.co.nz for every major mail provider).
+ *  Every match between "who is signed in" and "who the item went to" runs
+ *  through this, so a consultant using a plus-tagged address still gets in. */
+export function normalizeEmail(e: string): string {
+  const s = e.trim().toLowerCase();
+  const at = s.lastIndexOf("@");
+  if (at < 0) return s;
+  const local = s.slice(0, at).replace(/\+.*$/, "");
+  return `${local}${s.slice(at)}`;
+}
+
+/** The signed-in user's VERIFIED email addresses, normalized (see normalizeEmail). */
 export function verifiedEmails(user: ClerkUserLike): string[] {
   if (!user) return [];
   const out = new Set<string>();
   for (const e of user.emailAddresses ?? []) {
-    if (e.verification?.status === "verified" && e.emailAddress) out.add(e.emailAddress.trim().toLowerCase());
+    if (e.verification?.status === "verified" && e.emailAddress) out.add(normalizeEmail(e.emailAddress));
   }
   return [...out];
 }
@@ -64,7 +76,7 @@ export async function gateExternal(companyId: string, allowed: (string | null | 
   if (!userId) return { ok: false, reason: "login", required: true };
   const user = (await currentUser()) as ClerkUserLike;
   const mine = verifiedEmails(user);
-  const want = new Set(allowed.filter((a): a is string => !!a).map((a) => a.trim().toLowerCase()));
+  const want = new Set(allowed.filter((a): a is string => !!a).map(normalizeEmail));
   const match = mine.find((m) => want.has(m));
   if (!match) return { ok: false, reason: "mismatch", required: true };
   return { ok: true, userId, email: match, required: true };

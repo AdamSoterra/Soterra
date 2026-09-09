@@ -84,12 +84,15 @@ export type EmailAttachment = {
   content_id?: string;
 };
 
+export type EmailRecipient = { name?: string | null; email: string };
+
 export type SendEmailInput = {
   scope: Scope;
   kind: "qa_flags" | "rfi" | "inspection_items" | "correspondence" | "inbound" | "test";
   recordType?: "qa_flag" | "rfi" | "inspection_item" | "checklist_item" | "correspondence" | null;
   recordIds?: string[];
-  to: { name?: string | null; email: string };
+  /** One recipient, or several (an RFI assigned to two consultants). */
+  to: EmailRecipient | EmailRecipient[];
   cc?: string[];
   /** e.g. "Kauri Construction (via Soterra)" */
   fromName: string;
@@ -113,6 +116,7 @@ export type SendEmailResult = {
 };
 
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
+  const toList = (Array.isArray(input.to) ? input.to : [input.to]).filter((t) => t && t.email);
   // 1) Record. companyId/projectId come from the verified Scope only.
   //    Attachment CONTENT is not stored (base64 blobs don't belong in the
   //    log); filenames + sizes are, so the record shows what evidence rode
@@ -133,8 +137,8 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       kind: input.kind,
       recordType: input.recordType ?? null,
       recordIds: input.recordIds?.length ? JSON.stringify(input.recordIds) : null,
-      toName: input.to.name ?? null,
-      toEmail: input.to.email,
+      toName: toList[0]?.name ?? null,
+      toEmail: toList.map((t) => t.email).join(", "),
       cc: input.cc?.length ? JSON.stringify(input.cc) : null,
       fromEmail: input.fromEmail,
       replyTo: input.replyTo ?? null,
@@ -154,9 +158,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
 
   let providerId: string | null = null;
   try {
-    const toField = input.to.name
-      ? `${headerName(input.to.name)} <${input.to.email}>`
-      : input.to.email;
+    const toFields = toList.map((t) => (t.name ? `${headerName(t.name)} <${t.email}>` : t.email));
     const res = await fetch(RESEND_URL, {
       method: "POST",
       headers: {
@@ -165,7 +167,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       },
       body: JSON.stringify({
         from: `${headerName(input.fromName)} <${input.fromEmail}>`,
-        to: [toField],
+        to: toFields,
         ...(input.cc?.length ? { cc: input.cc } : {}),
         ...(input.replyTo ? { reply_to: input.replyTo } : {}),
         subject: input.subject,

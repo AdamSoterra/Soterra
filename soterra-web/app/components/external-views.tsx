@@ -171,6 +171,8 @@ export type RfiThread = {
     codeRefs: string[];
     consultantName: string | null;
     consultantCompany: string | null;
+    /** Everyone the RFI is assigned to (any of them can answer). */
+    assignees?: { name: string | null; company: string | null }[];
     dateRaised: string | null;
     dateRequiredBy: string | null;
     dateAnswered: string | null;
@@ -263,6 +265,7 @@ export function RfiThreadView({
         <h1 className="ans-subj">{r.subject}</h1>
         <div className="ans-meta">
           {r.location && <span>📍 {r.location}</span>}
+          {(r.assignees?.length ?? 0) > 1 && <span>Assigned to {r.assignees!.map((a) => a.company || a.name).filter(Boolean).join(" · ")}</span>}
           {r.dateRaised && <span>Raised {fmtDate(r.dateRaised)}</span>}
           {r.dateRequiredBy && r.status === "open" && (
             <span className={overdue ? "ans-due late" : "ans-due"}>

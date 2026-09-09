@@ -35,6 +35,8 @@ import type { Scope } from "./company";
 import { companyName } from "./company";
 import { companyRequiresLogin } from "./externalAuth";
 import { projectSenderAddress, sendEmail, type EmailAttachment } from "./email";
+import { normalizeEmail } from "./externalAuth";
+import { instructionForCorr } from "./instructions";
 import { renderCorrespondenceEmail, renderThreadNotice } from "./emailTemplates";
 import { indexPdf, docNameFromFilename } from "./indexPdf";
 import { invalidateProjectIndex } from "./projectIndex";
@@ -168,13 +170,25 @@ function cleanInput(input: Partial<CorrInput>) {
   return set;
 }
 
-export async function createDraft(scope: Scope, input: CorrInput, by: { userId?: string | null; name?: string | null }): Promise<Correspondence> {
+export async function createDraft(
+  scope: Scope,
+  input: CorrInput,
+  by: { userId?: string | null; name?: string | null },
+  /** Files picked before the draft existed (staged under <projectId>/correspondence/pending/…). */
+  attachments?: { filename: string; path: string; bytes: number; contentType: string }[]
+): Promise<Correspondence> {
   const set = cleanInput(input);
+  const root = `${scope.projectId}/correspondence/`;
+  const staged: CorrAttachment[] = (attachments ?? [])
+    .filter((f) => f.path.startsWith(root))
+    .slice(0, 30)
+    .map((f) => ({ filename: f.filename.trim().slice(0, 160) || "file", path: f.path, bytes: Math.max(0, Math.floor(f.bytes || 0)), contentType: (f.contentType || "application/octet-stream").slice(0, 120) }));
   const [row] = await db
     .insert(correspondence)
     .values({
       companyId: scope.companyId,
       projectId: scope.projectId,
+      attachments: staged.length ? JSON.stringify(staged) : null,
       type: set.type ?? "general",
       subject: set.subject ?? "",
       body: set.body ?? "",
@@ -223,7 +237,9 @@ export async function attachFiles(
   const row = await ours(scope, id);
   if (!row) throw new Error("Not found");
   if (row.status === "void" || row.status === "closed") throw new Error("This item is closed");
-  const prefix = corrBlobPrefix(scope.projectId, id);
+  // The item's own folder, or the form's staging folder (files picked before
+  // the draft existed). Reads never trust the folder: pathBelongsTo checks the list.
+  const prefix = `${scope.projectId}/correspondence/`;
   const existing = parseAttachments(row.attachments);
   for (const f of files) {
     if (!f.path.startsWith(prefix)) throw new Error("Bad file path");
@@ -313,8 +329,11 @@ export async function sendCorrespondence(
   const token = row.token ?? randomBytes(24).toString("base64url");
 
   // Transmittal filing happens BEFORE the send so the email can say "filed".
+  // A transmittal's PDFs ALWAYS file into Documents (drawings and specs are
+  // the whole point of one - Adam 2026-09-10: "this should automatically be
+  // done"); other types file on request, one tap per PDF.
   let attachments = parseAttachments(row.attachments);
-  if (row.fileAsDocs && attachments.length) {
+  if ((type === "transmittal" || row.fileAsDocs) && attachments.length) {
     const docType = row.docType && (DOC_TYPES as readonly string[]).includes(row.docType) ? (row.docType as DocType) : "drawings";
     attachments = await Promise.all(attachments.map((a) => fileOne(scope, a, docType)));
   }
@@ -580,6 +599,8 @@ export async function getCorrespondence(scope: Scope, id: string) {
       overdue: row.status === "sent" && row.responseRequired && !!row.dateDue && now > row.dateDue,
     },
     messages: messages.map((m) => ({ ...m, attachments: parseAttachments(m.attachments) })),
+    // A client instruction raised from this item lives inside it.
+    ci: await instructionForCorr(scope, id),
   };
 }
 
@@ -620,7 +641,7 @@ function tokenScope(row: Correspondence): Scope {
 
 /** The addresses an item was sent to — what the sign-in gate and the portal match on. */
 export function corrRecipients(row: Correspondence): string[] {
-  return [row.toEmail, ...parseCc(row.cc)].filter((e): e is string => !!e).map((e) => e.toLowerCase());
+  return [row.toEmail, ...parseCc(row.cc)].filter((e): e is string => !!e).map(normalizeEmail);
 }
 
 export type CorrView = {

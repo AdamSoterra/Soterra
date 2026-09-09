@@ -109,6 +109,14 @@ export async function POST(req: Request) {
     // Files picked on the form went straight to Blob under this site's rfis/
     // folder (/api/upload/token signs only that); anything else is dropped.
     attachments: sanitizeFiles(body.attachments, [rfiBlobRoot(scope.projectId)], 30),
+    // Everyone it is assigned to (the first is the accountable one); a caller that
+    // only sends the consultant_* fields becomes a one-person list in createDraft.
+    assignees: Array.isArray(body.assignees)
+      ? body.assignees.map((a) => {
+          const r = (a ?? {}) as Record<string, unknown>;
+          return { name: String(r.name ?? "").trim() || null, company: String(r.company ?? "").trim() || null, email: String(r.email ?? "").trim() };
+        })
+      : undefined,
   });
   return Response.json({ rfi: publicRfi(rfi) }, { status: 201 });
 }
@@ -198,6 +206,33 @@ export async function PATCH(req: Request) {
       return Response.json({ rfi: publicRfi(rfi) });
     }
     if (action === "create_ci") {
+      // The whole instruction, raised from the answer and kept inside the RFI.
+      const str = (k: string) => (body[k] === undefined ? undefined : String(body[k] ?? ""));
+      const dateRaw = str("dateIssued")?.trim();
+      const ci = await createCi(
+        scope,
+        id,
+        {
+          title: String(body.title ?? "").trim(),
+          body: str("body"),
+          issuedBy: (["client", "architect", "engineer", "other"] as const).find((v) => v === str("issuedBy")) ?? null,
+          issuedByName: str("issuedByName"),
+          dateIssued: dateRaw && !Number.isNaN(Date.parse(dateRaw)) ? new Date(dateRaw) : null,
+          location: str("location"),
+          trades: Array.isArray(body.trades) ? body.trades.map((t) => String(t)) : [],
+          amendsDrawings: Array.isArray(body.amendsDrawings)
+            ? body.amendsDrawings.map((d) => ({ doc: String((d as Record<string, unknown>)?.doc ?? "") }))
+            : String(body.amendsDrawings ?? "").split(/[,;\n]+/).map((x) => ({ doc: x.trim() })).filter((d) => d.doc),
+          cost: str("cost"),
+          filePath: typeof body.filePath === "string" ? body.filePath : null,
+          fileName: typeof body.fileName === "string" ? body.fileName : null,
+        },
+        by
+      );
+      const full = await getRfi(scope, id);
+      return Response.json({ rfi: full?.rfi ?? null, ci: full?.ci ?? null });
+    }
+    if (action === "create_ci_legacy") {
       const title = String(body.title ?? "").trim();
       if (!title) return Response.json({ error: "Give the CI a title" }, { status: 400 });
       const amends = Array.isArray(body.amendsDrawings)
