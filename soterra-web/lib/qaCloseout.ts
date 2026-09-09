@@ -33,7 +33,8 @@
 // current closeout_status is the lock, and exactly one writer wins.
 
 import { randomBytes } from "node:crypto";
-import { defectMessagesFor, logDefect } from "./defectThread";
+import { defectBlobPrefix, defectMessagesFor, logDefect } from "./defectThread";
+import { attachmentsLine, packForEmail, type Attachment } from "./attachments";
 import { normalizeEmail } from "./externalAuth";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -330,6 +331,8 @@ export async function fixView(found: FoundDefect) {
     // The conversation so far, and whether a note can still be added (anything short of closed).
     messages: await defectMessagesFor(found.kind, row.id),
     canNote: row.closeoutStatus !== "closed",
+    // Where the sub's own files on the thread go (direct-to-Blob, signed by the door).
+    uploadPrefix: row.closeoutStatus !== "closed" ? defectBlobPrefix(row.projectId, row.id) : null,
   };
 }
 
@@ -772,66 +775,100 @@ export async function emailReplyOnDefect(
   if (!senderLower || fromLower !== senderLower) {
     if (!senderLower) return { handled: "rejected" };
     await logDefect(row, found.kind, { type: "note", authorSide: found.side, authorName: from.name || from.email, authorEmail: from.email, via: "email", body, attachments });
-    await notifyMcOfNote(found, from, body, attLine, "email");
+    await notifyMcOfNote(found, from, body, attLine, "email", attachments);
     return { handled: "defect_note" };
   }
 
   // Our sender replying from their inbox: on the thread, and passed on to the
-  // external party with their link back in.
+  // external party with their link back in (and the files, while they fit).
   await logDefect(row, found.kind, { type: "note", authorSide: "contractor", authorName: from.name || from.email, authorEmail: from.email, via: "email", body, attachments });
-  const passed = await passNoteToExternal(found, from, body, attLine, "note");
+  const passed = await passNoteToExternal(found, from, body, attLine, "note", attachments);
   return { handled: passed ? "defect_forwarded" : "rejected" };
 }
 
+/** "2 attachments: photo.jpg · sketch.pdf" for a notice, with the ones too big
+ *  to ride in the email marked as on the page. */
+function filesLine(packed: { listed: { filename: string; attached: boolean }[] }, where: string): string | null {
+  return attachmentsLine(packed.listed.map((l) => ({ filename: l.attached ? l.filename : `${l.filename} (open it from ${where})` })));
+}
+
 /** A note from the sub or the consultant, written in the app (link or portal):
- *  on the thread, and emailed to whoever pressed Send. */
+ *  on the thread, and emailed to whoever pressed Send. Files alone are a note
+ *  too - a photo of the wall says enough. */
 export async function noteFromExternal(
   found: FoundDefect & { side: "sub" | "consultant" },
   from: { name: string; email: string | null },
   text: string,
-  via: "link" | "portal"
+  via: "link" | "portal",
+  files: Attachment[] = []
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const body = text.trim();
+  const attLine = attachmentsLine(files);
+  const body = text.trim() || (attLine ? `(${attLine})` : "");
   if (!body) return { ok: false, error: "empty" };
   if (found.row.closeoutStatus === "closed") return { ok: false, error: "closed" };
-  await logDefect(found.row, found.kind, { type: "note", authorSide: found.side, authorName: from.name, authorEmail: from.email, via, body });
+  await logDefect(found.row, found.kind, { type: "note", authorSide: found.side, authorName: from.name, authorEmail: from.email, via, body, attachments: files });
   try {
-    await notifyMcOfNote(found, { name: from.name, email: from.email ?? "" }, body, null, via);
+    await notifyMcOfNote(found, { name: from.name, email: from.email ?? "" }, body, attLine, via, files);
   } catch (e) {
     console.error("defect note notice failed:", e);
   }
   return { ok: true };
 }
-export async function noteByToken(token: string, text: string, name?: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function noteByToken(token: string, text: string, name?: string | null, files: Attachment[] = []): Promise<{ ok: true } | { ok: false; error: string }> {
   const found = await bySubToken(token);
   if (!found) return { ok: false, error: "not-found" };
   const emails = subEmailsOf(found);
-  return noteFromExternal({ ...found, side: "sub" }, { name: name?.trim() || subLine(found.kind, found.row), email: emails[0] ?? null }, text, "link");
+  return noteFromExternal({ ...found, side: "sub" }, { name: name?.trim() || subLine(found.kind, found.row), email: emails[0] ?? null }, text, "link", files);
 }
 
 /** The site team writes to the sub (or the consultant) from the item: on the
- *  thread, and emailed to them with their link back in. */
+ *  thread, and emailed to them with their link back in - and the files, while
+ *  they fit in the email; the rest open from their page. */
 export async function noteFromBuilder(
   scope: Scope,
   kind: CloseoutKind,
   id: string,
   text: string,
-  by: { name?: string | null; email?: string | null }
+  by: { name?: string | null; email?: string | null },
+  files: Attachment[] = []
 ): Promise<{ ok: true; emailed: boolean } | { ok: false; error: string }> {
   const found = await rowOf(scope, kind, id);
   if (!found) return { ok: false, error: "not-found" };
-  const body = text.trim();
+  const attLine = attachmentsLine(files);
+  const body = text.trim() || (attLine ? `(${attLine})` : "");
   if (!body) return { ok: false, error: "empty" };
-  await logDefect(found.row, kind, { type: "note", authorSide: "contractor", authorName: by.name ?? null, authorEmail: by.email ?? null, via: "app", body });
+  await logDefect(found.row, kind, { type: "note", authorSide: "contractor", authorName: by.name ?? null, authorEmail: by.email ?? null, via: "app", body, attachments: files });
   // Whoever holds the ball hears about it: the consultant while it is with them, else the sub.
   const side: "sub" | "consultant" = found.kind === "item" && found.row.closeoutStatus === "submitted" ? "consultant" : "sub";
   let emailed = false;
   try {
-    emailed = await passNoteToExternal({ ...found, side }, { name: by.name ?? "The site team", email: by.email ?? (found.row as { senderEmail?: string | null }).senderEmail ?? "" }, body, null, "note");
+    emailed = await passNoteToExternal({ ...found, side }, { name: by.name ?? "The site team", email: by.email ?? (found.row as { senderEmail?: string | null }).senderEmail ?? "" }, body, attLine, "note", files);
   } catch (e) {
     console.error("builder note to external failed:", e);
   }
   return { ok: true, emailed };
+}
+
+/** The defect behind a sub's link, for the thread-file upload door: the ids
+ *  build the blob path; a closed item takes no more files. */
+export async function threadUploadTarget(token: string): Promise<{ projectId: string; recordId: string; companyId: string; emails: string[]; canNote: boolean } | null> {
+  const found = await bySubToken(token);
+  if (!found) return null;
+  return { projectId: found.row.projectId, recordId: found.row.id, companyId: found.row.companyId, emails: subEmailsOf(found), canNote: found.row.closeoutStatus !== "closed" };
+}
+
+/** Either side's token → the defect, for the thread-file streaming route (both
+ *  the sub and the consultant are entitled to the files on the thread). */
+export async function defectByAnyToken(token: string): Promise<FoundDefect | null> {
+  const found = await bySubToken(token);
+  if (found) return found;
+  const item = await byConsultantToken(token);
+  return item ? { kind: "item", row: item } : null;
+}
+
+/** One of OUR defects, scoped (the builder's door on the thread-file route). */
+export async function defectForScope(scope: Scope, kind: CloseoutKind, id: string): Promise<FoundDefect | null> {
+  return rowOf(scope, kind, id);
 }
 
 /** The thread on one of our defects (the builder's side). */
@@ -841,8 +878,10 @@ export async function threadFor(scope: Scope, kind: CloseoutKind, id: string) {
   return defectMessagesFor(kind, id);
 }
 
-/** Tell whoever pressed Send that the other side wrote (link, portal or email). */
-async function notifyMcOfNote(found: FoundDefect & { side: "sub" | "consultant" }, from: { email: string; name: string }, body: string, attLine: string | null, via: string): Promise<void> {
+/** Tell whoever pressed Send that the other side wrote (link, portal or email).
+ *  Their files ride in the email while the budget lasts; the rest open from the
+ *  item in Soterra. */
+async function notifyMcOfNote(found: FoundDefect & { side: "sub" | "consultant" }, from: { email: string; name: string }, body: string, attLine: string | null, via: string, files: Attachment[] = []): Promise<void> {
   const row = found.row;
   const scope = tokenScope(row);
   const { project, company } = await projectAndCompany(scope);
@@ -850,6 +889,7 @@ async function notifyMcOfNote(found: FoundDefect & { side: "sub" | "consultant" 
   const senderLower = (row as { senderEmail?: string | null }).senderEmail?.toLowerCase() ?? null;
   if (!senderLower) return;
   {
+    const packed = files.length ? await packForEmail(files) : { attachments: [], listed: [] };
     const rendered = renderThreadNotice({
       companyName: company,
       projectName: project,
@@ -858,7 +898,7 @@ async function notifyMcOfNote(found: FoundDefect & { side: "sub" | "consultant" 
       actorLine: from.name || from.email,
       lead: `wrote on this defect${via === "email" ? " by email" : ""}${found.side === "sub" ? "" : " (sign-off)"}. It is on the item's thread in Soterra; the link in the original email is still the way to mark it fixed or sign it off.`,
       body,
-      attachmentsLine: attLine,
+      attachmentsLine: files.length ? filesLine(packed, "the item in Soterra") : attLine,
       linkLabel: "Open Soterra",
       linkUrl: APP_URL,
       refLabel: `QA close-out · ${title}`.slice(0, 80),
@@ -876,25 +916,30 @@ async function notifyMcOfNote(found: FoundDefect & { side: "sub" | "consultant" 
       subject: `${title} · ${via === "email" ? "reply by email" : "note"} · ${project}`,
       html: rendered.html,
       text: rendered.text,
+      attachments: packed.attachments,
       sentByName: from.name || from.email,
     });
   }
 }
 
 /** Pass a builder-side message (a note, a bounce-back) to the external party
- *  holding the ball, with their link back in. False when there is nobody to send to. */
+ *  holding the ball, with their link back in - and the files, while they fit.
+ *  False when there is nobody to send to. */
 async function passNoteToExternal(
   found: FoundDefect & { side: "sub" | "consultant" },
   from: { email: string; name: string },
   body: string,
   attLine: string | null,
-  kindOfNote: "note" | "bounced"
+  kindOfNote: "note" | "bounced",
+  files: Attachment[] = []
 ): Promise<boolean> {
   const row = found.row;
   const scope = tokenScope(row);
   const { project, company } = await projectAndCompany(scope);
   const title = row.title;
   const loginRequired = await companyRequiresLogin(scope.companyId);
+  const packed = files.length ? await packForEmail(files) : { attachments: [], listed: [] };
+  const line = files.length ? filesLine(packed, "the link below") : attLine;
   let to: { name: string | null; email: string } | null = null;
   let link = APP_URL;
   let replyTo: string | null = null;
@@ -923,7 +968,7 @@ async function passNoteToExternal(
     actorLine: `${from.name || from.email} · ${company}`,
     lead: kindOfNote === "bounced" ? "bounced this back - it needs another go before it can be closed." : "wrote about this defect.",
     body,
-    attachmentsLine: attLine,
+    attachmentsLine: line,
     tone: kindOfNote === "bounced" ? "amber" : "blue",
     linkLabel: found.side === "sub" ? "Open the item" : "Open the sign-off",
     linkUrl: link,
@@ -944,6 +989,7 @@ async function passNoteToExternal(
     subject: `${title} · ${kindOfNote === "bounced" ? "bounced back" : "note"} · ${project}`,
     html: rendered.html,
     text: rendered.text,
+    attachments: packed.attachments,
     sentByName: from.name || from.email,
   });
   return true;

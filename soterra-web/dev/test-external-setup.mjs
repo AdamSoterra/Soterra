@@ -20,7 +20,10 @@ if (!CLERK?.startsWith("sk_test_")) throw new Error("Refusing: CLERK_SECRET_KEY 
 const sql = neon(DATABASE_URL);
 
 const BUILDER_EMAIL = "zz.test.builder+clerk_test@soterra.co.nz";
-const EXTERNAL_EMAIL = "delivered@resend.dev";
+// +clerk_test makes it a Clerk TEST address (sign-in code 424242, so the
+// portal can be driven in a browser); the +label keeps it on Resend's
+// accepting sink, and normalizeEmail strips the tag on every match.
+const EXTERNAL_EMAIL = "delivered+clerk_test@resend.dev";
 const PASSWORD = "Tst-" + randomBytes(9).toString("base64url");
 
 async function clerk(path, init = {}) {

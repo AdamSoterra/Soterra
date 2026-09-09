@@ -1,6 +1,8 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { resolveScope } from "@/lib/company";
 import { analytics, closeDirect, forwardToConsultant, noteFromBuilder, reject, rejectCheck, reopenDefect, threadFor, type CloseoutKind } from "@/lib/qaCloseout";
+import { defectBlobPrefix } from "@/lib/defectThread";
+import { sanitizeFiles } from "@/lib/attachments";
 
 // The QA close-out loop, the site team's side.
 //   GET  /api/qa-closeout                → the scorecard (?level=company widens it)
@@ -67,8 +69,11 @@ export async function POST(req: Request) {
       return Response.json({ ok: true });
     }
     if (action === "note") {
-      const r = await noteFromBuilder(scope, kind as CloseoutKind, id, note ?? "", { name: byName, email: user?.primaryEmailAddress?.emailAddress ?? null });
-      if (!r.ok) return Response.json({ error: r.error === "empty" ? "Write the note first." : "Not found." }, { status: r.error === "empty" ? 400 : 404 });
+      // Files the site team attached (signed by /api/upload/token under this
+      // site's defects/<id>/ folder); a note can be files alone.
+      const files = sanitizeFiles(body.files, [defectBlobPrefix(scope.projectId, id)]);
+      const r = await noteFromBuilder(scope, kind as CloseoutKind, id, note ?? "", { name: byName, email: user?.primaryEmailAddress?.emailAddress ?? null }, files);
+      if (!r.ok) return Response.json({ error: r.error === "empty" ? "Write the note first, or attach a file." : "Not found." }, { status: r.error === "empty" ? 400 : 404 });
       return Response.json({ ok: true, emailed: r.emailed });
     }
     if (action === "reopen") {

@@ -69,6 +69,29 @@ export async function defectMessagesFor(kind: DefectKind, recordId: string): Pro
   }));
 }
 
+/** Where the files on a defect's thread live: namespaced by project + defect so
+ *  one item's link can never write into (or later read) another's. The sub's
+ *  "Mark it fixed" photo has its own folder (qa-fix/); email-reply files land
+ *  under inbound/ - both are reachable only through defectPathBelongsTo. */
+export function defectBlobPrefix(projectId: string, recordId: string): string {
+  return `${projectId}/defects/${recordId}/`;
+}
+
+/** Is this blob path one of the files on THIS defect's thread? The streaming
+ *  route asks before it serves anything - a path alone is never enough. */
+export async function defectPathBelongsTo(kind: DefectKind, recordId: string, path: string): Promise<Attachment | null> {
+  if (!path) return null;
+  const rows = await db
+    .select({ attachments: defectMessages.attachments })
+    .from(defectMessages)
+    .where(and(eq(defectMessages.kind, kind), eq(defectMessages.recordId, recordId)));
+  for (const r of rows) {
+    const hit = parseAttachments(r.attachments).find((a) => a.path === path);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 /** How many lines each of these defects has (for the builder's item list). */
 export async function defectMessageCounts(kind: DefectKind, recordIds: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();

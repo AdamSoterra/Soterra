@@ -392,6 +392,8 @@ export type FixData = {
   /** The conversation so far, and whether a note can still be added. */
   messages?: FixMsg[];
   canNote?: boolean;
+  /** Where the sub's own files on the thread go (null once closed). */
+  uploadPrefix?: string | null;
 };
 
 const FIX_MSG_LABEL: Record<string, string> = {
@@ -404,8 +406,10 @@ const FIX_MSG_LABEL: Record<string, string> = {
   reopened: "Reopened",
 };
 
-/** The thread on a defect, as the external party sees it (their own lines in green). */
-export function DefectThread({ messages, mine, photoSrc, hasPhoto }: { messages: FixMsg[]; mine: "sub" | "consultant"; photoSrc?: string; hasPhoto?: boolean }) {
+/** The thread on a defect, as the external party sees it (their own lines in
+ *  green). Files on a line open through the door's fileHref (token or portal);
+ *  without one they are listed by name. */
+export function DefectThread({ messages, mine, photoSrc, hasPhoto, fileHref }: { messages: FixMsg[]; mine: "sub" | "consultant"; photoSrc?: string; hasPhoto?: boolean; fileHref?: (path: string) => string }) {
   if (!messages.length) return null;
   const lastReady = [...messages].reverse().find((m) => m.type === "ready");
   return (
@@ -420,7 +424,11 @@ export function DefectThread({ messages, mine, photoSrc, hasPhoto }: { messages:
           </div>
           <div className="ans-msg-b">{m.body}</div>
           {m.attachments && m.attachments.length > 0 && (
-            <div className="ans-fine" style={{ marginTop: 4 }}>📎 {m.attachments.map((a) => a.filename).join(" · ")}</div>
+            fileHref ? (
+              <AttachmentList files={m.attachments} href={fileHref} />
+            ) : (
+              <div className="ans-fine" style={{ marginTop: 4 }}>📎 {m.attachments.map((a) => a.filename).join(" · ")}</div>
+            )
           )}
           {photoSrc && hasPhoto && lastReady && m.id === lastReady.id && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -438,18 +446,26 @@ export function FixView({
   act,
   onNote,
   photoSrc,
+  uploadFile,
+  fileHref,
 }: {
   d: FixData;
   uploadPhoto: (blob: Blob) => Promise<{ path?: string; error?: string }>;
   act: (note: string, photoPath: string | null) => Act<FixData>;
-  /** A note on the thread (a question, an update) without marking it fixed. */
-  onNote?: (text: string) => Act<FixData>;
+  /** A note on the thread (a question, an update) without marking it fixed - words, files, or both. */
+  onNote?: (text: string, files: CorrFile[]) => Act<FixData>;
   /** Where the sub's own fix photo streams from on this door. */
   photoSrc?: string;
+  /** Direct-to-Blob upload for a photo or file on the sub's note; absent = words only. */
+  uploadFile?: ((file: File) => Promise<{ file?: CorrFile; error?: string }>) | null;
+  /** Link for a file on the thread (the door decides: token or portal). */
+  fileHref?: (path: string) => string;
 }) {
   const [data, setData] = useState(d);
   const [note, setNote] = useState("");
   const [msgText, setMsgText] = useState("");
+  const [msgFiles, setMsgFiles] = useState<CorrFile[]>([]);
+  const [msgUploading, setMsgUploading] = useState(false);
   const [msgBusy, setMsgBusy] = useState(false);
   const [msgSent, setMsgSent] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
@@ -459,6 +475,31 @@ export function FixView({
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const msgFileRef = useRef<HTMLInputElement>(null);
+
+  // A photo on the note is shrunk on the phone first (a raw camera JPEG is
+  // 5-8 MB; nobody on site has the bandwidth, and it should still fit in the
+  // email to the builder). Anything else goes up as it is.
+  const pickMsgFiles = async (list: FileList | null) => {
+    if (!list || !uploadFile) return;
+    setErr(null);
+    setMsgUploading(true);
+    try {
+      for (const f of Array.from(list).slice(0, 10)) {
+        let file = f;
+        if (/^image\/(jpeg|png|webp)$/.test(f.type)) {
+          const small = await compress(f);
+          if (small !== f) file = new File([small], f.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+        }
+        const r = await uploadFile(file);
+        if (r.file) setMsgFiles((xs) => [...xs, r.file!]);
+        else setErr(r.error ?? `${f.name} didn't upload.`);
+      }
+    } finally {
+      setMsgUploading(false);
+      if (msgFileRef.current) msgFileRef.current.value = "";
+    }
+  };
 
   const pickPhoto = async (file: File) => {
     setErr(null);
@@ -492,14 +533,15 @@ export function FixView({
   };
   const alreadyIn = !data.canSubmit && !done;
   const sendNote = async () => {
-    if (!onNote || !msgText.trim() || msgBusy) return;
+    if (!onNote || (!msgText.trim() && !msgFiles.length) || msgBusy || msgUploading) return;
     setMsgBusy(true);
     setErr(null);
-    const res = await onNote(msgText);
+    const res = await onNote(msgText, msgFiles);
     if (!res.ok) setErr(res.error ?? "That didn't go through. Try again.");
     else {
       if (res.data) setData(res.data);
       setMsgText("");
+      setMsgFiles([]);
       setMsgSent(true);
     }
     setMsgBusy(false);
@@ -530,7 +572,7 @@ export function FixView({
         )}
       </div>
 
-      <DefectThread messages={data.messages ?? []} mine="sub" photoSrc={photoSrc} hasPhoto={data.hasFixPhoto} />
+      <DefectThread messages={data.messages ?? []} mine="sub" photoSrc={photoSrc} hasPhoto={data.hasFixPhoto} fileHref={fileHref} />
 
       {done && <div className="ans-done">✓ Marked fixed. {data.company} has been notified - you&apos;re done.</div>}
 
@@ -574,9 +616,19 @@ export function FixView({
           <p className="ans-note">A question, or an update before the fix is done. It goes on this item and {data.company} is told by email.</p>
           {msgSent && <div className="ans-done" style={{ margin: "0 0 10px" }}>✓ Sent. {data.company} has been notified.</div>}
           <textarea className="ans-ta" style={{ minHeight: 80 }} placeholder="e.g. Which system do you want here? We have the 60 minute collars on the truck." value={msgText} maxLength={4000} onChange={(e) => { setMsgText(e.target.value); setMsgSent(false); }} />
+          {uploadFile && (
+            <>
+              <input ref={msgFileRef} type="file" multiple accept="image/*,.pdf,.docx,.xlsx,.zip,.dwg" style={{ display: "none" }} onChange={(e) => void pickMsgFiles(e.target.files)} />
+              {msgFiles.length > 0 && <AttachmentList files={msgFiles} href={fileHref ?? (() => "#")} />}
+              <button className="qa-photo" style={{ marginTop: 9 }} disabled={msgUploading || msgBusy} onClick={() => msgFileRef.current?.click()}>
+                {msgUploading ? "Uploading…" : "📎 Attach a photo or a file"}
+              </button>
+            </>
+          )}
+          {err && !data.canSubmit && <div className="ans-err">{err}</div>}
           <div className="ans-actions">
-            <button className="ans-btn" disabled={msgBusy || !msgText.trim()} onClick={() => void sendNote()}>
-              {msgBusy ? "Sending…" : "Send the note"}
+            <button className="ans-btn" disabled={msgBusy || msgUploading || (!msgText.trim() && !msgFiles.length)} onClick={() => void sendNote()}>
+              {msgBusy ? "Sending…" : msgFiles.length && !msgText.trim() ? "Send the photo" : "Send the note"}
             </button>
           </div>
         </div>

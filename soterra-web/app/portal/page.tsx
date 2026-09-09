@@ -188,8 +188,28 @@ export default function PortalPage() {
           <FixView
             d={detail.data as FixData}
             photoSrc={`/api/portal/photo?table=${open.table ?? "item"}&id=${encodeURIComponent(open.id)}`}
-            onNote={async (text) => {
-              const r = await post({ kind: "fix", id: open.id, table: open.table ?? "item", action: "note", body: text });
+            fileHref={(path) => `/api/defect-file?portal=${encodeURIComponent(open.id)}&table=${open.table ?? "item"}&side=sub&path=${encodeURIComponent(path)}`}
+            uploadFile={
+              (detail.data as FixData).uploadPrefix
+                ? async (file) => {
+                    const v = detail.data as FixData;
+                    try {
+                      const res = await upload(`${v.uploadPrefix}${file.name}`, file, {
+                        access: "private",
+                        handleUploadUrl: "/api/portal/upload",
+                        clientPayload: JSON.stringify({ defectId: open.id, table: open.table ?? "item" }),
+                        contentType: file.type || "application/octet-stream",
+                      });
+                      const f: CorrFile = { filename: file.name, path: res.pathname, bytes: file.size, contentType: file.type || "application/octet-stream" };
+                      return { file: f };
+                    } catch (e) {
+                      return { error: e instanceof Error ? e.message : `${file.name} didn't upload.` };
+                    }
+                  }
+                : null
+            }
+            onNote={async (text, files) => {
+              const r = await post({ kind: "fix", id: open.id, table: open.table ?? "item", action: "note", body: text, files });
               return r.ok ? { ok: true, data: r.data as FixData } : r;
             }}
             uploadPhoto={async (blob) => {

@@ -13,6 +13,7 @@ import {
 import { sanitizeFiles } from "@/lib/attachments";
 import { corrForEmail, corrForEmails, corrLabel, corrTypeLabel, corrView, replyAsExternal, type CorrAttachment } from "@/lib/correspondence";
 import { defectForEmail, defectsForEmails, fixView, markReadyRow, noteFromExternal, signoffRow, signoffView } from "@/lib/qaCloseout";
+import { defectBlobPrefix } from "@/lib/defectThread";
 import { db } from "@/lib/db";
 import { companies, projects } from "@/lib/schema";
 import { inArray } from "drizzle-orm";
@@ -196,8 +197,10 @@ export async function POST(req: Request) {
       const found = await defectForEmail(table, id, who.emails, "sub");
       if (!found) return Response.json({ error: "Not found" }, { status: 404 });
       if (String(body.action ?? "") === "note") {
-        const r = await noteFromExternal({ ...found, side: "sub" }, { name: name ?? who.emails[0], email: who.emails[0] ?? null }, text, "portal");
-        if (!r.ok) return Response.json({ error: r.error === "empty" ? "Write the note first." : "This item is closed." }, { status: r.error === "empty" ? 400 : 409 });
+        // Files uploaded through /api/portal/upload under this defect's own folder.
+        const files = sanitizeFiles(body.files, [defectBlobPrefix(found.row.projectId, found.row.id)]);
+        const r = await noteFromExternal({ ...found, side: "sub" }, { name: name ?? who.emails[0], email: who.emails[0] ?? null }, text, "portal", files);
+        if (!r.ok) return Response.json({ error: r.error === "empty" ? "Write the note first, or attach a photo." : "This item is closed." }, { status: r.error === "empty" ? 400 : 409 });
         const again = await defectForEmail(table, id, who.emails, "sub");
         return Response.json({ ok: true, view: again ? await fixView(again) : null });
       }

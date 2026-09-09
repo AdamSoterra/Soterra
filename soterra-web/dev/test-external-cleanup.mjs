@@ -30,8 +30,16 @@ if (BLOB) {
   // RFI files too (the RFI's own + every line of its thread), since 2026-09-10.
   const rfiOwn = await sql`select attachments from rfis where company_id = ${co.id}`;
   const rfiMsgs = await sql`select attachments from rfi_messages where company_id = ${co.id}`;
-  const paths = new Set(files.map((f) => f.p));
-  for (const r of [...corr, ...msgs, ...rfiOwn, ...rfiMsgs]) for (const a of JSON.parse(r.attachments ?? "[]")) paths.add(a.path);
+  // Defect threads (photos and files either side wrote with, email-reply files)
+  // and the subs' "Mark it fixed" photos, since 2026-09-11.
+  const defMsgs = await sql`select attachments from defect_messages where company_id = ${co.id}`;
+  const fixPhotos = [
+    ...(await sql`select fix_photo as p from qa_flags where company_id = ${co.id} and fix_photo is not null`),
+    ...(await sql`select fix_photo as p from inspection_items where company_id = ${co.id} and fix_photo is not null`),
+    ...(await sql`select fix_photo as p from checklist_items where company_id = ${co.id} and fix_photo is not null`),
+  ];
+  const paths = new Set([...files, ...fixPhotos].map((f) => f.p));
+  for (const r of [...corr, ...msgs, ...rfiOwn, ...rfiMsgs, ...defMsgs]) for (const a of JSON.parse(r.attachments ?? "[]")) paths.add(a.path);
   for (const p of paths) {
     try {
       await del(p, { token: BLOB });
@@ -42,7 +50,7 @@ if (BLOB) {
   }
 }
 
-const byCompany = ["correspondence_messages", "correspondence", "email_log", "rfi_messages", "rfi_transitions", "rfis", "qa_flags", "inspection_items", "inspections", "checklist_items", "checklist_photos", "checklists", "plan_pins", "subs", "consultants", "contract_instructions", "inbound_emails"];
+const byCompany = ["defect_messages", "correspondence_messages", "correspondence", "email_log", "rfi_messages", "rfi_transitions", "rfis", "qa_flags", "inspection_items", "inspections", "checklist_items", "checklist_photos", "checklists", "plan_pins", "subs", "consultants", "contract_instructions", "inbound_emails"];
 for (const t of byCompany) {
   const r = await sql(`delete from ${t} where company_id = $1`, [co.id]);
   console.log(t, "deleted");

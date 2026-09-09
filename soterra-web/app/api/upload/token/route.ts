@@ -55,10 +55,13 @@ export async function POST(request: Request) {
         // lives under instructions/ and takes the same list.
         // RFI files (the New RFI form, a draft, a follow-up) take the same list
         // under rfis/ - "<projectId>/rfis/<rfiId>/…" or "…/rfis/pending/<key>/…".
+        // Files the site team writes to a sub with, on a defect's thread,
+        // live under defects/<recordId>/ (lib/defectThread.ts).
         const isCorr =
           pathname.startsWith(`${projectId}/correspondence/`) ||
           pathname.startsWith(`${projectId}/instructions/`) ||
-          pathname.startsWith(`${projectId}/rfis/`);
+          pathname.startsWith(`${projectId}/rfis/`) ||
+          pathname.startsWith(`${projectId}/defects/`);
         const corrTypes = [
           "application/pdf",
           "image/jpeg",

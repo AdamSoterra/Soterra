@@ -1,4 +1,6 @@
-import { fixGateEmails, getFixByToken, markReadyByToken, noteByToken } from "@/lib/qaCloseout";
+import { fixGateEmails, getFixByToken, markReadyByToken, noteByToken, threadUploadTarget } from "@/lib/qaCloseout";
+import { defectBlobPrefix } from "@/lib/defectThread";
+import { sanitizeFiles } from "@/lib/attachments";
 import { gateExternal, gateResponse } from "@/lib/externalAuth";
 
 export const runtime = "nodejs";
@@ -14,9 +16,10 @@ export const maxDuration = 60;
 //   POST /api/qa-fix {token, note?, photoPath?}
 //        -> mark it fixed: sent -> ready, clock stops, the MC is notified.
 //        photoPath is the pathname returned by /api/qa-fix/photo (same token).
-//   POST /api/qa-fix {token, action: "note", note, authorName?}
+//   POST /api/qa-fix {token, action: "note", note, authorName?, files?}
 //        -> a note on the thread (a question, an update) - the MC is told;
-//        the ball does not move.
+//        the ball does not move. files = what /api/qa-fix/upload signed,
+//        under this defect's own folder; a note can be files alone.
 
 const MAX_NOTE = 4000;
 
@@ -57,8 +60,11 @@ export async function POST(req: Request) {
 
   try {
     if (String(body.action ?? "") === "note") {
-      const r = await noteByToken(token, note, typeof body.authorName === "string" ? body.authorName : null);
-      if (!r.ok) return Response.json({ error: r.error === "empty" ? "Write the note first." : r.error === "closed" ? "This item is closed." : "This link is no longer valid." }, { status: r.error === "not-found" ? 404 : 409 });
+      // Only files under THIS defect's folder survive; anything else is dropped.
+      const target = await threadUploadTarget(token);
+      const files = target ? sanitizeFiles(body.files, [defectBlobPrefix(target.projectId, target.recordId)]) : [];
+      const r = await noteByToken(token, note, typeof body.authorName === "string" ? body.authorName : null, files);
+      if (!r.ok) return Response.json({ error: r.error === "empty" ? "Write the note first, or attach a photo." : r.error === "closed" ? "This item is closed." : "This link is no longer valid." }, { status: r.error === "not-found" ? 404 : 409 });
       return Response.json({ ok: true, defect: await getFixByToken(token) });
     }
     const result = await markReadyByToken(token, { photoBlobPath: photoPath, note });

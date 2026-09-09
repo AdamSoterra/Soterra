@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
-import { ErrorCard, FixView, InvalidCard, Loading, LoginGate, Shell, type FixData } from "@/app/components/external-views";
+import { upload } from "@vercel/blob/client";
+import { ErrorCard, FixView, InvalidCard, Loading, LoginGate, Shell, type CorrFile, type FixData } from "@/app/components/external-views";
 
 // The sub's side of a QA defect - soterra.co.nz/fix/<token>.
 //
@@ -47,9 +48,28 @@ export default function FixPage({ params }: { params: { token: string } }) {
       <FixView
         d={d}
         photoSrc={`/api/qa-fix/photo?token=${encodeURIComponent(token)}`}
-        onNote={async (text) => {
+        fileHref={(path) => `/api/defect-file?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`}
+        uploadFile={
+          d.uploadPrefix
+            ? async (file) => {
+                try {
+                  const res = await upload(`${d.uploadPrefix}${file.name}`, file, {
+                    access: "private",
+                    handleUploadUrl: "/api/qa-fix/upload",
+                    clientPayload: JSON.stringify({ token }),
+                    contentType: file.type || "application/octet-stream",
+                  });
+                  const f: CorrFile = { filename: file.name, path: res.pathname, bytes: file.size, contentType: file.type || "application/octet-stream" };
+                  return { file: f };
+                } catch (e) {
+                  return { error: e instanceof Error ? e.message : `${file.name} didn't upload.` };
+                }
+              }
+            : null
+        }
+        onNote={async (text, files) => {
           try {
-            const r = await fetch("/api/qa-fix", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, action: "note", note: text }) });
+            const r = await fetch("/api/qa-fix", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, action: "note", note: text, files }) });
             const j = (await r.json()) as { ok?: boolean; defect?: FixData; error?: string };
             if (!r.ok || !j.ok) return { ok: false, error: j.error };
             return { ok: true, data: j.defect };

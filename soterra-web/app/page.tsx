@@ -374,7 +374,7 @@ const SRC_LABEL: Record<string, string> = { ci: "Instruction", plans: "Plans", c
 // The close-out loop's status, as the site team reads it on an item.
 const CO_LABEL: Record<string, string> = { open: "not sent", sent: "with the sub", ready: "marked fixed", submitted: "with the consultant", closed: "closed out" };
 // One line of a defect's thread (lib/defectThread.ts) and how each type reads.
-type CoMsg = { id: string; type: string; authorSide: string; authorName: string | null; via: string | null; body: string; createdAt: string };
+type CoMsg = { id: string; type: string; authorSide: string; authorName: string | null; via: string | null; body: string; attachments?: RfiAtt[]; createdAt: string };
 const CO_MSG_LABEL: Record<string, string> = { sent: "✉ Sent", ready: "✓ Marked fixed", bounced: "↩ Bounced back", closed: "✓ Closed out", forwarded: "→ For sign-off", signed_off: "✓ Signed off", reopened: "Reopened" };
 // Programme-critique finding types → the section heading each groups under.
 const FINDING_GROUPS: { key: string; label: string }[] = [
@@ -2643,6 +2643,36 @@ export default function Page() {
   const [coThread, setCoThread] = useState<{ kind: "check" | "item"; id: string } | null>(null);
   const [coMsgs, setCoMsgs] = useState<CoMsg[] | null>(null);
   const [coText, setCoText] = useState("");
+  // Files on the note to the sub: direct-to-Blob under this site's
+  // defects/<id>/ folder (signed by /api/upload/token), sent with the note.
+  const [coFiles, setCoFiles] = useState<RfiAtt[]>([]);
+  const [coUploading, setCoUploading] = useState(false);
+  const coFileRef = useRef<HTMLInputElement>(null);
+  const coFileHref = (kind: "check" | "item", id: string, path: string) => `/api/defect-file?kind=${kind}&id=${encodeURIComponent(id)}&path=${encodeURIComponent(path)}&project=${encodeURIComponent(projRef.current ?? "")}`;
+  const uploadCoFiles = async (id: string, list: File[]) => {
+    const pid = projRef.current;
+    if (!pid) throw new Error("No site selected");
+    setCoUploading(true);
+    try {
+      for (const f of list.slice(0, 10)) {
+        // A photo is shrunk first (a raw camera JPEG is 5-8 MB); it should
+        // still fit in the email to the sub.
+        const isImg = /^image\/(jpeg|png|webp)$/.test(f.type);
+        const body = isImg ? await resizeImage(f, 1600, 0.82) : f;
+        const name = isImg ? f.name.replace(/\.[^.]+$/, "") + ".jpg" : f.name;
+        const type = isImg ? "image/jpeg" : f.type || "application/octet-stream";
+        const res = await upload(`${pid}/defects/${id}/${name}`, body, {
+          access: "private",
+          handleUploadUrl: "/api/upload/token",
+          clientPayload: JSON.stringify({ projectId: pid }),
+          contentType: type,
+        });
+        setCoFiles((xs) => [...xs, { filename: name, path: res.pathname, bytes: body.size, contentType: type }]);
+      }
+    } finally {
+      setCoUploading(false);
+    }
+  };
   const loadCoThread = async (kind: "check" | "item", id: string) => {
     try {
       const r = await apiFetch(`/api/qa-closeout?kind=${kind}&id=${encodeURIComponent(id)}`);
@@ -2654,7 +2684,7 @@ export default function Page() {
   };
   const toggleThread = (kind: "check" | "item", id: string) => {
     if (coThread && coThread.kind === kind && coThread.id === id) { setCoThread(null); setCoMsgs(null); return; }
-    setCoThread({ kind, id }); setCoMsgs(null); setCoText("");
+    setCoThread({ kind, id }); setCoMsgs(null); setCoText(""); setCoFiles([]);
     void loadCoThread(kind, id);
   };
   /** How the items on a check or report stand, in one line above the list. */
@@ -2729,14 +2759,30 @@ export default function Page() {
                     {m.via === "email" ? " · by email" : m.via === "portal" ? " · from the portal" : m.via === "link" ? " · from the link" : ""}
                   </div>
                   <div className="body">{m.body}</div>
+                  {(m.attachments?.length ?? 0) > 0 && m.attachments!.map((a) => (
+                    <div className="co-att" key={a.path}>
+                      <span>{rfiFileIcon(a.filename)}</span>
+                      <a href={coFileHref(kind, it.id, a.path)} target="_blank" rel="noopener noreferrer">{a.filename}</a>
+                      <small>{rfiFmtBytes(a.bytes)}</small>
+                    </div>
+                  ))}
                 </div>
               ))
             )}
             {st !== "closed" && st !== "open" && (
               <div style={{ marginTop: 8 }}>
                 <textarea className="ev-in" rows={2} value={coText} placeholder={st === "submitted" ? "Write to the consultant - goes on this item and to their inbox" : `Write to ${it.sentTo || "the sub"} - goes on this item and to their inbox, with their link`} onChange={(e) => setCoText(e.target.value)} />
-                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                  <button className="go" disabled={coBusy || !coText.trim()} onClick={async () => { if (await closeoutAction(kind, it.id, "note", { note: coText })) setCoText(""); }}>{coBusy ? "Sending…" : "Send"}</button>
+                {coFiles.length > 0 && rfiFileRows(coFiles, null, (path) => setCoFiles((xs) => xs.filter((x) => x.path !== path)))}
+                <input ref={coFileRef} type="file" multiple accept="image/*,.pdf,.docx,.xlsx,.zip,.dwg" style={{ display: "none" }} onChange={async (e) => {
+                  const list = e.target.files ? Array.from(e.target.files) : [];
+                  e.target.value = "";
+                  if (!list.length) return;
+                  try { await uploadCoFiles(it.id, list); }
+                  catch (err) { if (kind === "check") setClErr(err instanceof Error ? err.message : "Couldn't attach that."); else setInsErr(err instanceof Error ? err.message : "Couldn't attach that."); }
+                }} />
+                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                  <button className="go" disabled={coBusy || coUploading || (!coText.trim() && !coFiles.length)} onClick={async () => { if (await closeoutAction(kind, it.id, "note", { note: coText, files: coFiles })) { setCoText(""); setCoFiles([]); } }}>{coBusy ? "Sending…" : coFiles.length && !coText.trim() ? "Send the files" : "Send"}</button>
+                  <button type="button" disabled={coBusy || coUploading} onClick={() => coFileRef.current?.click()}>{coUploading ? "Uploading…" : "📎 Attach a photo or file"}</button>
                 </div>
               </div>
             )}
