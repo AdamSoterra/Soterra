@@ -1044,7 +1044,13 @@ export default function Page() {
   const [rfiLoaded, setRfiLoaded] = useState(false);
   const [rfiView, setRfiView] = useState<"reg" | "ana">("reg");
   // The RFIs tab has three areas, like Inspections: RFIs | Correspondence | Instructions.
-  const [rfiArea, setRfiArea] = useState<"rfis" | "corr">("rfis");
+  const [rfiArea, setRfiArea] = useState<"rfis" | "corr" | "instr">("rfis");
+  // The Instructions register (client / contract instructions), the third area
+  // under the RFIs tab. Same CiForm + CiCard the CI-in-RFI flow uses.
+  const [ciList, setCiList] = useState<Ci[]>([]);
+  const [ciLoaded, setCiLoaded] = useState(false);
+  const [newCiOpen, setNewCiOpen] = useState(false);
+  const [ciErr, setCiErr] = useState<string | null>(null);
   // A CI raised from a piece of correspondence arrives in the register prefilled.
   // Company settings shown in the Directory: the sign-in gate on external links.
   const [coSettings, setCoSettings] = useState<{ externalLoginRequired: boolean; inboundEnabled: boolean; role: string } | null>(null);
@@ -2938,6 +2944,13 @@ export default function Page() {
   };
 
   // ─── RFI loaders + actions ───
+  const loadCis = async () => {
+    try {
+      const r = await apiFetch("/api/instructions");
+      const d = await r.json();
+      setCiList(Array.isArray(d?.items) ? (d.items as Ci[]) : []);
+    } catch { /* keep what we have */ } finally { setCiLoaded(true); }
+  };
   const loadRfis = async () => {
     try {
       const r = await apiFetch("/api/rfis");
@@ -4577,6 +4590,7 @@ export default function Page() {
               <div className="rf-area">
                 <button className={"rf-areab" + (rfiArea === "rfis" ? " act" : "")} onClick={() => setRfiArea("rfis")}>RFIs</button>
                 <button className={"rf-areab" + (rfiArea === "corr" ? " act" : "")} onClick={() => { setRfiArea("corr"); void loadConsultants(); void loadSubs(); }}>Correspondence</button>
+                <button className={"rf-areab" + (rfiArea === "instr" ? " act" : "")} onClick={() => { setRfiArea("instr"); void loadCis(); }}>Instructions</button>
               </div>
             )}
             {rfiArea === "corr" && !rfiOpen && projectId && (
@@ -4589,6 +4603,45 @@ export default function Page() {
                 openDirectory={openDirectory}
                 categories={TRADES}
               />
+            )}
+            {rfiArea === "instr" && !rfiOpen && projectId && (
+              <>
+                <div className="rf-head">
+                  <div className="page-h" style={{ margin: 0 }}>Instructions</div>
+                  <button className="rf-new" style={{ marginLeft: "auto" }} onClick={() => { setCiErr(null); setNewCiOpen(true); }}>＋ New instruction</button>
+                </div>
+                <p className="page-sub" style={{ margin: "0 0 14px" }}>Client and contract instructions on this site. Each open one is carried onto the QA checks for the trades it touches, before anything else.</p>
+                {ciErr && <div className="ev-err" style={{ marginBottom: 12 }}>{ciErr}</div>}
+                {newCiOpen && (
+                  <div style={{ marginBottom: 16 }}>
+                    <CiForm
+                      projName={projName}
+                      categories={TRADES}
+                      apiFetch={apiFetch}
+                      projectId={projectId}
+                      onSave={async (values) => {
+                        const r = await apiFetch("/api/instructions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(ciPayload(values)) });
+                        const d = await r.json();
+                        if (!r.ok || !d.item) throw new Error(d.error || "Couldn't raise the instruction.");
+                        return d.item as Ci;
+                      }}
+                      onSaved={() => { setNewCiOpen(false); void loadCis(); }}
+                      onCancel={() => setNewCiOpen(false)}
+                    />
+                  </div>
+                )}
+                {!ciLoaded ? (
+                  <div className="page-sub">Loading…</div>
+                ) : ciList.length === 0 ? (
+                  <div className="rf-card" style={{ textAlign: "center", color: "var(--mut)" }}>No instructions yet. Raise one when the client or a consultant changes the works, and it lands on the QA checks for the trades it touches.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    {ciList.map((ci) => (
+                      <CiCard key={ci.id} ci={ci} apiFetch={apiFetch} projectId={projectId} projName={projName} categories={TRADES} standalone onChanged={() => void loadCis()} />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
             {rfiArea === "rfis" && !rfiOpen && (
               <>

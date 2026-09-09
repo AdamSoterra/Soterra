@@ -247,6 +247,7 @@ export function CiCard({
   projName,
   categories,
   onChanged,
+  standalone,
 }: {
   ci: Ci;
   apiFetch: ApiFetch;
@@ -254,6 +255,8 @@ export function CiCard({
   projName: string;
   categories: string[];
   onChanged: (ci: Ci) => void;
+  /** In the register (not under an RFI): label it by its kind, not "raised from this". */
+  standalone?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -302,7 +305,7 @@ export function CiCard({
   return (
     <div className="rf-card" style={{ borderColor: "rgba(139,92,246,.45)" }}>
       <div className="k" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span>Instruction raised from this</span>
+        <span>{!standalone ? "Instruction raised from this" : ci.issuedBy === "client" ? "Client instruction" : ci.issuedBy === "architect" ? "Architect's instruction" : ci.issuedBy === "engineer" ? "Engineer's instruction" : "Contract instruction"}</span>
         <span className={"rf-pill " + (ci.status === "open" ? "open" : ci.status === "done" ? "answered" : "void")}>{ci.status}</span>
         <span style={{ marginLeft: "auto", fontWeight: 600, textTransform: "none", letterSpacing: 0 }}>{ci.dateIssued ? `Issued ${fmt(ci.dateIssued)}` : `Raised ${fmt(ci.createdAt)}`}</span>
       </div>
@@ -325,13 +328,9 @@ export function CiCard({
           <small>{ci.fileText ? "text read in" : "no text (image)"}</small>
         </div>
       )}
-      <p className="page-sub" style={{ margin: "10px 0 0", fontSize: 12.5 }}>
-        {ci.status === "open"
-          ? ci.trades.length
-            ? `Every QA check generated for ${ci.trades.join(", ")} on this site starts with this instruction, phrased for that stage. The assistant treats it as amending the drawings.`
-            : "Tag the trades it touches (Edit) and every QA check generated for them starts with this instruction."
-          : "No longer open, so it no longer goes on new checks."}
-      </p>
+      {ci.status === "open" && !ci.trades.length && (
+        <p className="page-sub" style={{ margin: "10px 0 0", fontSize: 12.5 }}>Tag the trades it touches (Edit) so it lands on their QA checks.</p>
+      )}
       {err && <div className="ev-err" style={{ marginTop: 8 }}>{err}</div>}
       <input ref={fileRef} type="file" accept="application/pdf,image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) void attachNow(f); }} />
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
