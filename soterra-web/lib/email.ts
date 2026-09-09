@@ -88,7 +88,7 @@ export type EmailRecipient = { name?: string | null; email: string };
 
 export type SendEmailInput = {
   scope: Scope;
-  kind: "qa_flags" | "rfi" | "inspection_items" | "correspondence" | "inbound" | "test";
+  kind: "qa_flags" | "rfi" | "inspection_items" | "correspondence" | "inbound" | "invite" | "test";
   recordType?: "qa_flag" | "rfi" | "inspection_item" | "checklist_item" | "correspondence" | null;
   recordIds?: string[];
   /** One recipient, or several (an RFI assigned to two consultants). */

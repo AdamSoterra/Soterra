@@ -8,7 +8,7 @@ import { InstallHint } from "./components/install-hint";
 import { CorrespondencePanel } from "./components/correspondence-panel";
 import { CiCard, CiForm, ciPayload, guessIssuer, type Ci, type CiDocOption } from "./components/ci-form";
 
-type Tab = "assistant" | "calendar" | "tasks" | "inspections" | "plans" | "upload" | "rfis" | "insights" | "programme";
+type Tab = "assistant" | "calendar" | "tasks" | "inspections" | "plans" | "upload" | "rfis" | "insights";
 type Cite = {
   code: string; title: string; sub: string; ans: string; hlTag: string;
   // Set when the answer came from a manufacturer's manual (e.g. GIB) rather than
@@ -547,7 +547,6 @@ const NAV: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "plans", label: "Documents", icon: I.plans },
   { id: "rfis", label: "RFIs", icon: I.rfi },
   { id: "insights", label: "Insights", icon: I.insights },
-  { id: "programme", label: "Programme", icon: I.programme },
   { id: "upload", label: "Upload", icon: I.up },
 ];
 
@@ -1074,7 +1073,12 @@ export default function Page() {
   const [draftUploading, setDraftUploading] = useState(false);
   // ─── The Directory (address book): consultants + subs, company-wide ───
   const [dirOpen, setDirOpen] = useState(false);
-  const [dirTab, setDirTab] = useState<"consultants" | "subs">("consultants");
+  const [dirTab, setDirTab] = useState<"consultants" | "subs" | "team">("consultants");
+  // Invite someone in-house (the site manager, a foreman) by email: they get the
+  // join code and where to sign up. Admin-only on the server.
+  const [teamInvite, setTeamInvite] = useState({ name: "", email: "" });
+  const [teamBusy, setTeamBusy] = useState(false);
+  const [teamMsg, setTeamMsg] = useState<string | null>(null);
   const [conList, setConList] = useState<Consultant[]>([]);
   const [dirForm, setDirForm] = useState({ name: "", company: "", discipline: "", trade: "", email: "" });
   const [dirEdit, setDirEdit] = useState<{ id: string; name: string; company: string; discipline: string; trade: string; email: string } | null>(null);
@@ -1209,6 +1213,20 @@ export default function Page() {
     const res = await apiFetch("/api/members", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: m.userId, role }) });
     if (res.ok) { setCrewErr(null); await loadMembers(); }
     else setCrewErr((await res.json().catch(() => null))?.error ?? "Couldn't change that role.");
+  };
+  const inviteByEmail = async () => {
+    const email = teamInvite.email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    setTeamBusy(true); setTeamMsg(null); setCrewErr(null);
+    try {
+      const res = await apiFetch("/api/members", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "invite", email, name: teamInvite.name.trim() }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Couldn't send the invite just now.");
+      setTeamMsg(`Invite sent to ${email} with the join code.`);
+      setTeamInvite({ name: "", email: "" });
+    } catch (e) {
+      setCrewErr(e instanceof Error ? e.message : "Couldn't send the invite just now.");
+    } finally { setTeamBusy(false); }
   };
   const rotateCode = async () => {
     if (!window.confirm("Get a new invite code? The old one stops working immediately — anyone you've already sent it to won't be able to use it.")) return;
@@ -1360,7 +1378,8 @@ export default function Page() {
   useEffect(() => {
     if (!projectId) return;
     if ((tab === "plans" || tab === "upload") && !docsLoaded) loadPlans();
-    if (tab === "programme" && !progLoaded) loadCritiques();
+    // The programme review lives on the Upload tab now (Adam 2026-09-10: "why does this have to be a program page?").
+    if (tab === "upload" && !progLoaded) loadCritiques();
     // Both tabs need the filed reports now: Insights derives its analytics from
     // them, and the Inspections tab lists them beneath the QA checks.
     if ((tab === "insights" || tab === "inspections") && !insightsLoaded) loadInsights();
@@ -4037,18 +4056,16 @@ export default function Page() {
             ) : (
               <DocsList docs={docs} onDelete={deletePlan} />
             )}
-          </div></div>
-        )}
 
-        {/* ─── PROGRAMME critique ─── */}
-        {tab === "programme" && (
-          <div className="page"><div className="page-inner">
-            <div className="page-h">Programme</div>
-            <div className="page-sub">
-              Upload {projName}&apos;s build programme (a PDF export) and Soterra checks it against the job — the scope and plans, and the council inspection order — flagging missing scope, out-of-order work, unrealistic durations and missing inspection hold-points. It reads the programme visually, so a Gantt export is fine.
+            {/* ─── the build programme: dropped here like any other document, reviewed
+                against the job on the way in (scope + plans + the council inspection
+                order): missing scope, out-of-order work, unrealistic durations,
+                missing hold points. Used to be its own tab. ─── */}
+            <div className="pg-k" style={{ marginTop: 30 }}>Build programme</div>
+            <div className="page-sub" style={{ marginBottom: 6 }}>
+              Drop a PDF export of {projName}&apos;s programme (Asta, MS Project, P6, Powerproject, any Gantt PDF) and Soterra reads it against the job: the scope and plans, and the council inspection order. It flags missing scope, out-of-order work, unrealistic durations and missing hold points, each one cited. Pick the build type first - it sets which council hold-point rules apply.
             </div>
-
-            <div className="rf-vs" style={{ marginTop: 14, maxWidth: 360 }}>
+            <div className="rf-vs" style={{ marginTop: 10, maxWidth: 360 }}>
               <button className={"rf-vsb" + (progBuildType === "residential" ? " act" : "")} onClick={() => setProgBuildType("residential")}>Residential</button>
               <button className={"rf-vsb" + (progBuildType === "commercial" ? " act" : "")} onClick={() => setProgBuildType("commercial")}>Commercial</button>
             </div>
@@ -4078,11 +4095,11 @@ export default function Page() {
 
             {progErr && <div className="ev-err" style={{ marginTop: 12 }}>{progErr}</div>}
 
-            <div className="pg-k" style={{ marginTop: 24 }}>Past critiques {progLoaded && progList.length > 0 ? `(${progList.length})` : ""}</div>
+            <div className="pg-k" style={{ marginTop: 24 }}>Programme reviews {progLoaded && progList.length > 0 ? `(${progList.length})` : ""}</div>
             {!progLoaded ? (
               <div className="page-sub">Loading…</div>
             ) : progList.length === 0 ? (
-              <div className="page-sub">No programme checked yet. Upload one above.</div>
+              <div className="page-sub">No programme reviewed yet. Drop one above.</div>
             ) : (
               <div>
                 {progList.slice().reverse().map((c) => (
@@ -5443,6 +5460,7 @@ export default function Page() {
               <div className="rf-vs" style={{ marginBottom: 14 }}>
                 <button className={"rf-vsb" + (dirTab === "consultants" ? " act" : "")} onClick={() => { setDirTab("consultants"); setDirEdit(null); setDirErr(null); }}>Consultants</button>
                 <button className={"rf-vsb" + (dirTab === "subs" ? " act" : "")} onClick={() => { setDirTab("subs"); setDirEdit(null); setDirErr(null); }}>Subs</button>
+                <button className={"rf-vsb" + (dirTab === "team" ? " act" : "")} onClick={() => { setDirTab("team"); setDirEdit(null); setDirErr(null); setTeamMsg(null); void loadMembers(); }}>Our team</button>
               </div>
 
               {/* The sign-in gate on every link Soterra emails out (RFI answer,
@@ -5458,6 +5476,47 @@ export default function Page() {
                 </label>
               )}
 
+              {dirTab === "team" && (
+                <div>
+                  <p className="page-sub" style={{ margin: "0 0 12px" }}>Who is on <b>{projName}</b>. Anyone who enters the invite code joins this site; a site admin can change roles and remove people.</p>
+                  <label className="ev-lbl">Invite someone in-house by email</label>
+                  <div className="dir-grid">
+                    <input className="ev-in" value={teamInvite.name} placeholder="Site manager's name" onChange={(e) => setTeamInvite((v) => ({ ...v, name: e.target.value }))} />
+                    <input className="ev-in" type="email" value={teamInvite.email} placeholder="them@yourcompany.co.nz" onChange={(e) => setTeamInvite((v) => ({ ...v, email: e.target.value }))} />
+                  </div>
+                  <button className="lg-btn primary" style={{ height: 40, margin: "10px 0 0", fontSize: 13.5 }} disabled={teamBusy || curProject?.role !== "admin" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(teamInvite.email.trim())} onClick={() => void inviteByEmail()}>
+                    {teamBusy ? "Sending…" : "Send the invite"}
+                  </button>
+                  <p className="page-sub" style={{ margin: "8px 0 0", fontSize: 12.5 }}>They get an email with the join code and where to sign up; once in, they see this site&apos;s documents, checks and RFIs.{curProject?.role !== "admin" ? " Only a site admin can invite." : ""}</p>
+                  {teamMsg && <div className="ck-notice" style={{ marginTop: 10 }}>{teamMsg}</div>}
+
+                  <label className="ev-lbl" style={{ marginTop: 18 }}>Invite code</label>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <div style={{ flex: 1, fontFamily: "ui-monospace, monospace", fontSize: 20, fontWeight: 700, letterSpacing: 2, padding: "10px 14px", borderRadius: 12, background: "rgba(14,116,189,.08)", color: "var(--navy)" }}>{activeCode || "—"}</div>
+                    <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 14px" }} onClick={() => copyCode(activeCode)}>{copied ? "Copied ✓" : "Copy"}</button>
+                    {curProject?.role === "admin" && <button className="lg-btn" style={{ height: 44, margin: 0, width: "auto", padding: "0 14px" }} title="Get a new code - the old one stops working" onClick={rotateCode}>New code</button>}
+                  </div>
+
+                  <label className="ev-lbl" style={{ marginTop: 18 }}>On this site ({members.length})</label>
+                  {members.map((m) => (
+                    <div key={m.userId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid rgba(148,166,190,.15)" }}>
+                      <span style={{ width: 12, height: 12, borderRadius: 99, background: crewColor(m.colorIndex), flex: "0 0 auto" }} />
+                      <b style={{ fontSize: 14.5 }}>{m.name}{m.isMe ? " (you)" : ""}</b>
+                      {m.title && <small style={{ color: "var(--slate)" }}>· {m.title}</small>}
+                      <small style={{ marginLeft: "auto", color: "var(--slate)" }}>{m.role === "admin" ? "Admin" : "Crew"}</small>
+                      {curProject?.role === "admin" && !m.isMe && (
+                        <>
+                          <button className="crew-role" title={m.role === "admin" ? "Make crew" : "Make admin"} onClick={() => toggleRole(m)}>{m.role === "admin" ? "Make crew" : "Make admin"}</button>
+                          <button className="row-x" style={{ opacity: 1 }} title={`Remove ${m.name} from this site`} onClick={() => removeMember(m)}>✕</button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {crewErr && <div className="ev-err" style={{ marginTop: 10 }}>{crewErr}</div>}
+                </div>
+              )}
+
+              {dirTab !== "team" && (
               <div className="dir-add">
                 <div className="dir-grid">
                   <input className="ev-in" value={dirForm.name} placeholder={dirTab === "consultants" ? "Jane Smith" : "Fire Protection Ltd"} onChange={(e) => setDirForm((v) => ({ ...v, name: e.target.value }))} />
@@ -5485,6 +5544,7 @@ export default function Page() {
                   {dirTab === "consultants" ? "Add consultant" : "Add sub"}
                 </button>
               </div>
+              )}
 
               {dirErr && <div className="ev-err" style={{ marginTop: 0, marginBottom: 12 }}>{dirErr}</div>}
 

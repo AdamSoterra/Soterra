@@ -1,8 +1,13 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { projectMembers, projects } from "@/lib/schema";
 import { and, eq } from "drizzle-orm";
 import { generateCode, resolveProjectId, listMembers } from "@/lib/project";
+import { companyName, type Scope } from "@/lib/company";
+import { projectSenderAddress, sendEmail } from "@/lib/email";
+import { renderThreadNotice } from "@/lib/emailTemplates";
+
+const APP_URL = (process.env.APP_BASE_URL ?? "https://soterra.co.nz").replace(/\/+$/, "");
 
 export const runtime = "nodejs";
 
@@ -156,6 +161,48 @@ export async function POST(req: Request) {
     body = await req.json();
   } catch {
     /* empty body is fine */
+  }
+  // POST /api/members { action: "invite", email, name? } → email someone in-house
+  // the join code and where to sign up (Adam 2026-09-10: "the pm wants to invite
+  // the site manager"). Admin-only, like the code itself.
+  if (body.action === "invite") {
+    const email = String(body.email ?? "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Response.json({ error: "That email doesn't look right." }, { status: 400 });
+    const name = String(body.name ?? "").trim().slice(0, 120) || null;
+    const [proj] = await db.select({ code: projects.code, name: projects.name, companyId: projects.companyId }).from(projects).where(eq(projects.id, projectId)).limit(1);
+    if (!proj?.code) return Response.json({ error: "This site has no join code yet." }, { status: 409 });
+    const user = await currentUser();
+    const inviter = user?.firstName || user?.username || "A colleague";
+    const company = (proj.companyId && (await companyName(proj.companyId as Scope["companyId"]))) || "your company";
+    const scope: Scope = { projectId, companyId: (proj.companyId ?? "") as Scope["companyId"], userId, role: me.role };
+    const rendered = renderThreadNotice({
+      companyName: company,
+      projectName: proj.name,
+      heading: `Join ${proj.name} on Soterra`,
+      subject: `Invite from ${inviter}`,
+      actorLine: `${inviter} · ${company}`,
+      lead: `has invited you to ${proj.name} on Soterra${name ? `, ${name}` : ""}.`,
+      body: `Sign up at soterra.co.nz (free), then enter the join code ${proj.code} and you land straight on ${proj.name}: the documents, the QA checks, the RFIs and the assistant that answers from them.`,
+      linkLabel: "Open Soterra",
+      linkUrl: APP_URL,
+      linkNote: `Your join code: ${proj.code}`,
+      refLabel: `${proj.name} · invite`.slice(0, 80),
+    });
+    const result = await sendEmail({
+      scope,
+      kind: "invite",
+      to: { name, email },
+      fromName: `${company} (via Soterra)`,
+      fromEmail: projectSenderAddress(proj.name, projectId),
+      replyTo: user?.primaryEmailAddress?.emailAddress ?? null,
+      subject: `${inviter} invited you to ${proj.name} on Soterra`,
+      html: rendered.html,
+      text: rendered.text,
+      sentBy: userId,
+      sentByName: inviter,
+    });
+    if (result.status === "failed") return Response.json({ error: "The invite didn't send. Try again in a moment." }, { status: 502 });
+    return Response.json({ ok: true, status: result.status });
   }
   if (body.action !== "rotate-code") return Response.json({ error: "Unknown action" }, { status: 400 });
 
