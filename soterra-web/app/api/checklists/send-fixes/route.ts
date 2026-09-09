@@ -1,4 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { logDefect } from "@/lib/defectThread";
 import { and, eq, inArray } from "drizzle-orm";
 import { get } from "@vercel/blob";
 import { db } from "@/lib/db";
@@ -247,6 +248,16 @@ export async function POST(req: Request) {
       .update(checklistItems)
       .set({ closeoutStatus: "sent", senderEmail })
       .where(and(eq(checklistItems.companyId, scope.companyId), inArray(checklistItems.id, ids), inArray(checklistItems.closeoutStatus, ["open", "sent"])));
+    // The thread on each item opens with what was sent, to whom.
+    for (const it of sendItems) {
+      await logDefect({ id: it.id, companyId: scope.companyId, projectId: scope.projectId }, "check", {
+        type: "sent",
+        authorSide: "contractor",
+        authorName: senderName,
+        authorEmail: senderEmail,
+        body: `Sent to ${recipientsLabel(okRecipients)}${message ? `: ${message}` : ""}${it.note ? `\n${it.note}` : ""}`,
+      });
+    }
   }
 
   return Response.json({ sent: results, transmitting: emailEnabled() });

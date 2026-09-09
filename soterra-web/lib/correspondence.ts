@@ -570,12 +570,21 @@ export async function listCorrespondence(scope: Scope) {
     .from(correspondence)
     .where(eq(correspondence.projectId, scope.projectId))
     .orderBy(desc(correspondence.updatedAt));
+  // The thread at a glance: how many replies, and when the last one landed.
+  const counts = await db
+    .select({ corrId: correspondenceMessages.corrId, n: sql<number>`count(*)::int`, last: sql<string>`max(${correspondenceMessages.createdAt})` })
+    .from(correspondenceMessages)
+    .where(and(eq(correspondenceMessages.projectId, scope.projectId), eq(correspondenceMessages.type, "message")))
+    .groupBy(correspondenceMessages.corrId);
+  const byId = new Map(counts.map((c) => [c.corrId, c]));
   const now = new Date();
   return rows.map((r) => ({
     ...publicCorr(r),
     label: corrLabel(r),
     typeLabel: corrTypeLabel(r.type),
     attachmentCount: parseAttachments(r.attachments).length,
+    messageCount: byId.get(r.id)?.n ?? 0,
+    lastAt: byId.get(r.id)?.last ?? null,
     overdue: r.status === "sent" && r.responseRequired && !!r.dateDue && now > r.dateDue,
   }));
 }

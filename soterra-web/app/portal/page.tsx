@@ -187,6 +187,11 @@ export default function PortalPage() {
         {detail?.kind === "fix" && (
           <FixView
             d={detail.data as FixData}
+            photoSrc={`/api/portal/photo?table=${open.table ?? "item"}&id=${encodeURIComponent(open.id)}`}
+            onNote={async (text) => {
+              const r = await post({ kind: "fix", id: open.id, table: open.table ?? "item", action: "note", body: text });
+              return r.ok ? { ok: true, data: r.data as FixData } : r;
+            }}
             uploadPhoto={async (blob) => {
               const r = await fetch(`/api/portal/photo?table=${open.table ?? "item"}&id=${encodeURIComponent(open.id)}`, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: blob });
               const j = (await r.json().catch(() => ({}))) as { path?: string; error?: string };

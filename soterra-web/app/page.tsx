@@ -373,6 +373,9 @@ function outcomeChip(source: string, outcome: string, itemCount: number): { cls:
 const SRC_LABEL: Record<string, string> = { ci: "Instruction", plans: "Plans", code: "Code", manufacturer: "GIB manual", history: "Our history", ccc: "CCC pack", template: "Premade template", hsw: "HSWA / WorkSafe", manual: "Added", spec: "Spec", scope: "Scope", sequence: "Inspection order" };
 // The close-out loop's status, as the site team reads it on an item.
 const CO_LABEL: Record<string, string> = { open: "not sent", sent: "with the sub", ready: "marked fixed", submitted: "with the consultant", closed: "closed out" };
+// One line of a defect's thread (lib/defectThread.ts) and how each type reads.
+type CoMsg = { id: string; type: string; authorSide: string; authorName: string | null; via: string | null; body: string; createdAt: string };
+const CO_MSG_LABEL: Record<string, string> = { sent: "✉ Sent", ready: "✓ Marked fixed", bounced: "↩ Bounced back", closed: "✓ Closed out", forwarded: "→ For sign-off", signed_off: "✓ Signed off", reopened: "Reopened" };
 // Programme-critique finding types → the section heading each groups under.
 const FINDING_GROUPS: { key: string; label: string }[] = [
   { key: "missing_scope", label: "Missing scope" },
@@ -2615,13 +2618,44 @@ export default function Page() {
     }
   };
   // ─── per-item close-out (checks + report items): close / reopen / bounce / forward ───
-  const closeoutAction = async (kind: "check" | "item", id: string, action: "close" | "reopen" | "reject" | "forward", extra: Record<string, unknown> = {}) => {
+  // The thread under an item: opened on demand, reloaded after every action on that item.
+  const [coThread, setCoThread] = useState<{ kind: "check" | "item"; id: string } | null>(null);
+  const [coMsgs, setCoMsgs] = useState<CoMsg[] | null>(null);
+  const [coText, setCoText] = useState("");
+  const loadCoThread = async (kind: "check" | "item", id: string) => {
+    try {
+      const r = await apiFetch(`/api/qa-closeout?kind=${kind}&id=${encodeURIComponent(id)}`);
+      const d = await r.json();
+      setCoMsgs(Array.isArray(d?.messages) ? d.messages : []);
+    } catch {
+      setCoMsgs([]);
+    }
+  };
+  const toggleThread = (kind: "check" | "item", id: string) => {
+    if (coThread && coThread.kind === kind && coThread.id === id) { setCoThread(null); setCoMsgs(null); return; }
+    setCoThread({ kind, id }); setCoMsgs(null); setCoText("");
+    void loadCoThread(kind, id);
+  };
+  /** How the items on a check or report stand, in one line above the list. */
+  const closeoutSummary = (items: { closeoutStatus?: string | null }[]) => {
+    const n = (st: string) => items.filter((i) => (i.closeoutStatus ?? "open") === st).length;
+    const parts = [
+      n("sent") ? `${n("sent")} with the sub` : null,
+      n("ready") ? `${n("ready")} marked fixed` : null,
+      n("submitted") ? `${n("submitted")} with the consultant` : null,
+      n("closed") ? `${n("closed")} closed out` : null,
+    ].filter(Boolean);
+    if (!parts.length) return null;
+    return <div className="ck-cosum">{parts.join(" · ")}</div>;
+  };
+  const closeoutAction = async (kind: "check" | "item", id: string, action: "close" | "reopen" | "reject" | "forward" | "note", extra: Record<string, unknown> = {}) => {
     setCoBusy(true);
     try {
       const r = await apiFetch("/api/qa-closeout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, id, action, ...extra }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "That didn't work just now.");
       setCoFor(null); setCoNote(""); setCoEmail(""); setCoName("");
+      if (coThread && coThread.kind === kind && coThread.id === id) void loadCoThread(kind, id);
       if (kind === "check" && openChecklist) await openChecklistById(openChecklist.checklist.id);
       if (kind === "item" && openInspection) {
         const rr = await apiFetch(`/api/inspections?id=${encodeURIComponent(openInspection.inspection.id)}`);
@@ -2652,11 +2686,40 @@ export default function Page() {
         {st === "ready" && <button disabled={coBusy} onClick={() => { setCoFor({ kind, id: it.id, mode: "reject" }); setCoNote(""); }}>↩ Bounce back</button>}
         {st === "ready" && kind === "item" && it.consultantReport && <button disabled={coBusy} onClick={() => { setCoFor({ kind, id: it.id, mode: "forward" }); setCoName(it.consultantName ?? ""); setCoEmail(it.consultantEmail ?? ""); }}>→ Forward for sign-off</button>}
         {st === "closed" && <button disabled={coBusy} onClick={() => void closeoutAction(kind, it.id, "reopen")}>Reopen</button>}
+        {(st !== "open" || it.sentTo) && <button onClick={() => toggleThread(kind, it.id)}>{coThread?.kind === kind && coThread.id === it.id ? "Hide conversation" : "💬 Conversation"}</button>}
         {it.subNote && (st === "ready" || st === "submitted" || st === "closed") && <div className="note"><b>{it.sentTo || "Sub"}:</b> {it.subNote}</div>}
         {it.reviewNote && <div className="note"><b>Note:</b> {it.reviewNote}</div>}
         {it.hasPhoto && (st === "ready" || st === "submitted" || st === "closed") && (
           // eslint-disable-next-line @next/next/no-img-element
           <img className="fixpic" alt="The sub's photo of the fix" src={`/api/qa-closeout/photo?kind=${kind}&id=${encodeURIComponent(it.id)}`} />
+        )}
+        {coThread?.kind === kind && coThread.id === it.id && (
+          <div className="note ck-thread">
+            {coMsgs === null ? (
+              <div className="page-sub" style={{ margin: 0 }}>Loading…</div>
+            ) : coMsgs.length === 0 ? (
+              <div className="page-sub" style={{ margin: 0 }}>Nothing on the thread yet.</div>
+            ) : (
+              coMsgs.map((m) => (
+                <div className={"co-msg" + (m.authorSide !== "contractor" ? " them" : "")} key={m.id}>
+                  <div className="who">
+                    {CO_MSG_LABEL[m.type] ? `${CO_MSG_LABEL[m.type]} · ` : ""}
+                    {m.authorName ?? (m.authorSide === "contractor" ? "Us" : m.authorSide === "sub" ? it.sentTo || "Sub" : "Consultant")} · {new Date(m.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}
+                    {m.via === "email" ? " · by email" : m.via === "portal" ? " · from the portal" : m.via === "link" ? " · from the link" : ""}
+                  </div>
+                  <div className="body">{m.body}</div>
+                </div>
+              ))
+            )}
+            {st !== "closed" && st !== "open" && (
+              <div style={{ marginTop: 8 }}>
+                <textarea className="ev-in" rows={2} value={coText} placeholder={st === "submitted" ? "Write to the consultant - goes on this item and to their inbox" : `Write to ${it.sentTo || "the sub"} - goes on this item and to their inbox, with their link`} onChange={(e) => setCoText(e.target.value)} />
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button className="go" disabled={coBusy || !coText.trim()} onClick={async () => { if (await closeoutAction(kind, it.id, "note", { note: coText })) setCoText(""); }}>{coBusy ? "Sending…" : "Send"}</button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
         {mini && (
           <div className="note" style={{ background: "#fff" }}>
@@ -5947,6 +6010,7 @@ export default function Page() {
             <div className="dm-body">
               {clErr && <div className="ev-err" style={{ marginBottom: 12 }}>{clErr}</div>}
               {sendNotice && <div className="ck-notice" onClick={() => setSendNotice(null)}>{sendNotice}</div>}
+              {closeoutSummary(openChecklist.items)}
               {openChecklist.items.map((it, itIdx) => (
                 <div className={"ck" + (it.status !== "pending" ? " ck-" + it.status : "")} key={it.id}>
                   <div className="ck-head">
@@ -6114,7 +6178,9 @@ export default function Page() {
               {openInspection.items.length === 0 ? (
                 <div className="page-sub" style={{ marginBottom: 0 }}>Nothing was picked up on this one.</div>
               ) : (
-                openInspection.items.map((it) => (
+                <>
+                {closeoutSummary(openInspection.items)}
+                {openInspection.items.map((it) => (
                   <div className="ins-row" key={it.id}>
                     <span className="cat-dot" style={{ background: catColor(it.category) }} />
                     <div className="ins-body">
@@ -6140,7 +6206,8 @@ export default function Page() {
                       {renderCloseout("item", { ...it, hasPhoto: !!it.hasFixPhoto, canSend: (it.workStatus ?? "not_done") !== "done", consultantReport: openInspection.inspection.source === "consultant" })}
                     </div>
                   </div>
-                ))
+                ))}
+                </>
               )}
               {openInspection.items.some((i) => (i.workStatus ?? "not_done") !== "done" && i.closeoutStatus !== "closed") && (
                 <div className="ck-sendbar">

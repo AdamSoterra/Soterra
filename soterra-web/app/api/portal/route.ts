@@ -12,7 +12,7 @@ import {
 } from "@/lib/rfi";
 import { sanitizeFiles } from "@/lib/attachments";
 import { corrForEmail, corrForEmails, corrLabel, corrTypeLabel, corrView, replyAsExternal, type CorrAttachment } from "@/lib/correspondence";
-import { defectForEmail, defectsForEmails, fixView, markReadyRow, signoffRow, signoffView } from "@/lib/qaCloseout";
+import { defectForEmail, defectsForEmails, fixView, markReadyRow, noteFromExternal, signoffRow, signoffView } from "@/lib/qaCloseout";
 import { db } from "@/lib/db";
 import { companies, projects } from "@/lib/schema";
 import { inArray } from "drizzle-orm";
@@ -195,8 +195,14 @@ export async function POST(req: Request) {
       const table = t === "flag" ? "flag" : t === "check" ? "check" : "item";
       const found = await defectForEmail(table, id, who.emails, "sub");
       if (!found) return Response.json({ error: "Not found" }, { status: 404 });
+      if (String(body.action ?? "") === "note") {
+        const r = await noteFromExternal({ ...found, side: "sub" }, { name: name ?? who.emails[0], email: who.emails[0] ?? null }, text, "portal");
+        if (!r.ok) return Response.json({ error: r.error === "empty" ? "Write the note first." : "This item is closed." }, { status: r.error === "empty" ? 400 : 409 });
+        const again = await defectForEmail(table, id, who.emails, "sub");
+        return Response.json({ ok: true, view: again ? await fixView(again) : null });
+      }
       const photoPath = typeof body.photoPath === "string" ? body.photoPath : null;
-      const res = await markReadyRow(found, { photoBlobPath: photoPath, note: text });
+      const res = await markReadyRow(found, { photoBlobPath: photoPath, note: text, via: "portal" });
       if (!res.ok) return Response.json({ error: "This item has already been marked fixed." }, { status: 409 });
       const again = await defectForEmail(table, id, who.emails, "sub");
       return Response.json({ ok: true, view: again ? await fixView(again) : null });
@@ -207,7 +213,7 @@ export async function POST(req: Request) {
       const decision = String(body.decision ?? "");
       if (decision !== "approve" && decision !== "reject") return Response.json({ error: "Unknown decision" }, { status: 400 });
       if (decision === "reject" && !text) return Response.json({ error: "Add a note so the sub knows what to put right." }, { status: 400 });
-      const res = await signoffRow(found.row, { approve: decision === "approve", note: text });
+      const res = await signoffRow(found.row, { approve: decision === "approve", note: text, via: "portal" });
       if (!res.ok) return Response.json({ error: "This item has already been actioned." }, { status: 409 });
       const again = await defectForEmail("item", id, who.emails, "consultant");
       return Response.json({ ok: true, approved: res.approved, view: again && again.kind === "item" ? await signoffView(again.row) : null });

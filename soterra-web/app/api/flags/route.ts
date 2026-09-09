@@ -1,4 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { logDefect } from "@/lib/defectThread";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { planPins, planPages, projects, qaFlags, subs } from "@/lib/schema";
@@ -300,6 +301,8 @@ export async function PATCH(req: Request) {
     })
     .where(eq(qaFlags.id, id))
     .returning();
+  // The thread on the flag opens with what was sent, to whom.
+  await logDefect(row, "flag", { type: "sent", authorSide: "contractor", authorName: senderName, authorEmail: senderEmail, body: `Sent to ${subName || subEmail}${message ? `: ${message}` : ""}` });
   return Response.json({ flag: publicFlag(row), transmitting: emailEnabled() });
 }
 

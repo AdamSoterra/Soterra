@@ -33,6 +33,7 @@
 // current closeout_status is the lock, and exactly one writer wins.
 
 import { randomBytes } from "node:crypto";
+import { defectMessagesFor, logDefect } from "./defectThread";
 import { normalizeEmail } from "./externalAuth";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -326,6 +327,9 @@ export async function fixView(found: FoundDefect) {
     reviewNote: row.closeoutStatus === "sent" ? row.reviewNote : null, // the bounce-back note, when there is one
     // The button is live only while the ball is with the sub.
     canSubmit: row.closeoutStatus === "sent",
+    // The conversation so far, and whether a note can still be added (anything short of closed).
+    messages: await defectMessagesFor(found.kind, row.id),
+    canNote: row.closeoutStatus !== "closed",
   };
 }
 
@@ -345,7 +349,7 @@ export async function markReadyByToken(
 
 export async function markReadyRow(
   found: FoundDefect,
-  input: { photoBlobPath?: string | null; note?: string | null }
+  input: { photoBlobPath?: string | null; note?: string | null; via?: "link" | "portal" }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const row = found.row;
   const now = new Date();
@@ -369,6 +373,7 @@ export async function markReadyRow(
     // Lost the claim: already ready / closed, or never sent.
     return { ok: false, error: row.closeoutStatus === "sent" ? "race" : "not-open" };
   }
+  await logDefect(row, found.kind, { type: "ready", authorSide: "sub", authorName: subLine(found.kind, row), via: input.via ?? "link", body: note ?? "Marked fixed" });
 
   try {
     await notifyMc(found.kind, claimed as FlagRow | ItemRow | CheckRow, {
@@ -426,12 +431,13 @@ export async function closeDirect(
     await db.update(checklistItems).set({ closeoutStatus: "closed", closedAt: now, closedByName: byName, reviewNote: note }).where(eq(checklistItems.id, id));
     await db.update(checklists).set({ updatedAt: now }).where(eq(checklists.id, (found.row as CheckRow).checklistId));
   }
+  await logDefect(found.row, kind, { type: "closed", authorSide: "contractor", authorName: byName, body: note ?? "Closed out" });
   return { ok: true };
 }
 
 /** Undo a close: back to "sent" if it had gone to a sub (their link comes
  *  alive again), else "open". */
-export async function reopenDefect(scope: Scope, kind: CloseoutKind, id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function reopenDefect(scope: Scope, kind: CloseoutKind, id: string, byName?: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
   const found = await rowOf(scope, kind, id);
   if (!found) return { ok: false, error: "not-found" };
   if (found.row.closeoutStatus !== "closed") return { ok: false, error: "not-closed" };
@@ -444,17 +450,21 @@ export async function reopenDefect(scope: Scope, kind: CloseoutKind, id: string)
   } else {
     await db.update(checklistItems).set({ closeoutStatus: back, closedAt: null, closedByName: null }).where(eq(checklistItems.id, id));
   }
+  await logDefect(found.row, kind, { type: "reopened", authorSide: "contractor", authorName: byName ?? null, body: back === "sent" ? "Reopened - back with the sub" : "Reopened" });
   return { ok: true };
 }
 
 /** Bounce a ready QA CHECK item back to the sub (flags/items use reject()). */
-export async function rejectCheck(scope: Scope, id: string, note: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function rejectCheck(scope: Scope, id: string, note: string | null, byName?: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
   const [row] = await db
     .update(checklistItems)
     .set({ closeoutStatus: "sent", reviewNote: note?.trim().slice(0, 4000) || null })
     .where(and(eq(checklistItems.id, id), eq(checklistItems.projectId, scope.projectId), eq(checklistItems.closeoutStatus, "ready")))
     .returning();
-  return row ? { ok: true } : { ok: false, error: "not-ready" };
+  if (!row) return { ok: false, error: "not-ready" };
+  await logDefect(row, "check", { type: "bounced", authorSide: "contractor", authorName: byName ?? null, body: note?.trim() || "Bounced back" });
+  await notifySubBounced({ kind: "check", row }, byName ?? null, note?.trim() || null);
+  return { ok: true };
 }
 
 // ─── the consultant's /signoff page (token-authorised, no login) ────────────
@@ -504,7 +514,7 @@ export async function signoffByToken(
 
 export async function signoffRow(
   item: ItemRow,
-  input: { approve: boolean; note?: string | null }
+  input: { approve: boolean; note?: string | null; via?: "link" | "portal" }
 ): Promise<{ ok: true; approved: boolean } | { ok: false; error: string }> {
   const now = new Date();
   const note = input.note?.trim().slice(0, 4000) || null;
@@ -518,6 +528,14 @@ export async function signoffRow(
     .where(and(eq(inspectionItems.id, item.id), eq(inspectionItems.closeoutStatus, "submitted")))
     .returning();
   if (!claimed) return { ok: false, error: "not-open" };
+  await logDefect(claimed, "item", {
+    type: input.approve ? "signed_off" : "bounced",
+    authorSide: "consultant",
+    authorName: item.consultantName || item.consultantEmail || "The consultant",
+    via: input.via ?? "link",
+    body: note ?? (input.approve ? "Signed off" : "Bounced back"),
+  });
+  if (!input.approve) await notifySubBounced({ kind: "item", row: claimed }, item.consultantName || item.consultantEmail || "The consultant", note);
 
   try {
     await notifyMc("item", claimed, {
@@ -551,7 +569,7 @@ export async function reviewClose(
   scope: Scope,
   kind: CloseoutKind,
   id: string,
-  input?: { note?: string | null }
+  input?: { note?: string | null; byName?: string | null }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const now = new Date();
   const note = input?.note?.trim().slice(0, 4000) || null;
@@ -561,6 +579,7 @@ export async function reviewClose(
       .set({ closeoutStatus: "closed", closedAt: now, reviewNote: note, status: "done", fixedAt: now })
       .where(and(eq(qaFlags.id, id), eq(qaFlags.projectId, scope.projectId), eq(qaFlags.closeoutStatus, "ready")))
       .returning();
+    if (row) await logDefect(row, "flag", { type: "closed", authorSide: "contractor", authorName: input?.byName ?? null, body: note ?? "Closed out" });
     return row ? { ok: true } : { ok: false, error: "not-ready" };
   }
   // A consultant-report defect cannot be closed internally - it must be
@@ -574,6 +593,7 @@ export async function reviewClose(
     .set({ closeoutStatus: "closed", closedAt: now, reviewNote: note, workStatus: "done" })
     .where(and(eq(inspectionItems.id, id), eq(inspectionItems.projectId, scope.projectId), eq(inspectionItems.closeoutStatus, "ready")))
     .returning();
+  if (row) await logDefect(row, "item", { type: "closed", authorSide: "contractor", authorName: input?.byName ?? null, body: note ?? "Closed out" });
   return row ? { ok: true } : { ok: false, error: "not-ready" };
 }
 
@@ -606,6 +626,7 @@ export async function forwardToConsultant(
     .where(and(eq(inspectionItems.id, itemId), eq(inspectionItems.projectId, scope.projectId), eq(inspectionItems.closeoutStatus, "ready")))
     .returning();
   if (!claimed) return { ok: false, error: "not-ready" };
+  await logDefect(claimed, "item", { type: "forwarded", authorSide: "contractor", authorName: input.byName ?? null, body: `Sent to ${name ? `${name} (${email})` : email} to sign off` });
 
   const { project, company } = await projectAndCompany(scope);
   const loginRequired = await companyRequiresLogin(scope.companyId);
@@ -648,7 +669,7 @@ export async function reject(
   scope: Scope,
   kind: CloseoutKind,
   id: string,
-  input: { note?: string | null }
+  input: { note?: string | null; byName?: string | null }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const note = input.note?.trim().slice(0, 4000) || null;
   if (kind === "flag") {
@@ -657,14 +678,30 @@ export async function reject(
       .set({ closeoutStatus: "sent", reviewNote: note })
       .where(and(eq(qaFlags.id, id), eq(qaFlags.projectId, scope.projectId), eq(qaFlags.closeoutStatus, "ready")))
       .returning();
-    return row ? { ok: true } : { ok: false, error: "not-ready" };
+    if (!row) return { ok: false, error: "not-ready" };
+    await logDefect(row, "flag", { type: "bounced", authorSide: "contractor", authorName: input.byName ?? null, body: note ?? "Bounced back" });
+    await notifySubBounced({ kind: "flag", row }, input.byName ?? null, note);
+    return { ok: true };
   }
   const [row] = await db
     .update(inspectionItems)
     .set({ closeoutStatus: "sent", reviewNote: note })
     .where(and(eq(inspectionItems.id, id), eq(inspectionItems.projectId, scope.projectId), eq(inspectionItems.closeoutStatus, "ready")))
     .returning();
-  return row ? { ok: true } : { ok: false, error: "not-ready" };
+  if (!row) return { ok: false, error: "not-ready" };
+  await logDefect(row, "item", { type: "bounced", authorSide: "contractor", authorName: input.byName ?? null, body: note ?? "Bounced back" });
+  await notifySubBounced({ kind: "item", row }, input.byName ?? null, note);
+  return { ok: true };
+}
+
+/** A bounce-back is a message to the sub: they hear about it by email, with
+ *  their link back in, instead of finding out next time they open it. */
+async function notifySubBounced(found: FoundDefect, byName: string | null, note: string | null): Promise<void> {
+  try {
+    await passNoteToExternal({ ...found, side: "sub" }, { name: byName ?? "The site team", email: (found.row as { senderEmail?: string | null }).senderEmail ?? "" }, note ? `Bounced back: ${note}` : "Bounced back - please redo and mark it fixed again.", null, "bounced");
+  } catch (e) {
+    console.error("bounce notice to sub failed:", e);
+  }
 }
 
 // ─── the MC notice ──────────────────────────────────────────────────────────
@@ -726,24 +763,100 @@ export async function emailReplyOnDefect(
   attachments: { filename: string; path: string; bytes: number; contentType: string }[]
 ): Promise<{ handled: "defect_note" | "defect_forwarded" | "rejected" }> {
   const row = found.row;
-  const scope = tokenScope(row);
-  const { project, company } = await projectAndCompany(scope);
-  const title = row.title;
   const fromLower = from.email.toLowerCase();
   const senderLower = (row as { senderEmail?: string | null }).senderEmail?.toLowerCase() ?? null;
   const attLine = attachments.length ? `${attachments.length} attachment${attachments.length === 1 ? "" : "s"}: ${attachments.map((a) => a.filename).join(" · ")}` : null;
   const body = text.trim() || (attLine ? `(${attLine})` : "(empty reply)");
 
-  // The other side wrote: tell whoever pressed Send.
+  // The other side wrote: it goes on the thread, and whoever pressed Send is told.
   if (!senderLower || fromLower !== senderLower) {
     if (!senderLower) return { handled: "rejected" };
+    await logDefect(row, found.kind, { type: "note", authorSide: found.side, authorName: from.name || from.email, authorEmail: from.email, via: "email", body, attachments });
+    await notifyMcOfNote(found, from, body, attLine, "email");
+    return { handled: "defect_note" };
+  }
+
+  // Our sender replying from their inbox: on the thread, and passed on to the
+  // external party with their link back in.
+  await logDefect(row, found.kind, { type: "note", authorSide: "contractor", authorName: from.name || from.email, authorEmail: from.email, via: "email", body, attachments });
+  const passed = await passNoteToExternal(found, from, body, attLine, "note");
+  return { handled: passed ? "defect_forwarded" : "rejected" };
+}
+
+/** A note from the sub or the consultant, written in the app (link or portal):
+ *  on the thread, and emailed to whoever pressed Send. */
+export async function noteFromExternal(
+  found: FoundDefect & { side: "sub" | "consultant" },
+  from: { name: string; email: string | null },
+  text: string,
+  via: "link" | "portal"
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const body = text.trim();
+  if (!body) return { ok: false, error: "empty" };
+  if (found.row.closeoutStatus === "closed") return { ok: false, error: "closed" };
+  await logDefect(found.row, found.kind, { type: "note", authorSide: found.side, authorName: from.name, authorEmail: from.email, via, body });
+  try {
+    await notifyMcOfNote(found, { name: from.name, email: from.email ?? "" }, body, null, via);
+  } catch (e) {
+    console.error("defect note notice failed:", e);
+  }
+  return { ok: true };
+}
+export async function noteByToken(token: string, text: string, name?: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+  const found = await bySubToken(token);
+  if (!found) return { ok: false, error: "not-found" };
+  const emails = subEmailsOf(found);
+  return noteFromExternal({ ...found, side: "sub" }, { name: name?.trim() || subLine(found.kind, found.row), email: emails[0] ?? null }, text, "link");
+}
+
+/** The site team writes to the sub (or the consultant) from the item: on the
+ *  thread, and emailed to them with their link back in. */
+export async function noteFromBuilder(
+  scope: Scope,
+  kind: CloseoutKind,
+  id: string,
+  text: string,
+  by: { name?: string | null; email?: string | null }
+): Promise<{ ok: true; emailed: boolean } | { ok: false; error: string }> {
+  const found = await rowOf(scope, kind, id);
+  if (!found) return { ok: false, error: "not-found" };
+  const body = text.trim();
+  if (!body) return { ok: false, error: "empty" };
+  await logDefect(found.row, kind, { type: "note", authorSide: "contractor", authorName: by.name ?? null, authorEmail: by.email ?? null, via: "app", body });
+  // Whoever holds the ball hears about it: the consultant while it is with them, else the sub.
+  const side: "sub" | "consultant" = found.kind === "item" && found.row.closeoutStatus === "submitted" ? "consultant" : "sub";
+  let emailed = false;
+  try {
+    emailed = await passNoteToExternal({ ...found, side }, { name: by.name ?? "The site team", email: by.email ?? (found.row as { senderEmail?: string | null }).senderEmail ?? "" }, body, null, "note");
+  } catch (e) {
+    console.error("builder note to external failed:", e);
+  }
+  return { ok: true, emailed };
+}
+
+/** The thread on one of our defects (the builder's side). */
+export async function threadFor(scope: Scope, kind: CloseoutKind, id: string) {
+  const found = await rowOf(scope, kind, id);
+  if (!found) return null;
+  return defectMessagesFor(kind, id);
+}
+
+/** Tell whoever pressed Send that the other side wrote (link, portal or email). */
+async function notifyMcOfNote(found: FoundDefect & { side: "sub" | "consultant" }, from: { email: string; name: string }, body: string, attLine: string | null, via: string): Promise<void> {
+  const row = found.row;
+  const scope = tokenScope(row);
+  const { project, company } = await projectAndCompany(scope);
+  const title = row.title;
+  const senderLower = (row as { senderEmail?: string | null }).senderEmail?.toLowerCase() ?? null;
+  if (!senderLower) return;
+  {
     const rendered = renderThreadNotice({
       companyName: company,
       projectName: project,
-      heading: `${found.side === "sub" ? "Sub" : "Consultant"} reply by email`,
+      heading: `${found.side === "sub" ? "Sub" : "Consultant"} ${via === "email" ? "reply by email" : "wrote back"}`,
       subject: title,
       actorLine: from.name || from.email,
-      lead: `replied by email on this defect${found.side === "sub" ? "" : " (sign-off)"}. The link in the original email is still the way to mark it fixed or sign it off; this is their note.`,
+      lead: `wrote on this defect${via === "email" ? " by email" : ""}${found.side === "sub" ? "" : " (sign-off)"}. It is on the item's thread in Soterra; the link in the original email is still the way to mark it fixed or sign it off.`,
       body,
       attachmentsLine: attLine,
       linkLabel: "Open Soterra",
@@ -757,19 +870,30 @@ export async function emailReplyOnDefect(
       recordType: found.kind === "flag" ? "qa_flag" : found.kind === "item" ? "inspection_item" : "checklist_item",
       recordIds: [row.id],
       to: { email: senderLower },
-      replyTo: from.email,
+      replyTo: from.email || null,
       fromName: "Soterra",
       fromEmail: projectSenderAddress(project, scope.projectId),
-      subject: `${title} · reply by email · ${project}`,
+      subject: `${title} · ${via === "email" ? "reply by email" : "note"} · ${project}`,
       html: rendered.html,
       text: rendered.text,
       sentByName: from.name || from.email,
     });
-    return { handled: "defect_note" };
   }
+}
 
-  // Our sender replying from their inbox: pass it on to the external party
-  // with their link back in.
+/** Pass a builder-side message (a note, a bounce-back) to the external party
+ *  holding the ball, with their link back in. False when there is nobody to send to. */
+async function passNoteToExternal(
+  found: FoundDefect & { side: "sub" | "consultant" },
+  from: { email: string; name: string },
+  body: string,
+  attLine: string | null,
+  kindOfNote: "note" | "bounced"
+): Promise<boolean> {
+  const row = found.row;
+  const scope = tokenScope(row);
+  const { project, company } = await projectAndCompany(scope);
+  const title = row.title;
   const loginRequired = await companyRequiresLogin(scope.companyId);
   let to: { name: string | null; email: string } | null = null;
   let link = APP_URL;
@@ -790,16 +914,17 @@ export async function emailReplyOnDefect(
       replyTo = await replyAddress("so", item.consultantToken);
     }
   }
-  if (!to) return { handled: "rejected" };
+  if (!to) return false;
   const rendered = renderThreadNotice({
     companyName: company,
     projectName: project,
-    heading: "Note from the builder",
+    heading: kindOfNote === "bounced" ? "Bounced back" : "Note from the builder",
     subject: title,
     actorLine: `${from.name || from.email} · ${company}`,
-    lead: "wrote about this defect.",
+    lead: kindOfNote === "bounced" ? "bounced this back - it needs another go before it can be closed." : "wrote about this defect.",
     body,
     attachmentsLine: attLine,
+    tone: kindOfNote === "bounced" ? "amber" : "blue",
     linkLabel: found.side === "sub" ? "Open the item" : "Open the sign-off",
     linkUrl: link,
     linkNote: loginRequired ? "Opens for your Soterra account on the address this was sent to." : "No account needed.",
@@ -813,15 +938,15 @@ export async function emailReplyOnDefect(
     recordType: found.kind === "flag" ? "qa_flag" : found.kind === "item" ? "inspection_item" : "checklist_item",
     recordIds: [row.id],
     to,
-    replyTo: replyTo ?? from.email,
+    replyTo: replyTo ?? from.email ?? null,
     fromName: `${company} (via Soterra)`,
     fromEmail: projectSenderAddress(project, scope.projectId),
-    subject: `${title} · ${project}`,
+    subject: `${title} · ${kindOfNote === "bounced" ? "bounced back" : "note"} · ${project}`,
     html: rendered.html,
     text: rendered.text,
     sentByName: from.name || from.email,
   });
-  return { handled: "defect_forwarded" };
+  return true;
 }
 
 // ─── the sub's fix photo (private Blob, streamed through a token route) ───────

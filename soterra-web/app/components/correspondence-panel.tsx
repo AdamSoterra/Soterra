@@ -32,6 +32,8 @@ type Row = {
   toCompany: string | null;
   toEmail: string | null;
   attachmentCount: number;
+  messageCount?: number;
+  lastAt?: string | null;
   overdue: boolean;
   updatedAt: string;
 };
@@ -362,18 +364,6 @@ export function CorrespondencePanel({
 
         <div className="rf-cols">
           <div className="rf-thread">
-            <div className="rf-card">
-              <div className="k">{it.typeLabel} · {it.sentByName ?? "us"}{it.dateSent ? ` · ${fmt(it.dateSent)}` : " · draft"}</div>
-              <div className="rf-q">{it.body}</div>
-              {it.attachments.length > 0 && (
-                <div style={{ marginTop: 10 }}>
-                  {it.attachments.map((a) => (
-                    <AttRow key={a.path} a={a} itemId={it.id} canFile={it.status !== "draft"} />
-                  ))}
-                </div>
-              )}
-            </div>
-
             {it.status === "draft" && (
               <div className="rf-card" style={{ borderColor: "rgba(139,92,246,.4)" }}>
                 <div className="k">Draft - not sent, no number burned</div>
@@ -387,46 +377,58 @@ export function CorrespondencePanel({
               </div>
             )}
 
+
+            {/* One thread, like email: what went out, every reply in order, the
+                reply box at the bottom (Adam 2026-09-10: "messages come one by one
+                like an email"). */}
+            <div className="rf-card">
+              <div className="k">Conversation</div>
+              <div className="co-msg">
+                <div className="who">{it.sentByName ?? "Us"} · {it.dateSent ? fmtLong(it.dateSent) : "draft"} · {it.typeLabel}{it.toEmail ? ` → ${toLine}` : ""}</div>
+                <div className="body">{it.body}</div>
+                {it.attachments.map((a) => (
+                  <AttRow key={a.path} a={a} itemId={it.id} canFile={it.status !== "draft"} />
+                ))}
+              </div>
+              {open.messages.map((m) =>
+                m.type === "system" ? (
+                  <div className="rf-sys" key={m.id}>{m.body} · {fmt(m.createdAt)}</div>
+                ) : (
+                  <div className={"co-msg" + (m.authorSide === "external" ? " them" : "")} key={m.id}>
+                    <div className="who">
+                      {m.authorName ?? (m.authorSide === "external" ? "Them" : "Us")} · {fmtLong(m.createdAt)}{m.via === "email" ? " · by email" : m.via === "link" ? " · from the link" : m.via === "portal" ? " · from the portal" : ""}
+                    </div>
+                    <div className="body">{m.body}</div>
+                    {m.attachments.map((a) => (
+                      <AttRow key={a.path} a={a} itemId={it.id} canFile />
+                    ))}
+                  </div>
+                )
+              )}
+              {(it.status === "sent" || it.status === "responded") && (
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
+                  <div className="k">Reply</div>
+                  <textarea className="ev-in" rows={3} value={reply} placeholder="Goes to them by email with the link, and stays on this thread." onChange={(e) => setReply(e.target.value)} />
+                  {replyAtts.map((a) => (
+                    <div className="co-att" key={a.path}><span>📎</span><a>{a.filename}</a><small>{bytes(a.bytes)}</small></div>
+                  ))}
+                  <input ref={replyFileRef} type="file" multiple style={{ display: "none" }} onChange={(e) => void pickReplyFiles(e.target.files)} />
+                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    <button className="lg-btn" style={{ height: 40, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} disabled={busy || uploading} onClick={() => replyFileRef.current?.click()}>{uploading ? "Uploading…" : "📎 Attach"}</button>
+                    <button className="lg-btn primary" style={{ height: 40, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} disabled={busy || uploading || (!reply.trim() && !replyAtts.length)} onClick={() => void sendReply()}>Send</button>
+                    <button className="lg-btn" style={{ height: 40, margin: 0, width: "auto", padding: "0 14px", fontSize: 13, marginLeft: "auto" }} disabled={busy} onClick={() => void action(it.id, "close")}>Close it out</button>
+                  </div>
+                </div>
+              )}
+              {it.status === "closed" && (
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <span className="k" style={{ margin: 0 }}>Closed{it.dateClosed ? ` · ${fmt(it.dateClosed)}` : ""}</span>
+                  <button className="lg-btn" style={{ height: 34, margin: "0 0 0 auto", width: "auto", padding: "0 12px", fontSize: 12.5 }} disabled={busy} onClick={() => void action(it.id, "reopen")}>Reopen</button>
+                </div>
+              )}
+            </div>
             {open.ci && (
               <CiCard ci={open.ci} apiFetch={apiFetch} projectId={projectId} projName={projName} categories={categories} onChanged={(c) => setOpen((o) => (o ? { ...o, ci: c } : o))} />
-            )}
-
-            {open.messages.map((m) =>
-              m.type === "system" ? (
-                <div className="rf-sys" key={m.id}>{m.body} · {fmt(m.createdAt)}</div>
-              ) : (
-                <div className={"co-msg" + (m.authorSide === "external" ? " them" : "")} key={m.id}>
-                  <div className="who">
-                    {m.authorName ?? (m.authorSide === "external" ? "Them" : "Us")} · {fmtLong(m.createdAt)}{m.via === "email" ? " · by email" : m.via === "link" ? " · from the link" : m.via === "portal" ? " · from the portal" : ""}
-                  </div>
-                  <div className="body">{m.body}</div>
-                  {m.attachments.map((a) => (
-                    <AttRow key={a.path} a={a} itemId={it.id} canFile />
-                  ))}
-                </div>
-              )
-            )}
-
-            {(it.status === "sent" || it.status === "responded") && (
-              <div className="rf-card">
-                <div className="k">Write back</div>
-                <textarea className="ev-in" rows={3} value={reply} placeholder="Goes to them by email with the link, and stays in this thread." onChange={(e) => setReply(e.target.value)} />
-                {replyAtts.map((a) => (
-                  <div className="co-att" key={a.path}><span>📎</span><a>{a.filename}</a><small>{bytes(a.bytes)}</small></div>
-                ))}
-                <input ref={replyFileRef} type="file" multiple style={{ display: "none" }} onChange={(e) => void pickReplyFiles(e.target.files)} />
-                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                  <button className="lg-btn" style={{ height: 40, margin: 0, width: "auto", padding: "0 14px", fontSize: 13 }} disabled={busy || uploading} onClick={() => replyFileRef.current?.click()}>{uploading ? "Uploading…" : "📎 Attach"}</button>
-                  <button className="lg-btn primary" style={{ height: 40, margin: 0, width: "auto", padding: "0 16px", fontSize: 13 }} disabled={busy || uploading || (!reply.trim() && !replyAtts.length)} onClick={() => void sendReply()}>Send</button>
-                  <button className="lg-btn" style={{ height: 40, margin: 0, width: "auto", padding: "0 14px", fontSize: 13, marginLeft: "auto" }} disabled={busy} onClick={() => void action(it.id, "close")}>Close it out</button>
-                </div>
-              </div>
-            )}
-            {it.status === "closed" && (
-              <div className="rf-card">
-                <div className="k">Closed{it.dateClosed ? ` · ${fmt(it.dateClosed)}` : ""}</div>
-                <button className="lg-btn" style={{ height: 36, margin: 0, width: "auto", padding: "0 14px", fontSize: 12.5 }} disabled={busy} onClick={() => void action(it.id, "reopen")}>Reopen</button>
-              </div>
             )}
           </div>
 
@@ -529,7 +531,7 @@ export function CorrespondencePanel({
           </div>
         ) : (
           <table>
-            <thead><tr><th>No.</th><th>Type</th><th>Subject</th><th>To</th><th>Status</th><th>Sent</th><th>Due</th><th style={{ textAlign: "right" }}>Files</th></tr></thead>
+            <thead><tr><th>No.</th><th>Type</th><th>Subject</th><th>To</th><th>Status</th><th>Sent</th><th>Due</th><th>Thread</th><th style={{ textAlign: "right" }}>Files</th></tr></thead>
             <tbody>
               {shown.map((r) => (
                 <tr key={r.id} className={r.overdue ? "late" : ""} onClick={() => void openById(r.id)}>
@@ -540,6 +542,7 @@ export function CorrespondencePanel({
                   <td><span className={"rf-pill " + pill(r.status)}>{r.status}</span></td>
                   <td className="due">{fmt(r.dateSent)}</td>
                   <td className={"due" + (r.overdue ? " red" : "")}>{r.responseRequired && r.status === "sent" ? fmt(r.dateDue) + (r.overdue ? " · late" : "") : "-"}</td>
+                  <td className="due">{r.messageCount ? `${r.messageCount} repl${r.messageCount === 1 ? "y" : "ies"}${r.lastAt ? ` · ${fmt(r.lastAt)}` : ""}` : "-"}</td>
                   <td className="days">{r.attachmentCount || "-"}</td>
                 </tr>
               ))}

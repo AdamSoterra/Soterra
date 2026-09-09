@@ -377,6 +377,8 @@ export function RfiThreadView({
 
 // ─── Defect to fix (the sub's page) ────────────────────────────────────────
 
+/** One line of a defect's thread (lib/defectThread.ts). */
+export type FixMsg = { id: string; type: string; authorSide: string; authorName: string | null; via: string | null; body: string; attachments?: CorrFile[]; createdAt: string };
 export type FixData = {
   company: string;
   project: string;
@@ -387,19 +389,69 @@ export type FixData = {
   hasFixPhoto: boolean;
   reviewNote?: string | null;
   canSubmit: boolean;
+  /** The conversation so far, and whether a note can still be added. */
+  messages?: FixMsg[];
+  canNote?: boolean;
 };
+
+const FIX_MSG_LABEL: Record<string, string> = {
+  sent: "Sent to you",
+  ready: "✓ Marked fixed",
+  bounced: "↩ Bounced back",
+  closed: "✓ Closed out",
+  forwarded: "→ Sent for sign-off",
+  signed_off: "✓ Signed off",
+  reopened: "Reopened",
+};
+
+/** The thread on a defect, as the external party sees it (their own lines in green). */
+export function DefectThread({ messages, mine, photoSrc, hasPhoto }: { messages: FixMsg[]; mine: "sub" | "consultant"; photoSrc?: string; hasPhoto?: boolean }) {
+  if (!messages.length) return null;
+  const lastReady = [...messages].reverse().find((m) => m.type === "ready");
+  return (
+    <div className="ans-card">
+      <div className="ans-klabel">Conversation</div>
+      {messages.map((m) => (
+        <div className={"ans-msg " + (m.authorSide === mine ? "them" : "us")} key={m.id}>
+          <div className="ans-msg-k">
+            {FIX_MSG_LABEL[m.type] ? `${FIX_MSG_LABEL[m.type]} · ` : ""}
+            {m.authorName ?? (m.authorSide === "contractor" ? "The builder" : m.authorSide === "sub" ? "The sub" : "The consultant")} · {fmtDate(m.createdAt)}
+            {m.via === "email" ? " · by email" : ""}
+          </div>
+          <div className="ans-msg-b">{m.body}</div>
+          {m.attachments && m.attachments.length > 0 && (
+            <div className="ans-fine" style={{ marginTop: 4 }}>📎 {m.attachments.map((a) => a.filename).join(" · ")}</div>
+          )}
+          {photoSrc && hasPhoto && lastReady && m.id === lastReady.id && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="qa-thumb" style={{ marginTop: 8 }} src={photoSrc} alt="The photo of the fix" />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function FixView({
   d,
   uploadPhoto,
   act,
+  onNote,
+  photoSrc,
 }: {
   d: FixData;
   uploadPhoto: (blob: Blob) => Promise<{ path?: string; error?: string }>;
   act: (note: string, photoPath: string | null) => Act<FixData>;
+  /** A note on the thread (a question, an update) without marking it fixed. */
+  onNote?: (text: string) => Act<FixData>;
+  /** Where the sub's own fix photo streams from on this door. */
+  photoSrc?: string;
 }) {
   const [data, setData] = useState(d);
   const [note, setNote] = useState("");
+  const [msgText, setMsgText] = useState("");
+  const [msgBusy, setMsgBusy] = useState(false);
+  const [msgSent, setMsgSent] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [photoPath, setPhotoPath] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -439,6 +491,19 @@ export function FixView({
     setBusy(false);
   };
   const alreadyIn = !data.canSubmit && !done;
+  const sendNote = async () => {
+    if (!onNote || !msgText.trim() || msgBusy) return;
+    setMsgBusy(true);
+    setErr(null);
+    const res = await onNote(msgText);
+    if (!res.ok) setErr(res.error ?? "That didn't go through. Try again.");
+    else {
+      if (res.data) setData(res.data);
+      setMsgText("");
+      setMsgSent(true);
+    }
+    setMsgBusy(false);
+  };
 
   return (
     <>
@@ -465,11 +530,18 @@ export function FixView({
         )}
       </div>
 
+      <DefectThread messages={data.messages ?? []} mine="sub" photoSrc={photoSrc} hasPhoto={data.hasFixPhoto} />
+
       {done && <div className="ans-done">✓ Marked fixed. {data.company} has been notified - you&apos;re done.</div>}
 
-      {alreadyIn && (
+      {alreadyIn && data.status !== "closed" && (
         <div className="ans-card ans-center">
           <p>This item has already been marked fixed. {data.company} has the ball now - nothing more needed from you.</p>
+        </div>
+      )}
+      {alreadyIn && data.status === "closed" && (
+        <div className="ans-card ans-center">
+          <p>This item is closed. Nothing further is needed from you.</p>
         </div>
       )}
 
@@ -493,6 +565,20 @@ export function FixView({
             </button>
           </div>
           <p className="ans-fine">This tells {data.company} the fix is done and sends them your photo. They sign it off from their end.</p>
+        </div>
+      )}
+
+      {onNote && data.canNote !== false && data.status !== "closed" && (
+        <div className="ans-card">
+          <div className="ans-klabel">Write back</div>
+          <p className="ans-note">A question, or an update before the fix is done. It goes on this item and {data.company} is told by email.</p>
+          {msgSent && <div className="ans-done" style={{ margin: "0 0 10px" }}>✓ Sent. {data.company} has been notified.</div>}
+          <textarea className="ans-ta" style={{ minHeight: 80 }} placeholder="e.g. Which system do you want here? We have the 60 minute collars on the truck." value={msgText} maxLength={4000} onChange={(e) => { setMsgText(e.target.value); setMsgSent(false); }} />
+          <div className="ans-actions">
+            <button className="ans-btn" disabled={msgBusy || !msgText.trim()} onClick={() => void sendNote()}>
+              {msgBusy ? "Sending…" : "Send the note"}
+            </button>
+          </div>
         </div>
       )}
     </>

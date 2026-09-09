@@ -1,4 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { logDefect } from "@/lib/defectThread";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { inspectionItems, projects, subs } from "@/lib/schema";
@@ -165,6 +166,16 @@ export async function POST(req: Request) {
         inArray(inspectionItems.id, ids),
         inArray(inspectionItems.closeoutStatus, ["open", "sent"])
       ));
+    // The thread on each item opens with what was sent, to whom.
+    for (const it of sendItems) {
+      await logDefect({ id: it.id, companyId: scope.companyId, projectId: scope.projectId }, "item", {
+        type: "sent",
+        authorSide: "contractor",
+        authorName: senderName,
+        authorEmail: senderEmail,
+        body: `Sent to ${recipientsLabel(okRecipients)}`,
+      });
+    }
   }
 
   return Response.json({ sent: results, transmitting: emailEnabled() });

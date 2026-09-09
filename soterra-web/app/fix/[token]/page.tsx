@@ -46,6 +46,17 @@ export default function FixPage({ params }: { params: { token: string } }) {
     <Shell company={d.company} project={d.project} foot={<>Sent with <b>Soterra</b> · soterra.co.nz · This link is private to this item - don&apos;t forward it.</>}>
       <FixView
         d={d}
+        photoSrc={`/api/qa-fix/photo?token=${encodeURIComponent(token)}`}
+        onNote={async (text) => {
+          try {
+            const r = await fetch("/api/qa-fix", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, action: "note", note: text }) });
+            const j = (await r.json()) as { ok?: boolean; defect?: FixData; error?: string };
+            if (!r.ok || !j.ok) return { ok: false, error: j.error };
+            return { ok: true, data: j.defect };
+          } catch {
+            return { ok: false, error: "That didn't go through. Check your connection and try again." };
+          }
+        }}
         uploadPhoto={async (blob) => {
           const r = await fetch(`/api/qa-fix/photo?token=${encodeURIComponent(token)}`, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: blob });
           const j = (await r.json().catch(() => ({}))) as { path?: string; error?: string };

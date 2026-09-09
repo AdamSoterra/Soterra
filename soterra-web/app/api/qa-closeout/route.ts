@@ -1,9 +1,10 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { resolveScope } from "@/lib/company";
-import { analytics, closeDirect, forwardToConsultant, reject, rejectCheck, reopenDefect, type CloseoutKind } from "@/lib/qaCloseout";
+import { analytics, closeDirect, forwardToConsultant, noteFromBuilder, reject, rejectCheck, reopenDefect, threadFor, type CloseoutKind } from "@/lib/qaCloseout";
 
 // The QA close-out loop, the site team's side.
 //   GET  /api/qa-closeout                → the scorecard (?level=company widens it)
+//   GET  /api/qa-closeout?kind=…&id=…     → the thread on one defect
 //   POST /api/qa-closeout {kind, id, action, note?, name?, email?}
 //        kind   "flag" | "item" | "check"   (qa_flags / inspection_items / checklist_items)
 //        action "close"   → closed now, by the site team, from any stage (Adam,
@@ -12,6 +13,7 @@ import { analytics, closeDirect, forwardToConsultant, reject, rejectCheck, reope
 //               "reopen"  → back to sent/open
 //               "reject"  → bounce a ready item back to the sub with a note
 //               "forward" → send a ready CONSULTANT-report item for sign-off
+//               "note"    → write to whoever holds the ball (on the thread + emailed)
 // Company/project scope comes from resolveScope, never from the client.
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -25,7 +27,16 @@ export async function GET(req: Request) {
   if (!userId) return Response.json({ error: "Not signed in" }, { status: 401 });
   const scope = await resolveScope(req, userId);
   if (!scope) return Response.json({ error: "No site selected" }, { status: 403 });
-  const level = new URL(req.url).searchParams.get("level") === "company" ? "company" as const : "project" as const;
+  const url = new URL(req.url);
+  const kind = url.searchParams.get("kind");
+  const id = url.searchParams.get("id");
+  if (kind && id) {
+    if ((kind !== "flag" && kind !== "item" && kind !== "check") || !UUID_RE.test(id)) return Response.json({ error: "Bad request" }, { status: 400 });
+    const messages = await threadFor(scope, kind, id);
+    if (!messages) return Response.json({ error: "Not found" }, { status: 404 });
+    return Response.json({ messages }, { headers: { "Cache-Control": "no-store" } });
+  }
+  const level = url.searchParams.get("level") === "company" ? "company" as const : "project" as const;
   return Response.json(await analytics(scope, { level }));
 }
 
@@ -55,13 +66,18 @@ export async function POST(req: Request) {
       if (!r.ok) return Response.json({ error: r.error === "already-closed" ? "Already closed." : "Not found." }, { status: 409 });
       return Response.json({ ok: true });
     }
+    if (action === "note") {
+      const r = await noteFromBuilder(scope, kind as CloseoutKind, id, note ?? "", { name: byName, email: user?.primaryEmailAddress?.emailAddress ?? null });
+      if (!r.ok) return Response.json({ error: r.error === "empty" ? "Write the note first." : "Not found." }, { status: r.error === "empty" ? 400 : 404 });
+      return Response.json({ ok: true, emailed: r.emailed });
+    }
     if (action === "reopen") {
-      const r = await reopenDefect(scope, kind as CloseoutKind, id);
+      const r = await reopenDefect(scope, kind as CloseoutKind, id, byName);
       if (!r.ok) return Response.json({ error: "That item isn't closed." }, { status: 409 });
       return Response.json({ ok: true });
     }
     if (action === "reject") {
-      const r = kind === "check" ? await rejectCheck(scope, id, note) : await reject(scope, kind as "flag" | "item", id, { note });
+      const r = kind === "check" ? await rejectCheck(scope, id, note, byName) : await reject(scope, kind as "flag" | "item", id, { note, byName });
       if (!r.ok) return Response.json({ error: "Only an item the sub has marked fixed can be bounced back." }, { status: 409 });
       return Response.json({ ok: true });
     }

@@ -1,4 +1,4 @@
-import { fixGateEmails, getFixByToken, markReadyByToken } from "@/lib/qaCloseout";
+import { fixGateEmails, getFixByToken, markReadyByToken, noteByToken } from "@/lib/qaCloseout";
 import { gateExternal, gateResponse } from "@/lib/externalAuth";
 
 export const runtime = "nodejs";
@@ -14,6 +14,9 @@ export const maxDuration = 60;
 //   POST /api/qa-fix {token, note?, photoPath?}
 //        -> mark it fixed: sent -> ready, clock stops, the MC is notified.
 //        photoPath is the pathname returned by /api/qa-fix/photo (same token).
+//   POST /api/qa-fix {token, action: "note", note, authorName?}
+//        -> a note on the thread (a question, an update) - the MC is told;
+//        the ball does not move.
 
 const MAX_NOTE = 4000;
 
@@ -53,6 +56,11 @@ export async function POST(req: Request) {
   if (res) return res;
 
   try {
+    if (String(body.action ?? "") === "note") {
+      const r = await noteByToken(token, note, typeof body.authorName === "string" ? body.authorName : null);
+      if (!r.ok) return Response.json({ error: r.error === "empty" ? "Write the note first." : r.error === "closed" ? "This item is closed." : "This link is no longer valid." }, { status: r.error === "not-found" ? 404 : 409 });
+      return Response.json({ ok: true, defect: await getFixByToken(token) });
+    }
     const result = await markReadyByToken(token, { photoBlobPath: photoPath, note });
     if (!result.ok) {
       if (result.error === "not-found") return Response.json({ error: "This link is no longer valid." }, { status: 404 });

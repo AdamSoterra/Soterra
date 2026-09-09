@@ -981,3 +981,32 @@ export type QaFlag = typeof qaFlags.$inferSelect;
 export type RfiMessage = typeof rfiMessages.$inferSelect;
 export type RfiTransition = typeof rfiTransitions.$inferSelect;
 export type ContractInstruction = typeof contractInstructions.$inferSelect;
+
+// ─── The thread on a QA defect (flag / report item / check item). One line per
+//     thing that happened: sent to the sub, the sub's note, marked fixed,
+//     bounced back, closed, forwarded for sign-off, signed off, reopened, and
+//     plain notes either way (in-app or by email). Adam 2026-09-10: the answer
+//     "comes back under the actual QA item". Rendered on the sub's page and
+//     under the item on the builder's side (lib/defectThread.ts). ───
+export const defectMessages = pgTable(
+  "defect_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: text("company_id").notNull(),
+    projectId: text("project_id").notNull(),
+    kind: text("kind").notNull(), // flag | item | check
+    recordId: uuid("record_id").notNull(),
+    type: text("type").notNull(), // sent | note | ready | bounced | closed | forwarded | signed_off | reopened
+    authorSide: text("author_side").default("contractor").notNull(), // contractor | sub | consultant
+    authorName: text("author_name"),
+    authorEmail: text("author_email"),
+    via: text("via"), // app | link | portal | email
+    body: text("body").notNull(),
+    attachments: text("attachments"), // JSON array of {filename, path, bytes, contentType}
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byRecord: index("defect_messages_record_idx").on(t.kind, t.recordId),
+    byProject: index("defect_messages_project_idx").on(t.projectId),
+  })
+);

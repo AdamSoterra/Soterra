@@ -1193,3 +1193,9 @@ select.ev-in{appearance:none;-webkit-appearance:none;cursor:pointer;padding-righ
 .msg-copy{display:inline-flex;align-items:center;gap:6px;margin-top:10px;height:32px;padding:0 12px;border-radius:9px;border:1px solid #D6E4F2;background:#FBFDFF;color:#0A78C8;font-size:12.5px;font-weight:700;font-family:var(--font);cursor:pointer}
 .msg-copy:hover{border-color:#0E8FE6}
 .msg-copy.ok{color:#0F7B43;border-color:#BFE8CE;background:#F0FAF4}
+
+/* the thread under a QA item + the one-line summary above the list */
+.ck-co .ck-thread{background:#fff}
+.ck-co .ck-thread .co-msg{margin-bottom:9px}
+.ck-co .ck-thread .co-msg .body{font-size:12.5px}
+.ck-cosum{font-size:12px;font-weight:700;color:var(--slate);background:#F8FAFC;border:1px solid var(--line2);border-radius:9px;padding:7px 11px;margin:0 0 10px}
