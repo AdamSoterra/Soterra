@@ -224,7 +224,7 @@ const TOOLS: { name: string; description: string; input_schema: any }[] = [
     input_schema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "What to look for, in plain English (e.g. 'pre-line', 'cladding sequence', 'hold points', 'roof'). Leave empty to get the newest review's findings." },
+        query: { type: "string", description: "What to look for, in plain English (e.g. 'pre-line', 'cladding sequence', 'hold points', 'roof'). Leave empty to list every review's findings, newest review first." },
         severity: { type: "string", description: "Optional: only findings of this severity - high, medium or low." },
         finding_type: { type: "string", description: "Optional: missing_scope | out_of_sequence | unrealistic_duration | missing_hold_point." },
       },
@@ -937,7 +937,12 @@ async function executeTool(name: string, input: Record<string, unknown>, ctx: Ct
         // The programme is the job's own, so this reads THIS project only (the
         // verified scope), unlike search_history which spans the company.
         if (!ctx.scope) return { content: JSON.stringify({ reviews: [], findings: [], note: "No programme reviews are set up for this site yet." }), cards: [] };
-        const res = await searchProgrammeReviews(ctx.scope, s(input.query) ?? "", { severity: s(input.severity), findingType: s(input.finding_type), limit: 30 });
+        // An unknown filter must not silently widen to "everything".
+        const sevIn = (s(input.severity) ?? "").toLowerCase() || null;
+        const ftIn = (s(input.finding_type) ?? "").toLowerCase() || null;
+        if (sevIn && !["high", "medium", "low"].includes(sevIn)) return { content: JSON.stringify({ error: "severity must be high, medium or low" }), cards: [] };
+        if (ftIn && !["missing_scope", "out_of_sequence", "unrealistic_duration", "missing_hold_point"].includes(ftIn)) return { content: JSON.stringify({ error: "finding_type must be one of missing_scope, out_of_sequence, unrealistic_duration, missing_hold_point" }), cards: [] };
+        const res = await searchProgrammeReviews(ctx.scope, s(input.query) ?? "", { severity: sevIn, findingType: ftIn, limit: 30 });
         if (res.reviews.length === 0) return { content: JSON.stringify({ reviews: [], findings: [], note: "The build programme has not been reviewed on this site yet. A PDF export of the programme can be dropped on the Upload tab under Build programme." }), cards: [] };
         if (res.findings.length === 0) return { content: JSON.stringify({ reviews: res.reviews, findings: [], note: "This site's programme reviews have no finding matching that. The reviews on file are listed." }), cards: [] };
         return {

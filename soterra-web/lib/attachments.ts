@@ -106,9 +106,11 @@ export async function packForEmail(
     let attached = false;
     if (a.bytes > 0 && used + a.bytes <= EMAIL_ATTACH_BUDGET) {
       const buf = await readPrivateBlob(a.path);
-      if (buf) {
+      // The declared size came from the browser; the real one decides, so a
+      // stale or low `bytes` can never push the message past the provider cap.
+      if (buf && used + buf.length <= EMAIL_ATTACH_BUDGET) {
         attachments.push({ filename: a.filename, content: buf.toString("base64") });
-        used += a.bytes;
+        used += buf.length;
         attached = true;
       }
     }

@@ -31,7 +31,7 @@ import { db } from "./db";
 import { inboundEmails } from "./schema";
 import { resendKey } from "./email";
 import { getSetting } from "./settings";
-import { bareAddress, displayNameOf, parseReplyAddress, type InboundKind } from "./inboundAddress";
+import { bareAddress, displayNameOf, parseReplyAddress, type InboundKind, rawAddress } from "./inboundAddress";
 import { rfiByToken, emailReplyOnRfi } from "./rfi";
 import { corrByToken, replyAsExternal, corrRecipients, type CorrAttachment } from "./correspondence";
 import { defectByReplyToken, emailReplyOnDefect } from "./qaCloseout";
@@ -80,7 +80,7 @@ export type ParsedInbound = {
   providerId: string;
   messageId: string | null;
   from: { email: string; name: string };
-  recipients: string[]; // to + cc + received_for, bare lowercase
+  recipients: string[]; // to + cc + received_for, bare, CASE KEPT (reply tokens are case-sensitive)
   subject: string;
   text: string; // the reply with quoted history stripped
   attachments: InboundAttachment[];
@@ -139,7 +139,8 @@ export async function fetchReceivedEmail(emailId: string): Promise<ParsedInbound
       console.error("inbound attachments fetch failed:", e);
     }
   }
-  const recipients = [...(mail.to ?? []), ...(mail.cc ?? []), ...(mail.received_for ?? [])].map(bareAddress).filter(Boolean);
+  // Case kept: the reply-address token in the local part is case-sensitive.
+  const recipients = [...(mail.to ?? []), ...(mail.cc ?? []), ...(mail.received_for ?? [])].map(rawAddress).filter(Boolean);
   return {
     providerId: mail.id,
     messageId: mail.message_id ?? mail.headers?.["message-id"] ?? null,
@@ -207,7 +208,9 @@ export function stripQuoted(text: string): string {
   // A line like "On Tue, 9 Sep 2026 at 10:15, Adam <adam@…>" may wrap over
   // two lines: drop a trailing unfinished "On …" line too.
   let out = lines.slice(0, cut);
-  while (out.length && /^On .{3,200}$/i.test(out[out.length - 1].trim()) && !/wrote:$/i.test(out[out.length - 1].trim())) out.pop();
+  // Only when a quote marker was found: a real last line like "On site
+  // Monday." must survive a reply with no quoted history.
+  while (cut < lines.length && out.length && /^On .{3,200}$/i.test(out[out.length - 1].trim()) && !/wrote:$/i.test(out[out.length - 1].trim())) out.pop();
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
@@ -336,7 +339,7 @@ export async function handleInbound(p: ParsedInbound): Promise<InboundResult> {
   return record({
     companyId: found.row.companyId,
     projectId: found.row.projectId,
-    recordType: found.kind === "flag" ? "qa_flag" : "inspection_item",
+    recordType: found.kind === "flag" ? "qa_flag" : found.kind === "check" ? "checklist_item" : "inspection_item",
     recordId: found.row.id,
     attachments: stored,
     handled: res.handled,

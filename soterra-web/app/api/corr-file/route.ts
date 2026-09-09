@@ -13,6 +13,8 @@ import { resolveScope } from "@/lib/company";
 //                                  the item was addressed to
 export const runtime = "nodejs";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function safeName(name: string): string {
   return name.replace(/["\r\n\\]/g, "").slice(0, 150) || "file";
 }
@@ -29,6 +31,7 @@ export async function GET(req: Request) {
   const portal = url.searchParams.get("portal");
   if (id) {
     if (!userId) return new Response("Not signed in", { status: 401 });
+    if (!UUID_RE.test(id)) return new Response("Not found", { status: 404 });
     const scope = await resolveScope(req, userId);
     const projectId = scope?.projectId ?? (await resolveProjectId(req, userId));
     if (!scope || !projectId) return new Response("Forbidden", { status: 403 });
@@ -41,6 +44,7 @@ export async function GET(req: Request) {
     }
   } else if (portal) {
     if (!userId) return new Response("Not signed in", { status: 401 });
+    if (!UUID_RE.test(portal)) return new Response("Not found", { status: 404 });
     const user = await currentUser();
     row = await corrForEmail(portal, verifiedEmails(user as never));
   }

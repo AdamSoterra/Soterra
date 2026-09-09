@@ -58,7 +58,7 @@ export async function POST(req: Request) {
   if (!text && !files.length) return Response.json({ error: "Write the reply first." }, { status: 400 });
 
   try {
-    const result = await replyByToken(token, text, authorName, files);
+    const result = await replyByToken(token, text, authorName, files, gate.email ?? null);
     if (!result.ok) {
       if (result.error === "not-found") return Response.json({ error: "This link is no longer valid." }, { status: 404 });
       return Response.json({ error: "This item is closed - nothing further is needed." }, { status: 409 });

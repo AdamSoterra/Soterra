@@ -19,7 +19,7 @@
 // PDF has its text extracted so the register is searchable and the generator
 // can read the instruction in the client's own words.
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { get } from "@vercel/blob";
 import { extractText, getDocumentProxy } from "unpdf";
 import { db } from "./db";
@@ -205,7 +205,7 @@ async function directsFor(rows: ContractInstruction[]): Promise<Map<string, stri
   const out = new Map<string, string>();
   const rfiIds = [...new Set(rows.map((r) => r.sourceRfiId).filter((v): v is string => !!v))];
   if (!rfiIds.length) return out;
-  const msgs = await db.select().from(rfiMessages).where(and(eq(rfiMessages.type, "official_answer")));
+  const msgs = await db.select().from(rfiMessages).where(and(eq(rfiMessages.type, "official_answer"), inArray(rfiMessages.rfiId, rfiIds)));
   const latest = new Map<string, { body: string; at: number }>();
   for (const m of msgs) {
     if (!rfiIds.includes(m.rfiId)) continue;

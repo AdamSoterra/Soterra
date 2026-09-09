@@ -370,9 +370,10 @@ export async function sendCorrespondence(
     let attached = false;
     if (a.bytes > 0 && used + a.bytes <= EMAIL_ATTACH_BUDGET) {
       const buf = await readPrivateBlob(a.path);
-      if (buf) {
+      // The declared size came from the browser; the real one decides.
+      if (buf && used + buf.length <= EMAIL_ATTACH_BUDGET) {
         emailAttachments.push({ filename: a.filename, content: buf.toString("base64") });
-        used += a.bytes;
+        used += buf.length;
         attached = true;
       }
     }
@@ -634,7 +635,8 @@ export async function corrById(scope: Scope, id: string): Promise<Correspondence
 async function byToken(token: string): Promise<Correspondence | null> {
   const clean = token.trim();
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(clean)) return null;
-  const [row] = await db.select().from(correspondence).where(eq(correspondence.token, clean)).limit(1);
+  // lower() on both sides: an MTA may fold the local part of a reply address.
+  const [row] = await db.select().from(correspondence).where(sql`lower(${correspondence.token}) = ${clean.toLowerCase()}`).limit(1);
   return row ?? null;
 }
 export async function corrByToken(token: string): Promise<Correspondence | null> {
@@ -731,7 +733,11 @@ export async function replyAsExternal(
   via: "link" | "portal" | "email",
   attachments?: CorrAttachment[]
 ): Promise<{ ok: true; message: CorrespondenceMessage } | { ok: false; error: string }> {
-  if (row.status !== "sent" && row.status !== "responded") return { ok: false, error: "closed" };
+  // An EMAIL reply to a closed item is still kept on the thread (and the
+  // sender told): with inbound on the Reply-To is ours, so dropping it would
+  // lose the message entirely. The status stays closed. Link/portal replies
+  // on a closed item are refused as before (the page says so).
+  if (row.status !== "sent" && row.status !== "responded" && !(via === "email" && row.status === "closed")) return { ok: false, error: "closed" };
   const text = body.trim();
   if (!text && !(attachments?.length)) return { ok: false, error: "empty" };
   const name = author.name?.trim().slice(0, 120) || row.toName || row.toCompany || author.email || "The recipient";
@@ -763,10 +769,12 @@ export async function replyAsExternal(
   return { ok: true, message: msg };
 }
 
-export async function replyByToken(token: string, body: string, name?: string | null, attachments?: CorrAttachment[]) {
+export async function replyByToken(token: string, body: string, name?: string | null, attachments?: CorrAttachment[], email?: string | null) {
   const row = await corrByToken(token);
   if (!row) return { ok: false as const, error: "not-found" };
-  return replyAsExternal(row, body, { name, email: row.toEmail }, "link", attachments);
+  // The gate's matched address when there is one (a cc'd engineer replying),
+  // else the To party.
+  return replyAsExternal(row, body, { name, email: email || row.toEmail }, "link", attachments);
 }
 
 // ─── notices ───────────────────────────────────────────────────────────────
@@ -799,7 +807,7 @@ async function notifySender(row: Correspondence, actor: string, text: string, at
     recordType: "correspondence",
     recordIds: [row.id],
     to: { email: to },
-    replyTo: row.toEmail ?? null,
+    replyTo: (await replyAddress("cor", row.token)) ?? row.toEmail ?? null,
     fromName: "Soterra",
     fromEmail: projectSenderAddress(project, scope.projectId),
     subject: `${label} reply · ${project} · ${row.subject}`,
@@ -856,21 +864,27 @@ async function notifyExternal(scope: Scope, row: Correspondence, actor: string, 
 export async function corrForEmails(emails: string[]) {
   if (!emails.length) return [] as Correspondence[];
   const lower = emails.map((e) => e.toLowerCase());
-  // to_email is indexed; cc is a JSON array scanned with LIKE (rare, small).
+  // A row addressed to "local+tag@domain" belongs to the account on
+  // "local@domain" (normalizeEmail). The SQL pre-filter lets exact, tagged and
+  // cc'd rows through (escaping _ and % rather than deleting them); the exact
+  // match on corrRecipients decides, so a substring like "an@x.nz" never
+  // lists "dan@x.nz"'s items.
+  const variants = lower.map((e) => {
+    const clean = e.replace(/[\\%_]/g, "\\$&");
+    const at = clean.lastIndexOf("@");
+    return { e, clean, tagged: at > 0 ? `${clean.slice(0, at)}+%${clean.slice(at)}` : null };
+  });
+  const clauses = variants.flatMap((v) => [
+    sql`lower(${correspondence.toEmail}) = ${v.e}`,
+    sql`${correspondence.cc} ILIKE ${"%" + v.clean + "%"}`,
+    ...(v.tagged ? [sql`lower(${correspondence.toEmail}) LIKE ${v.tagged}`, sql`${correspondence.cc} ILIKE ${"%" + v.tagged + "%"}`] : []),
+  ]);
   const rows = await db
     .select()
     .from(correspondence)
-    .where(
-      and(
-        inArray(correspondence.status, ["sent", "responded", "closed"]),
-        sql`(${correspondence.toEmail} IN (${sql.join(lower.map((e) => sql`${e}`), sql`, `)}) OR ${sql.join(
-          lower.map((e) => sql`${correspondence.cc} ILIKE ${"%" + e.replace(/[%_]/g, "") + "%"}`),
-          sql` OR `
-        )})`
-      )
-    )
+    .where(and(inArray(correspondence.status, ["sent", "responded", "closed"]), sql`(${sql.join(clauses, sql` OR `)})`))
     .orderBy(desc(correspondence.updatedAt));
-  return rows;
+  return rows.filter((r) => corrRecipients(r).some((x) => lower.includes(x)));
 }
 
 /** One item for the portal, only if it was addressed to one of these emails. */

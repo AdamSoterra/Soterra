@@ -98,7 +98,8 @@ export async function POST(req: Request) {
     consultantName: String(body.consultantName ?? "").trim() || null,
     consultantCompany: String(body.consultantCompany ?? "").trim() || null,
     consultantEmail: consultantEmail || null,
-    cc: asStrArray(body.cc),
+    // Only real addresses: one junk cc made the provider reject the whole send.
+    cc: asStrArray(body.cc).map((e) => e.toLowerCase()).filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)),
     costImpact: impact(body.costImpact),
     costEstimate: String(body.costEstimate ?? "").trim() || null,
     programmeImpact: impact(body.programmeImpact),

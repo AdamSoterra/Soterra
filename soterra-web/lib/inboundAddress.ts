@@ -86,10 +86,20 @@ export async function replyAddress(kind: InboundKind, token: string | null | und
  *  Accepts a bare address or a "Name <address>" form. */
 export function parseReplyAddress(raw: string): { kind: InboundKind; token: string; domain: string } | null {
   const m = raw.match(/<([^>]+)>/);
-  const addr = (m ? m[1] : raw).trim().toLowerCase();
+  // The token is base64url and CASE-SENSITIVE: never fold the address before
+  // matching (the kind and domain are matched case-insensitively instead).
+  const addr = (m ? m[1] : raw).trim();
   const hit = addr.match(ADDR_RE);
   if (!hit) return null;
-  return { kind: hit[1] as InboundKind, token: hit[2], domain: hit[3] };
+  return { kind: hit[1].toLowerCase() as InboundKind, token: hit[2], domain: hit[3].toLowerCase() };
+}
+
+/** The address out of "Name <addr>" / "addr" with its case KEPT - what the
+ *  reply-address parser needs (see parseReplyAddress). */
+export function rawAddress(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const m = raw.match(/<([^>]+)>/);
+  return (m ? m[1] : raw).trim();
 }
 
 /** Bare lowercase address out of "Name <addr>" / "addr". */

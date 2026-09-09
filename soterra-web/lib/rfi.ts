@@ -190,6 +190,25 @@ async function transition(
     throw new Error(`An RFI can't go ${rfi.status} → ${toStatus}`);
   }
   const ballTo = ballFor(toStatus);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const set: Record<string, any> = { status: toStatus, ballParty: ballTo, updatedAt: new Date() };
+  if (toStatus === "answered") set.dateAnswered = new Date();
+  if (toStatus === "closed") set.dateClosed = new Date();
+  if (toStatus === "open" && rfi.status !== "draft") {
+    // A reopen (a bounce, an undo): the clock restarts from now, so the
+    // consultant is not overdue the second the follow-up lands.
+    set.dateClosed = null;
+    set.dateRequiredBy = addWorkingDays(new Date(), RFI_SLA_WORKING_DAYS);
+  }
+  // The WHERE on the current status is the lock (neon-http has no
+  // transactions): two tabs moving the same RFI at once - one wins, the other
+  // is told. The audit row is written only once the move has happened.
+  const [row] = await db
+    .update(rfis)
+    .set(set)
+    .where(and(eq(rfis.id, rfi.id), eq(rfis.projectId, scope.projectId), eq(rfis.status, rfi.status)))
+    .returning();
+  if (!row) throw new Error("This RFI just moved on - reload and try again");
   await db.insert(rfiTransitions).values({
     companyId: scope.companyId,
     projectId: scope.projectId,
@@ -202,12 +221,6 @@ async function transition(
     byName: by.name ?? null,
     comment: comment ?? null,
   });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const set: Record<string, any> = { status: toStatus, ballParty: ballTo, updatedAt: new Date() };
-  if (toStatus === "answered") set.dateAnswered = new Date();
-  if (toStatus === "closed") set.dateClosed = new Date();
-  if (toStatus === "open" && rfi.status !== "draft") set.dateClosed = null; // reopen
-  const [row] = await db.update(rfis).set(set).where(and(eq(rfis.id, rfi.id), eq(rfis.projectId, scope.projectId))).returning();
   return row;
 }
 
@@ -476,9 +489,12 @@ export async function sendRfi(
     type: "system",
     authorSide: "contractor",
     authorName: by.name ?? null,
-    body: emailEnabled()
-      ? `Sent to ${assignees.length ? assignees.map((a) => [a.name, a.company].filter(Boolean).join(" ") || a.email).join(", ") : `${rfi.consultantName ?? ""} ${rfi.consultantCompany ?? ""}`.trim()}` + (cc.length ? ` · cc ${cc.join(", ")}` : "")
-      : `Recorded for ${rfi.consultantName ?? ""} ${rfi.consultantCompany ?? ""}`.trim() + " (email sending not yet live)",
+    body:
+      result.status === "failed"
+        ? `EMAIL FAILED to ${assignees.length ? assignees.map((a) => a.email).join(", ") : rfi.consultantEmail} - nobody has this RFI yet. Check the addresses and send it again.`
+        : result.status === "sent"
+          ? `Sent to ${assignees.length ? assignees.map((a) => [a.name, a.company].filter(Boolean).join(" ") || a.email).join(", ") : `${rfi.consultantName ?? ""} ${rfi.consultantCompany ?? ""}`.trim()}` + (cc.length ? ` · cc ${cc.join(", ")}` : "")
+          : `Recorded for ${rfi.consultantName ?? ""} ${rfi.consultantCompany ?? ""}`.trim() + " (email sending not yet live)",
   });
   // Remember the consultant in the Directory (upsert on company + email, so
   // details are typed once, ever). Best-effort: never fails a send.
@@ -670,7 +686,9 @@ async function notifyConsultantOfFollowup(
     kind: "rfi",
     recordType: "rfi",
     recordIds: [rfi.id],
-    to: { name: rfi.consultantName || rfi.consultantCompany, email: rfi.consultantEmail! },
+    // Everyone on the RFI hears the follow-up: any assignee can answer it.
+    to: rfiAssignees(rfi).length ? rfiAssignees(rfi).map((a) => ({ name: a.name || a.company, email: a.email })) : { name: rfi.consultantName || rfi.consultantCompany, email: rfi.consultantEmail! },
+    cc: rfi.cc ? (JSON.parse(rfi.cc) as string[]) : [],
     replyTo: (await replyAddress("rfi", rfi.answerToken!)) ?? by.email ?? null,
     fromName: `${company} (via Soterra)`,
     fromEmail: projectSenderAddress(projectName, scope.projectId),
@@ -738,6 +756,7 @@ export async function createCi(scope: Scope, rfiId: string, input: CiFromRfiInpu
   const rfi = await ourRfi(scope, rfiId);
   if (!rfi) throw new Error("RFI not found");
   if (rfi.resultingCiId) throw new Error("This RFI already raised an instruction");
+  if (rfi.status !== "answered" && rfi.status !== "closed") throw new Error("Raise the CI once the RFI has its answer");
   const answer = (await db.select({ body: rfiMessages.body }).from(rfiMessages).where(and(eq(rfiMessages.rfiId, rfiId), eq(rfiMessages.type, "official_answer"))).orderBy(desc(rfiMessages.createdAt)).limit(1))[0];
   let ci = await createInstruction(
     scope,
@@ -758,7 +777,17 @@ export async function createCi(scope: Scope, rfiId: string, input: CiFromRfiInpu
       console.error("ci document from rfi failed:", e);
     }
   }
-  await db.update(rfis).set({ resultingCiId: ci.id, updatedAt: new Date() }).where(eq(rfis.id, rfi.id));
+  // Claim the link atomically: if another call got there first, this CI is
+  // the orphan - remove it rather than leave two.
+  const [claimed] = await db
+    .update(rfis)
+    .set({ resultingCiId: ci.id, updatedAt: new Date() })
+    .where(and(eq(rfis.id, rfi.id), sql`${rfis.resultingCiId} IS NULL`))
+    .returning({ id: rfis.id });
+  if (!claimed) {
+    await db.delete(contractInstructions).where(eq(contractInstructions.id, ci.id));
+    throw new Error("This RFI already raised an instruction");
+  }
   const amends = input.amendsDrawings ?? [];
   await db.insert(rfiMessages).values({
     companyId: scope.companyId,
@@ -845,7 +874,8 @@ export async function rfiByToken(token: string): Promise<Rfi | null> {
   const clean = token.trim();
   // base64url of 24 bytes is 32 chars; reject junk before it reaches the db.
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(clean)) return null;
-  const [row] = await db.select().from(rfis).where(eq(rfis.answerToken, clean)).limit(1);
+  // lower() on both sides: an MTA may fold the local part of a reply address.
+  const [row] = await db.select().from(rfis).where(sql`lower(${rfis.answerToken}) = ${clean.toLowerCase()}`).limit(1);
   return row ?? null;
 }
 
@@ -870,7 +900,7 @@ export async function rfisForEmails(emails: string[]): Promise<Rfi[]> {
   // Matches the accountable consultant, any assignee (JSON text) or a cc;
   // "local+tag@domain" rows count as "local@domain" (normalizeEmail).
   const clauses = lower.flatMap((e) => {
-    const clean = e.replace(/[%_]/g, "");
+    const clean = e.replace(/[\\%_]/g, "\\$&"); // escape, never delete: john_smith must still match
     const at = clean.lastIndexOf("@");
     const tagged = at > 0 ? `${clean.slice(0, at)}+%${clean.slice(at)}` : null;
     return [
@@ -885,7 +915,9 @@ export async function rfisForEmails(emails: string[]): Promise<Rfi[]> {
     .from(rfis)
     .where(and(inArray(rfis.status, ["open", "answered", "closed"]), sql`(${sql.join(clauses, sql` OR `)})`))
     .orderBy(desc(rfis.updatedAt));
-  return rows.filter((r) => r.number != null);
+  // The exact test the item routes use: a substring hit ("jo@" inside
+  // "banjo@") never lists someone else's RFI.
+  return rows.filter((r) => r.number != null && rfiRecipients(r).some((x) => lower.includes(x)));
 }
 
 /** See the header note: token IS the authorisation, ids come from the row. */
@@ -997,7 +1029,9 @@ export async function answerAsConsultant(
   if (rfi.status === "closed") return { ok: false, error: "closed" };
   if (rfi.status !== "open") return { ok: false, error: "not-open" };
   const scope = tokenScope(rfi);
-  const name = authorName?.trim().slice(0, 120) || rfi.consultantName || rfi.consultantCompany || "The consultant";
+  // With several assignees the accountable person's name is NOT a safe
+  // default - the engineer's answer must not read as the architect's.
+  const name = authorName?.trim().slice(0, 120) || (rfiAssignees(rfi).length <= 1 ? rfi.consultantName || rfi.consultantCompany : null) || "The consultant";
   const atts = cleanFiles(files, [rfiBlobPrefix(rfi.projectId, rfi.id), `${rfi.projectId}/inbound/${rfi.id}/`]);
   try {
     await logAnswer(scope, rfi.id, body, { userId: null, name, consultantName: name, via }, atts);
@@ -1037,7 +1071,9 @@ export async function commentAsConsultant(
   files?: Attachment[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (rfi.status !== "open" && rfi.status !== "answered") return { ok: false, error: "closed" };
-  const name = authorName?.trim().slice(0, 120) || rfi.consultantName || rfi.consultantCompany || "The consultant";
+  // With several assignees the accountable person's name is NOT a safe
+  // default - the engineer's answer must not read as the architect's.
+  const name = authorName?.trim().slice(0, 120) || (rfiAssignees(rfi).length <= 1 ? rfi.consultantName || rfi.consultantCompany : null) || "The consultant";
   const atts = cleanFiles(files, [rfiBlobPrefix(rfi.projectId, rfi.id), `${rfi.projectId}/inbound/${rfi.id}/`]);
   const text = body.trim() || "(see attachments)";
   await db.insert(rfiMessages).values({
@@ -1091,7 +1127,7 @@ async function notifyConsultantNote(rfi: Rfi, actor: string, text: string, attLi
     recordType: "rfi",
     recordIds: [rfi.id],
     to: { email: to },
-    replyTo: rfi.consultantEmail ?? null,
+    replyTo: (await replyAddress("rfi", rfi.answerToken)) ?? rfi.consultantEmail ?? null,
     fromName: "Soterra",
     fromEmail: projectSenderAddress(projectName, scope.projectId),
     subject: `${label} note · ${projectName} · ${rfi.subject}`,
@@ -1170,7 +1206,7 @@ export async function emailReplyOnRfi(
         recordType: "rfi",
         recordIds: [rfi.id],
         to: { email: to },
-        replyTo: rfi.consultantEmail ?? null,
+        replyTo: (await replyAddress("rfi", rfi.answerToken)) ?? rfi.consultantEmail ?? null,
         fromName: "Soterra",
         fromEmail: projectSenderAddress(projectName, scope.projectId),
         subject: `${label} reply · ${projectName} · ${rfi.subject}`,
@@ -1218,7 +1254,8 @@ export async function emailReplyOnRfi(
       kind: "inbound",
       recordType: "rfi",
       recordIds: [rfi.id],
-      to: { name: rfi.consultantName || rfi.consultantCompany, email: rfi.consultantEmail },
+      to: rfiAssignees(rfi).length ? rfiAssignees(rfi).map((a) => ({ name: a.name || a.company, email: a.email })) : { name: rfi.consultantName || rfi.consultantCompany, email: rfi.consultantEmail },
+      cc: rfi.cc ? (JSON.parse(rfi.cc) as string[]) : [],
       replyTo: (await replyAddress("rfi", rfi.answerToken)) ?? from.email,
       fromName: `${company} (via Soterra)`,
       fromEmail: projectSenderAddress(projectName, scope.projectId),
@@ -1313,7 +1350,7 @@ async function notifyAnswer(scope: Scope, rfi: Rfi, answer: string, consultantLi
     recordIds: [rfi.id],
     to: { email: to },
     // Replying to the notice goes straight back to the consultant.
-    replyTo: rfi.consultantEmail ?? null,
+    replyTo: (await replyAddress("rfi", rfi.answerToken)) ?? rfi.consultantEmail ?? null,
     fromName: "Soterra",
     fromEmail: projectSenderAddress(projectName, scope.projectId),
     subject: `${label} answered · ${projectName} · ${rfi.subject}`,
