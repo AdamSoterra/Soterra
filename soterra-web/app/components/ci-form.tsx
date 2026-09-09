@@ -314,13 +314,6 @@ export function CiCard({
         <span style={{ fontSize: 14.5, fontWeight: 600, color: "var(--navy)" }}>{ci.title}</span>
       </div>
       <div className="rf-q">{ci.directs ?? "No wording on record - edit the instruction to add it."}</div>
-      <div className="rf-refs" style={{ marginTop: 8 }}>
-        {ci.trades.map((t) => <span key={t} className="rf-rchip code">{t}</span>)}
-        {ci.location && <span className="rf-rchip">📍 {ci.location}</span>}
-        {(ci.issuedBy || ci.issuedByName) && <span className="rf-rchip">{[issuerLabel(ci.issuedBy), ci.issuedByName].filter(Boolean).join(" · ")}</span>}
-        {ci.amendsDrawings.length > 0 && <span className="rf-rchip">amends {ci.amendsDrawings.map((a) => a.doc).join(", ")}</span>}
-        {ci.cost && <span className="rf-rchip">{ci.cost}</span>}
-      </div>
       {ci.file && (
         <div className="co-att" style={{ marginTop: 10 }}>
           <span>📄</span>
