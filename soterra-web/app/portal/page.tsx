@@ -227,6 +227,7 @@ export default function PortalPage() {
           <SignoffView
             d={detail.data as SignoffData}
             photoSrc={`/api/portal/photo?table=item&id=${encodeURIComponent(open.id)}&side=consultant`}
+            fileHref={(path) => `/api/defect-file?portal=${encodeURIComponent(open.id)}&table=item&side=consultant&path=${encodeURIComponent(path)}`}
             act={async (decision, note) => {
               const r = await post({ kind: "signoff", id: open.id, decision, body: note });
               return r.ok ? { ok: true, data: r.data as SignoffData } : r;

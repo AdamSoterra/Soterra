@@ -47,6 +47,7 @@ export default function SignoffPage({ params }: { params: { token: string } }) {
       <SignoffView
         d={d}
         photoSrc={`/api/qa-fix/photo?token=${encodeURIComponent(token)}`}
+        fileHref={(path) => `/api/defect-file?token=${encodeURIComponent(token)}&path=${encodeURIComponent(path)}`}
         act={async (decision, note) => {
           try {
             const r = await fetch("/api/qa-signoff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, decision, note }) });

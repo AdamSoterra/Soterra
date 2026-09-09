@@ -499,6 +499,9 @@ export async function signoffView(item: ItemRow) {
     hasFixPhoto: !!item.fixPhoto,
     status: item.closeoutStatus,
     canSignoff: item.closeoutStatus === "submitted",
+    // The whole back-and-forth (sent, the sub's questions, bounces, the
+    // photo), so the consultant signs off on the history, not just the last note.
+    messages: await defectMessagesFor("item", item.id),
   };
 }
 

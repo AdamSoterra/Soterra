@@ -649,16 +649,21 @@ export type SignoffData = {
   hasFixPhoto: boolean;
   status: string;
   canSignoff: boolean;
+  /** The conversation on the defect so far (read-only on this page). */
+  messages?: FixMsg[];
 };
 
 export function SignoffView({
   d,
   photoSrc,
   act,
+  fileHref,
 }: {
   d: SignoffData;
   photoSrc: string;
   act: (decision: "approve" | "reject", note: string) => Act<SignoffData & { approved?: boolean }>;
+  /** Link for a file on the thread (the door decides: token or portal). */
+  fileHref?: (path: string) => string;
 }) {
   const [data, setData] = useState(d);
   const [note, setNote] = useState("");
@@ -709,6 +714,10 @@ export function SignoffView({
           </div>
         )}
       </div>
+
+      {/* The whole history, read-only: what was sent, the sub's questions, any
+          bounce, the marked-fixed line. The photo stays in the card above. */}
+      <DefectThread messages={data.messages ?? []} mine="consultant" fileHref={fileHref} />
 
       {outcome === "approved" && <div className="ans-done">✓ Signed off. {data.company} has been notified and the item is closed.</div>}
       {outcome === "rejected" && (
