@@ -505,7 +505,14 @@ export async function generateChecklistItems(
     // text-only matches are left to the model's judgement.
     const labelled = (it: { title: string; sourceRef: string | null }, label: string) =>
       (it.sourceRef ?? "").toUpperCase().includes(label) || it.title.toUpperCase().includes(label);
-    const must = cis.filter((c) => type?.category && c.trades.includes(type.category));
+    // Force in EVERY instruction the register scored as relevant to THIS check
+    // — matched by trade, by location, or by real text overlap — not only ones
+    // whose trade happens to equal this inspection's single category. Missing an
+    // open CI is the worst failure here (it OUTRANKS the drawings and the crew
+    // has to build it), so if the model produced no item for a relevant
+    // instruction it still gets a deterministic item at the top. Only the
+    // general catch-all (score 1: no trade AND no location) is left to the model.
+    const must = cis.filter((c) => c.score > 1);
     const forced = must
       .filter((c) => !items.some((it) => labelled(it, c.label)))
       .map((c) => ({
@@ -517,7 +524,7 @@ export async function generateChecklistItems(
         ].filter(Boolean).join(" "),
         source: "ci",
         sourceRef: c.label,
-        category: type?.category ?? ("Other" as const),
+        category: (isCategory(c.trades[0]) ? c.trades[0] : type?.category) ?? ("Other" as const),
       }));
     const modelCi = items.filter((it) => it.source === "ci" || cis.some((c) => labelled(it, c.label)));
     const rest = items.filter((it) => !modelCi.includes(it));
